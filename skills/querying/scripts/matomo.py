@@ -566,160 +566,144 @@ class MatomoAPI:
             params["segment"] = segment
         return self._request("Referrers.getSocials", params)
 
+    # --- Visit frequency (returning visitors) ---
+
+    def get_visit_frequency(
+        self,
+        site_id: int,
+        period: str,
+        date: str,
+        segment: Optional[str] = None,
+    ) -> dict:
+        """
+        Get metrics for returning visitors vs new visitors.
+
+        Returns dict with metrics prefixed by visitor type:
+        - nb_visits_returning, nb_actions_returning, avg_time_on_site_returning, ...
+        - nb_visits_new, nb_actions_new, bounce_rate_new, ...
+
+        Useful for comparing engagement between new and returning visitors.
+        """
+        params = {"idSite": site_id, "period": period, "date": date}
+        if segment:
+            params["segment"] = segment
+        return self._request("VisitFrequency.get", params)
+
+    # --- Cohorts (premium plugin) ---
+
+    def get_cohorts(
+        self,
+        site_id: int,
+        period: str,
+        date: str,
+        metric: Optional[str] = None,
+        segment: Optional[str] = None,
+        limit: int = 100,
+    ) -> list[dict]:
+        """
+        Get cohort analysis data.
+
+        A cohort is a group of visitors whose first visit was within a specific period.
+        Returns metrics for each cohort for periods after the cohort's first visit.
+
+        Args:
+            site_id: Matomo site ID
+            period: day, week, month, or year
+            date: Date or range (e.g., "2025-12-01" or "last30")
+            metric: Specific metric to return (optional)
+            segment: Optional segment filter
+            limit: Max cohorts to return
+
+        Returns:
+            List of cohort data with metrics by period.
+        """
+        params = {
+            "idSite": site_id,
+            "period": period,
+            "date": date,
+            "filter_limit": limit,
+        }
+        if metric:
+            params["metric"] = metric
+        if segment:
+            params["segment"] = segment
+        return self._request("Cohorts.getCohorts", params)
+
+    def get_cohorts_over_time(
+        self,
+        site_id: int,
+        period: str,
+        display_date_range: str,
+        cohorts: str,
+        segment: Optional[str] = None,
+        limit: int = 100,
+    ) -> Any:
+        """
+        Get cohort metrics evolution over time.
+
+        Args:
+            site_id: Matomo site ID
+            period: day, week, month, or year
+            display_date_range: Date range to display
+            cohorts: Cohort specification
+            segment: Optional segment filter
+            limit: Max rows to return
+
+        Returns:
+            Cohort evolution data for graphing.
+        """
+        params = {
+            "idSite": site_id,
+            "period": period,
+            "displayDateRange": display_date_range,
+            "cohorts": cohorts,
+            "filter_limit": limit,
+        }
+        if segment:
+            params["segment"] = segment
+        return self._request("Cohorts.getCohortsOverTime", params)
+
+    def get_cohorts_by_first_visit(
+        self,
+        site_id: int,
+        period: str,
+        cohorts: str,
+        segment: Optional[str] = None,
+        periods_from_start: Optional[str] = None,
+    ) -> Any:
+        """
+        Get cohorts grouped by period of first visit.
+
+        Args:
+            site_id: Matomo site ID
+            period: day, week, month, or year
+            cohorts: Cohort specification
+            segment: Optional segment filter
+            periods_from_start: Number of periods from cohort start
+
+        Returns:
+            Cohort data grouped by first visit period.
+        """
+        params = {
+            "idSite": site_id,
+            "period": period,
+            "cohorts": cohorts,
+        }
+        if segment:
+            params["segment"] = segment
+        if periods_from_start:
+            params["periodsFromStart"] = periods_from_start
+        return self._request("Cohorts.getByPeriodOfFirstVisit", params)
+
 
 class MatomoError(Exception):
     """Error from Matomo API."""
     pass
 
 
-# --- Web UI URL generation ---
+# --- Web UI URL generation (re-exported from ui_mapping) ---
 
-# Mapping from API methods to web UI category/subcategory
-# Discovered via API.getWidgetMetadata - these are the actual Matomo IDs
-_UI_MAPPING = {
-    # Visitors
-    "VisitsSummary.get": ("General_Visitors", "General_Overview"),
-    "VisitsSummary.getUniqueVisitors": ("General_Visitors", "General_Overview"),
-    # Actions - Pages
-    "Actions.getPageUrls": ("General_Actions", "General_Pages"),
-    "Actions.getPageTitles": ("General_Actions", "Actions_SubmenuPageTitles"),
-    "Actions.getEntryPageUrls": ("General_Actions", "Actions_SubmenuPagesEntry"),
-    "Actions.getExitPageUrls": ("General_Actions", "Actions_SubmenuPagesExit"),
-    # Custom dimensions - subcategory is "customdimension{N}" where N is dimension ID
-    "CustomDimensions.getCustomDimension": ("General_Visitors", None),  # subcategory = f"customdimension{id}"
-    # Events
-    "Events.getCategory": ("General_Actions", "Events_Events"),
-    "Events.getAction": ("General_Actions", "Events_Events"),
-    "Events.getName": ("General_Actions", "Events_Events"),
-    # Referrers
-    "Referrers.getReferrerType": ("Referrers_Referrers", "Referrers_WidgetGetAll"),
-    "Referrers.getWebsites": ("Referrers_Referrers", "Referrers_SubmenuWebsitesOnly"),
-    "Referrers.getSearchEngines": ("Referrers_Referrers", "Referrers_SubmenuSearchEngines"),
-    "Referrers.getSocials": ("Referrers_Referrers", "Referrers_Socials"),
-    "Referrers.getAll": ("Referrers_Referrers", "Referrers_WidgetGetAll"),
-    # Visit time
-    "VisitTime.getVisitInformationPerServerTime": ("General_Visitors", "VisitTime_SubmenuTimes"),
-    "VisitTime.getByDayOfWeek": ("General_Visitors", "VisitTime_SubmenuTimes"),
-    # Transitions
-    "Transitions.getTransitionsForAction": ("General_Actions", "Transitions_Transitions"),
-    # Devices & Location
-    "DevicesDetection.getType": ("General_Visitors", "DevicesDetection_Devices"),
-    "DevicesDetection.getBrowsers": ("General_Visitors", "DevicesDetection_Software"),
-    "UserCountry.getCountry": ("General_Visitors", "UserCountry_SubmenuLocations"),
-    "UserCountry.getRegion": ("General_Visitors", "UserCountry_SubmenuLocations"),
-    "UserCountry.getCity": ("General_Visitors", "UserCountry_SubmenuLocations"),
-    # Engagement
-    "VisitorInterest.getNumberOfVisitsPerVisitDuration": ("General_Actions", "VisitorInterest_Engagement"),
-    "VisitorInterest.getNumberOfVisitsPerPage": ("General_Actions", "VisitorInterest_Engagement"),
-}
-
-
-def get_ui_url(
-    base_url: str,
-    method: str,
-    site_id: int,
-    period: str,
-    date: str,
-    segment: Optional[str] = None,
-    dimension_id: Optional[int] = None,
-) -> str:
-    """
-    Generate a Matomo web UI URL for a given API method.
-
-    Args:
-        base_url: Matomo instance URL (e.g., "matomo.inclusion.beta.gouv.fr")
-        method: API method name (e.g., "VisitsSummary.get")
-        site_id: Matomo site ID
-        period: day, week, month, or year
-        date: YYYY-MM-DD format
-        segment: Optional segment filter
-        dimension_id: Required for CustomDimensions methods
-
-    Returns:
-        Full URL to the Matomo web UI with the appropriate view.
-    """
-    mapping = _UI_MAPPING.get(method)
-    if not mapping:
-        # Fallback to dashboard
-        category, subcategory = "Dashboard_Dashboard", "1"
-    else:
-        category, subcategory = mapping
-        if subcategory is None and dimension_id is not None:
-            # Custom dimensions use "customdimension{N}" format
-            subcategory = f"customdimension{dimension_id}"
-
-    # Build the hash fragment with category/subcategory
-    hash_params = {
-        "category": category,
-        "subcategory": subcategory or "1",
-    }
-    if segment:
-        hash_params["segment"] = segment
-
-    # Use safe='@=;' to avoid over-encoding segment operators
-    hash_fragment = urllib.parse.urlencode(hash_params, safe='@=;,')
-
-    # Build the main URL
-    main_params = {
-        "module": "CoreHome",
-        "action": "index",
-        "idSite": site_id,
-        "period": period,
-        "date": date,
-    }
-    main_query = urllib.parse.urlencode(main_params)
-
-    return f"https://{base_url}/index.php?{main_query}#?{hash_fragment}"
-
-
-def format_data_source(
-    base_url: str,
-    method: str,
-    params: dict,
-    dimension_id: Optional[int] = None,
-) -> str:
-    """
-    Format a data source reference for reports.
-
-    Returns a markdown string with:
-    - A hyperlink to the web UI
-    - The raw API call for reproducibility
-
-    Args:
-        base_url: Matomo instance URL
-        method: API method name
-        params: Dict with idSite, period, date, and optionally segment
-        dimension_id: For custom dimension queries
-
-    Returns:
-        Markdown-formatted data source string.
-    """
-    site_id = params.get("idSite")
-    period = params.get("period")
-    date = params.get("date")
-    segment = params.get("segment")
-
-    # Generate web UI link
-    ui_url = get_ui_url(
-        base_url=base_url,
-        method=method,
-        site_id=site_id,
-        period=period,
-        date=date,
-        segment=segment,
-        dimension_id=dimension_id,
-    )
-
-    # Generate raw API call (without token)
-    api_params = {"idSite": site_id, "period": period, "date": date}
-    if segment:
-        api_params["segment"] = segment
-    if dimension_id:
-        api_params["idDimension"] = dimension_id
-
-    api_call = f"{method}?" + "&".join(f"{k}={v}" for k, v in api_params.items())
-
-    return f"[View in Matomo]({ui_url}) | `{api_call}`"
+from scripts.ui_mapping import UI_MAPPING, get_ui_url, format_data_source
 
 
 # --- Convenience functions for CLI usage ---
