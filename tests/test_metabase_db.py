@@ -31,27 +31,30 @@ def populated_db(temp_db):
     # Add sample cards
     db.upsert_card(
         card_id=1,
-        name="File active count",
+        name="[408] File active count",
         description="Count of candidates in file active",
         collection_id=453,
+        dashboard_id=408,
         topic="file-active",
         sql_query="SELECT COUNT(*) FROM candidats WHERE status = 'active'",
         tables_referenced=["candidats"],
     )
     db.upsert_card(
         card_id=2,
-        name="Candidatures by region",
+        name="[408] Candidatures by region",
         description="Breakdown of applications by region",
         collection_id=453,
+        dashboard_id=408,
         topic="candidatures",
         sql_query="SELECT region, COUNT(*) FROM candidatures GROUP BY region",
         tables_referenced=["candidatures"],
     )
     db.upsert_card(
         card_id=3,
-        name="Gender demographics",
+        name="[267] Gender demographics",
         description=None,
         collection_id=453,
+        dashboard_id=267,
         topic="demographie",
         sql_query="SELECT gender, COUNT(*) FROM candidats GROUP BY gender",
         tables_referenced=["candidats"],
@@ -88,7 +91,7 @@ class TestSchema:
         columns = {row[1] for row in cursor.fetchall()}
 
         expected = {
-            "id", "name", "description", "collection_id",
+            "id", "name", "description", "collection_id", "dashboard_id",
             "topic", "sql_query", "tables_referenced",
             "created_at", "updated_at"
         }
@@ -102,9 +105,10 @@ class TestCardOperations:
         """Upsert card and retrieve it."""
         temp_db.upsert_card(
             card_id=100,
-            name="Test card",
+            name="[999] Test card",
             description="A test card",
             collection_id=453,
+            dashboard_id=999,
             topic="autre",
             sql_query="SELECT 1",
             tables_referenced=["test_table"],
@@ -114,8 +118,9 @@ class TestCardOperations:
         card = temp_db.get(100)
         assert card is not None
         assert card.id == 100
-        assert card.name == "Test card"
+        assert card.name == "[999] Test card"
         assert card.description == "A test card"
+        assert card.dashboard_id == 999
         assert card.topic == "autre"
         assert card.tables_referenced == ["test_table"]
 

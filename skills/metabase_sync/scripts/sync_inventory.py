@@ -175,6 +175,7 @@ def generate_readme(db: CardsDB, last_sync: str):
         "    name TEXT NOT NULL,",
         "    description TEXT,",
         "    collection_id INTEGER,",
+        "    dashboard_id INTEGER,  -- Extracted from [XXX] prefix in name",
         "    topic TEXT,",
         "    sql_query TEXT,",
         "    tables_referenced TEXT,  -- JSON array",
@@ -213,6 +214,19 @@ def generate_readme(db: CardsDB, last_sync: str):
         if count > 0:
             lines.append(f"| {topic} | {count} | {TOPICS[topic]} |")
 
+    # Add dashboards summary
+    dashboards_summary = db.dashboards_summary()
+    lines.extend([
+        "",
+        "## Dashboards",
+        "",
+        "| Dashboard ID | Cards |",
+        "|--------------|-------|",
+    ])
+
+    for dash_id, count in list(dashboards_summary.items())[:15]:
+        lines.append(f"| {dash_id} | {count} |")
+
     lines.extend([
         "",
         "## Querying the Database",
@@ -223,8 +237,9 @@ def generate_readme(db: CardsDB, last_sync: str):
         "db = load_cards_db()",
         'cards = db.search("file active")  # Full-text search',
         'cards = db.by_topic("candidatures")  # Filter by topic',
+        'cards = db.by_dashboard(408)  # Cards in a dashboard',
         'cards = db.by_table("candidats")  # Cards using a table',
-        "card = db.get(4413)  # Get by ID",
+        "card = db.get(7004)  # Get by ID",
         "```",
         "",
         "## Key Tables Referenced",

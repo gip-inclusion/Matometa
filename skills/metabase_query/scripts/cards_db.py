@@ -47,6 +47,7 @@ class Card:
     name: str
     description: Optional[str]
     collection_id: Optional[int]
+    dashboard_id: Optional[int]
     topic: Optional[str]
     sql_query: Optional[str]
     tables_referenced: list[str]
@@ -61,11 +62,12 @@ class Card:
             name=row[1],
             description=row[2],
             collection_id=row[3],
-            topic=row[4],
-            sql_query=row[5],
-            tables_referenced=json.loads(row[6]) if row[6] else [],
-            created_at=row[7],
-            updated_at=row[8],
+            dashboard_id=row[4],
+            topic=row[5],
+            sql_query=row[6],
+            tables_referenced=json.loads(row[7]) if row[7] else [],
+            created_at=row[8],
+            updated_at=row[9],
         )
 
 
@@ -117,6 +119,7 @@ class CardsDB:
                 name TEXT NOT NULL,
                 description TEXT,
                 collection_id INTEGER,
+                dashboard_id INTEGER,
                 topic TEXT,
                 sql_query TEXT,
                 tables_referenced TEXT,
@@ -128,6 +131,7 @@ class CardsDB:
         # Indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_cards_topic ON cards(topic)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_cards_collection ON cards(collection_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_cards_dashboard ON cards(dashboard_id)")
 
         # Full-text search table
         cursor.execute("""
@@ -218,6 +222,24 @@ class CardsDB:
         """, (f'%"{table_name}"%',))
         return [Card.from_row(row) for row in cursor.fetchall()]
 
+    def by_dashboard(self, dashboard_id: int) -> list[Card]:
+        """Get cards belonging to a dashboard."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM cards WHERE dashboard_id = ? ORDER BY id", (dashboard_id,))
+        return [Card.from_row(row) for row in cursor.fetchall()]
+
+    def dashboards_summary(self) -> dict[int, int]:
+        """Get count of cards per dashboard."""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT dashboard_id, COUNT(*) as count
+            FROM cards
+            WHERE dashboard_id IS NOT NULL
+            GROUP BY dashboard_id
+            ORDER BY count DESC
+        """)
+        return {row[0]: row[1] for row in cursor.fetchall()}
+
     def topics_summary(self) -> dict[str, int]:
         """Get count of cards per topic."""
         cursor = self.conn.cursor()
@@ -252,6 +274,7 @@ class CardsDB:
         name: str,
         description: Optional[str],
         collection_id: Optional[int],
+        dashboard_id: Optional[int],
         topic: Optional[str],
         sql_query: Optional[str],
         tables_referenced: list[str],
@@ -262,17 +285,18 @@ class CardsDB:
 
         cursor = self.conn.cursor()
         cursor.execute("""
-            INSERT INTO cards (id, name, description, collection_id, topic, sql_query, tables_referenced, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO cards (id, name, description, collection_id, dashboard_id, topic, sql_query, tables_referenced, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name,
                 description = excluded.description,
                 collection_id = excluded.collection_id,
+                dashboard_id = excluded.dashboard_id,
                 topic = excluded.topic,
                 sql_query = excluded.sql_query,
                 tables_referenced = excluded.tables_referenced,
                 updated_at = excluded.updated_at
-        """, (card_id, name, description, collection_id, topic, sql_query, tables_json, now, now))
+        """, (card_id, name, description, collection_id, dashboard_id, topic, sql_query, tables_json, now, now))
 
     def rebuild_fts(self):
         """Rebuild full-text search index."""
