@@ -2,4 +2,5 @@
 .env
 .claude
 __pycache__
+.matomo_cookie
 
