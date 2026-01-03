@@ -1,7 +1,7 @@
 # Metabase Cards Inventory
 
 **Database:** `knowledge/metabase/cards.db`
-**Last synced:** 2026-01-03 21:33
+**Last synced:** 2026-01-03 21:43
 **Total cards:** 334
 **Dashboards:** 16
 
@@ -53,18 +53,18 @@ CREATE TABLE dashboards (
 
 | ID | Name | Topic | Pilotage URL |
 |----|------|-------|--------------|
-| 52 | Candidatures - Zoom sur les prescripteurs | etp-effectifs |  |
-| 54 | Offre - Zoom sur les employeurs | etp-effectifs |  |
+| 52 | Candidatures - Zoom sur les prescripteurs | prescripteurs |  |
+| 54 | Offre - Zoom sur les employeurs | employeurs |  |
 | 116 | Candidatures - Traitement et résultats des ca... | candidatures |  |
-| 136 | Candidatures - L'accompagnement des prescript... | demographie |  |
-| 150 | Offre - Postes en tension | employeurs |  |
+| 136 | Candidatures - L'accompagnement des prescript... | prescripteurs |  |
+| 150 | Offre - Postes en tension | postes-tension |  |
 | 185 | SIAE - Analyse des candidatures reçues et de ... | candidatures |  |
-| 216 | Publics - Représentation des femmes dans les ... | esat |  |
-| 217 | Pilotage dispositif - Suivi des PASS IAE | candidatures |  |
+| 216 | Publics - Représentation des femmes dans les ... | demographie | [link](/tableaux-de-bord/femmes-iae/) |
+| 217 | Pilotage dispositif - Suivi des PASS IAE | generalites-iae |  |
 | 265 | DDETS/DREETS- Suivi du contrôle a posteriori | controles | [link](/tableaux-de-bord/auto-prescription/) |
 | 267 | DDETS/DREETS - Les auto-prescription et suivi... | auto-prescription | [link](/tableaux-de-bord/auto-prescription/) |
-| 287 | Pilotage dispositif - Conventionnements IAE | prescripteurs | [link](/tableaux-de-bord/zoom-prescripteurs/) |
-| 325 | Pilotage dispositif - Analyses autour des con... | etp-effectifs |  |
+| 287 | Pilotage dispositif - Conventionnements IAE | generalites-iae | [link](/tableaux-de-bord/conventionnements-iae/) |
+| 325 | Pilotage dispositif - Analyses autour des con... | generalites-iae |  |
 | 336 | Pilotage dispositif - Demandes de prolongatio... | prolongations | [link](/tableaux-de-bord/suivi-demandes-prolongation/) |
 | 337 | Candidatures - Bilan annuel des candidatures ... | candidatures | [link](/tableaux-de-bord/etat-suivi-candidatures/) |
 | 408 | Publics - Candidats dans la file active IAE d... | file-active | [link](/tableaux-de-bord/candidat-file-active-IAE/) |

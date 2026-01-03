@@ -118,17 +118,18 @@ PILOTAGE_DASHBOARDS = {
 
 # Additional known dashboard IDs with their topics (from card analysis)
 KNOWN_DASHBOARDS = {
-    52: ("etp-effectifs", None),
-    54: ("etp-effectifs", None),
+    52: ("prescripteurs", None),  # Zoom sur les prescripteurs
+    54: ("employeurs", None),  # Zoom sur les employeurs
     116: ("candidatures", None),
-    136: ("demographie", None),
-    150: ("employeurs", None),
-    216: ("esat", None),
-    217: ("candidatures", None),
+    136: ("prescripteurs", None),  # L'accompagnement des prescripteurs habilités
+    150: ("postes-tension", None),  # Postes en tension
+    185: ("candidatures", None),  # Analyse des candidatures
+    216: ("demographie", "/tableaux-de-bord/femmes-iae/"),  # Représentation des femmes
+    217: ("generalites-iae", None),  # Suivi des PASS IAE
     265: ("controles", "/tableaux-de-bord/auto-prescription/"),
     267: ("auto-prescription", "/tableaux-de-bord/auto-prescription/"),
-    287: ("prescripteurs", "/tableaux-de-bord/zoom-prescripteurs/"),
-    325: ("etp-effectifs", None),
+    287: ("generalites-iae", "/tableaux-de-bord/conventionnements-iae/"),  # Conventionnements
+    325: ("generalites-iae", None),  # Analyses conventionnements
     336: ("prolongations", "/tableaux-de-bord/suivi-demandes-prolongation/"),
     337: ("candidatures", "/tableaux-de-bord/etat-suivi-candidatures/"),
     408: ("file-active", "/tableaux-de-bord/candidat-file-active-IAE/"),
