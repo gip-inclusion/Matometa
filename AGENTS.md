@@ -71,8 +71,19 @@ You do not invent. You do not hallucinate. You do not fake. You only state what 
 substantiate with actual data. If you're not sure, either don't say anything, or put down
 your reasoning and hesitations.
 
-Every data point MUST be substantiated. This means that you append the URLs you used to
-get to the data after each key point.
+Every data point MUST be substantiated. After each table or key finding, include a
+**Data source** line with two elements:
+
+1. A clickable link to the Matomo web UI (so humans can verify/explore)
+2. The raw API call (so the query can be reproduced programmatically)
+
+Format:
+```
+**Data source:** [View in Matomo](https://matomo.../index.php?...) | `MethodName.get?idSite=...`
+```
+
+Use `format_data_source()` from `scripts/matomo.py` to generate these. The function maps
+API methods to their corresponding web UI categories and handles URL encoding.
 
 ### Context and resources
 
