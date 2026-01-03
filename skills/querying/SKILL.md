@@ -12,6 +12,10 @@ Use this skill when you need to:
 - Analyze traffic by user type, department, or organization
 - Query specific page URLs or URL patterns
 - Compare metrics across time periods
+- Track events (button clicks, form submissions, feature usage)
+- Analyze user journeys (entry pages, exit pages, page flow)
+- Understand temporal patterns (by hour, by day of week)
+- Identify traffic sources (referrers, search engines, social)
 
 ## Prerequisites
 
@@ -38,6 +42,23 @@ user_types = api.get_dimension(site_id=117, dimension_id=1, period="month", date
 
 # Query with URL segment
 gps_visits = api.get_visits(site_id=117, period="month", date="2025-12-01", segment="pageUrl=@/gps/")
+
+# Get events
+events = api.get_event_categories(site_id=117, period="month", date="2025-12-01")
+
+# Get entry/exit pages
+landing = api.get_entry_pages(site_id=117, period="month", date="2025-12-01")
+exits = api.get_exit_pages(site_id=117, period="month", date="2025-12-01")
+
+# Get page flow (what happens before/after a page)
+flow = api.get_transitions(site_id=117, period="month", date="2025-12-01", page_url="/gps/groups/list")
+
+# Get temporal patterns
+by_hour = api.get_visits_by_hour(site_id=117, period="month", date="2025-12-01")
+by_day = api.get_visits_by_day_of_week(site_id=117, period="month", date="2025-12-01")
+
+# Get traffic sources
+referrers = api.get_referrers(site_id=117, period="month", date="2025-12-01")
 ```
 
 ## API reference
@@ -55,8 +76,20 @@ https://{MATOMO_URL}/?module=API&method={METHOD}&format=JSON&token_auth={API_KEY
 | `VisitsSummary.get` | Full visit metrics (visitors, actions, bounce rate, etc.) |
 | `VisitsSummary.getUniqueVisitors` | Just unique visitor count |
 | `Actions.getPageUrls` | Page-level stats; use `filter_pattern` to filter URLs |
+| `Actions.getEntryPageUrls` | Landing pages (first page of visits) |
+| `Actions.getExitPageUrls` | Exit pages (last page of visits) |
 | `CustomDimensions.getCustomDimension` | Breakdown by custom dimension |
 | `CustomDimensions.getConfiguredCustomDimensions` | List available dimensions for a site |
+| `Events.getCategory` | Event categories with counts |
+| `Events.getAction` | Event actions with counts |
+| `Events.getName` | Event names with counts |
+| `Referrers.getReferrerType` | Traffic sources by type (direct, search, social, etc.) |
+| `Referrers.getWebsites` | Referring websites |
+| `Referrers.getSearchEngines` | Search engines driving traffic |
+| `Referrers.getSocials` | Social networks driving traffic |
+| `VisitTime.getVisitInformationPerServerTime` | Visits by hour of day |
+| `VisitTime.getByDayOfWeek` | Visits by day of week |
+| `Transitions.getTransitionsForAction` | Page flow (before/after a specific page) |
 
 ### Parameters
 
@@ -120,6 +153,97 @@ method=CustomDimensions.getCustomDimension&idSite=117&idDimension=1&period=month
 
 Note: Visit-scoped dimensions use idDimension=1, action-scoped use idDimension=3 or 4 (the idcustomdimension value).
 
+### Events
+
+Events track user interactions beyond page views: button clicks, form submissions, feature usage.
+
+Matomo events have a 3-level hierarchy:
+- **Category**: broad grouping (e.g., "GPS", "Candidacy", "Form")
+- **Action**: what happened (e.g., "click", "submit", "view")
+- **Name**: specific element (e.g., "approve_button", "search_form")
+
+```python
+# Get all event categories
+categories = api.get_event_categories(site_id=117, period="month", date="2025-12-01")
+# Returns: [{"label": "GPS", "nb_events": 1234, "nb_visits": 567}, ...]
+
+# Get event actions
+actions = api.get_event_actions(site_id=117, period="month", date="2025-12-01")
+
+# Combine with segments to analyze events for specific user types
+events = api.get_event_categories(
+    site_id=117, period="month", date="2025-12-01",
+    segment="dimension1==prescriber"
+)
+```
+
+### Entry and exit pages
+
+Understand where users land and where they leave:
+
+```python
+# Top landing pages
+entry = api.get_entry_pages(site_id=117, period="month", date="2025-12-01")
+# Returns: [{"label": "/", "entry_nb_visits": 5000, "entry_bounce_count": 200}, ...]
+
+# Top exit pages
+exit = api.get_exit_pages(site_id=117, period="month", date="2025-12-01")
+# Returns: [{"label": "/dashboard", "exit_nb_visits": 3000, "exit_rate": "15%"}, ...]
+```
+
+### Transitions (page flow)
+
+Analyze what users do before and after visiting a specific page:
+
+```python
+flow = api.get_transitions(
+    site_id=117,
+    period="month",
+    date="2025-12-01",
+    page_url="/gps/groups/list"
+)
+# Returns dict with:
+# - previousPages: what pages led here
+# - followingPages: where users went next
+# - referrers: external sources
+# - outlinks: external links clicked
+```
+
+Use case: "What do users do after viewing the GPS group list?"
+
+**Note:** Transitions queries are expensive. Use `period="week"` instead of `"month"` to avoid timeouts.
+
+### Visit time patterns
+
+Understand when users are active:
+
+```python
+# By hour (0-23)
+hourly = api.get_visits_by_hour(site_id=117, period="month", date="2025-12-01")
+# Returns 24 items, one per hour
+
+# By day of week (1=Monday, 7=Sunday)
+daily = api.get_visits_by_day_of_week(site_id=117, period="month", date="2025-12-01")
+# Returns 7 items
+```
+
+Use case: "Is GPS used during work hours or after?"
+
+### Referrers
+
+Understand traffic sources:
+
+```python
+# Overview by type
+types = api.get_referrers(site_id=117, period="month", date="2025-12-01")
+# Returns: Direct Entry, Search Engines, Websites, Social Networks, Campaigns
+
+# Drill down
+websites = api.get_referrer_websites(site_id=117, period="month", date="2025-12-01")
+search = api.get_referrer_search_engines(site_id=117, period="month", date="2025-12-01")
+social = api.get_referrer_socials(site_id=117, period="month", date="2025-12-01")
+```
+
 ## Handling timeouts
 
 Segment queries on large date ranges can timeout. Strategies:
@@ -133,8 +257,19 @@ Matomo archives data with a 1-3 day lag. If "today" returns 0, try `date=last7` 
 
 ## Output format
 
-Always document your queries in reports with:
-- The full API URL (with token redacted)
-- Date range queried
-- Any segments applied
-- Timestamp of when data was retrieved
+Always document your queries in reports with a **Data source** line. Use `format_data_source()`:
+
+```python
+from scripts.matomo import format_data_source
+
+source = format_data_source(
+    base_url="matomo.inclusion.beta.gouv.fr",
+    method="VisitsSummary.get",
+    params={"idSite": 117, "period": "month", "date": "2025-12-01", "segment": "pageUrl=@/gps/"}
+)
+# Returns: "[View in Matomo](https://...) | `VisitsSummary.get?idSite=117&...`"
+```
+
+This generates:
+1. A clickable link to the Matomo web UI
+2. The raw API call for reproducibility
