@@ -1,8 +1,9 @@
 # Metabase Cards Inventory
 
 **Database:** `knowledge/metabase/cards.db`
-**Last synced:** 2026-01-03 21:23
+**Last synced:** 2026-01-03 21:33
 **Total cards:** 334
+**Dashboards:** 16
 
 ## Database Schema
 
@@ -12,7 +13,7 @@ CREATE TABLE cards (
     name TEXT NOT NULL,
     description TEXT,
     collection_id INTEGER,
-    dashboard_id INTEGER,  -- Extracted from [XXX] prefix in name
+    dashboard_id INTEGER,
     topic TEXT,
     sql_query TEXT,
     tables_referenced TEXT,  -- JSON array
@@ -20,14 +21,19 @@ CREATE TABLE cards (
     updated_at TEXT
 );
 
-CREATE VIRTUAL TABLE cards_fts USING fts5(
-    name, description, sql_query
+CREATE TABLE dashboards (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,  -- From virtual text cards
+    topic TEXT,
+    pilotage_url TEXT,
+    collection_id INTEGER
 );
 ```
 
 ## Topics
 
-| Topic | Count | Description |
+| Topic | Cards | Description |
 |-------|-------|-------------|
 | file-active | 11 | Candidats dans la file active (30+ days waiting) |
 | postes-tension | 14 | Postes en tension (difficult to recruit) |
@@ -45,23 +51,24 @@ CREATE VIRTUAL TABLE cards_fts USING fts5(
 
 ## Dashboards
 
-| Dashboard ID | Cards |
-|--------------|-------|
-| 471 | 54 |
-| 216 | 33 |
-| 336 | 21 |
-| 408 | 21 |
-| 116 | 16 |
-| 287 | 16 |
-| 267 | 15 |
-| 136 | 8 |
-| 150 | 8 |
-| 265 | 6 |
-| 337 | 5 |
-| 52 | 4 |
-| 217 | 4 |
-| 325 | 2 |
-| 54 | 1 |
+| ID | Name | Topic | Pilotage URL |
+|----|------|-------|--------------|
+| 52 | Candidatures - Zoom sur les prescripteurs | etp-effectifs |  |
+| 54 | Offre - Zoom sur les employeurs | etp-effectifs |  |
+| 116 | Candidatures - Traitement et résultats des ca... | candidatures |  |
+| 136 | Candidatures - L'accompagnement des prescript... | demographie |  |
+| 150 | Offre - Postes en tension | employeurs |  |
+| 185 | SIAE - Analyse des candidatures reçues et de ... | candidatures |  |
+| 216 | Publics - Représentation des femmes dans les ... | esat |  |
+| 217 | Pilotage dispositif - Suivi des PASS IAE | candidatures |  |
+| 265 | DDETS/DREETS- Suivi du contrôle a posteriori | controles | [link](/tableaux-de-bord/auto-prescription/) |
+| 267 | DDETS/DREETS - Les auto-prescription et suivi... | auto-prescription | [link](/tableaux-de-bord/auto-prescription/) |
+| 287 | Pilotage dispositif - Conventionnements IAE | prescripteurs | [link](/tableaux-de-bord/zoom-prescripteurs/) |
+| 325 | Pilotage dispositif - Analyses autour des con... | etp-effectifs |  |
+| 336 | Pilotage dispositif - Demandes de prolongatio... | prolongations | [link](/tableaux-de-bord/suivi-demandes-prolongation/) |
+| 337 | Candidatures - Bilan annuel des candidatures ... | candidatures | [link](/tableaux-de-bord/etat-suivi-candidatures/) |
+| 408 | Publics - Candidats dans la file active IAE d... | file-active | [link](/tableaux-de-bord/candidat-file-active-IAE/) |
+| 471 | ESAT - Tableau de bord 2024 | esat | [link](/tableaux-de-bord/zoom-esat-2025/) |
 
 ## Querying the Database
 
@@ -69,18 +76,22 @@ CREATE VIRTUAL TABLE cards_fts USING fts5(
 from skills.metabase_query.scripts.cards_db import load_cards_db
 
 db = load_cards_db()
+
+# Cards
 cards = db.search("file active")  # Full-text search
 cards = db.by_topic("candidatures")  # Filter by topic
 cards = db.by_dashboard(408)  # Cards in a dashboard
-cards = db.by_table("candidats")  # Cards using a table
 card = db.get(7004)  # Get by ID
+
+# Dashboards
+dash = db.get_dashboard(408)
+dashboards = db.dashboards_by_topic("esat")
 ```
 
 ## Key Tables Referenced
 
-| Table | Cards Using It |
-|-------|----------------|
-| `public` | 312 |
+| Table | Cards |
+|-------|-------|
 | `candidatures_echelle_locale` | 72 |
 | `Esat` | 55 |
 | `ESAT` | 42 |

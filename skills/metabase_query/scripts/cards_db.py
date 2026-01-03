@@ -71,6 +71,30 @@ class Card:
         )
 
 
+@dataclass
+class Dashboard:
+    """A Metabase dashboard."""
+
+    id: int
+    name: str
+    description: Optional[str]
+    topic: Optional[str]
+    pilotage_url: Optional[str]
+    collection_id: Optional[int]
+
+    @classmethod
+    def from_row(cls, row: tuple) -> "Dashboard":
+        """Create Dashboard from database row."""
+        return cls(
+            id=row[0],
+            name=row[1],
+            description=row[2],
+            topic=row[3],
+            pilotage_url=row[4],
+            collection_id=row[5],
+        )
+
+
 class CardsDB:
     """SQLite database for Metabase cards."""
 
@@ -147,6 +171,7 @@ class CardsDB:
                 id INTEGER PRIMARY KEY,
                 name TEXT NOT NULL,
                 description TEXT,
+                topic TEXT,
                 pilotage_url TEXT,
                 collection_id INTEGER
             )
@@ -313,6 +338,56 @@ class CardsDB:
         cursor = self.conn.cursor()
         cursor.execute("DELETE FROM cards")
         cursor.execute("DELETE FROM cards_fts")
+        self.conn.commit()
+
+    # --- Dashboard operations ---
+
+    def get_dashboard(self, dashboard_id: int) -> Optional[Dashboard]:
+        """Get a dashboard by ID."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM dashboards WHERE id = ?", (dashboard_id,))
+        row = cursor.fetchone()
+        return Dashboard.from_row(row) if row else None
+
+    def all_dashboards(self) -> list[Dashboard]:
+        """Get all dashboards."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM dashboards ORDER BY id")
+        return [Dashboard.from_row(row) for row in cursor.fetchall()]
+
+    def dashboards_by_topic(self, topic: str) -> list[Dashboard]:
+        """Get dashboards by topic."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM dashboards WHERE topic = ? ORDER BY id", (topic,))
+        return [Dashboard.from_row(row) for row in cursor.fetchall()]
+
+    def upsert_dashboard(
+        self,
+        dashboard_id: int,
+        name: str,
+        description: Optional[str],
+        topic: Optional[str],
+        pilotage_url: Optional[str],
+        collection_id: Optional[int],
+    ):
+        """Insert or update a dashboard."""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO dashboards (id, name, description, topic, pilotage_url, collection_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                description = excluded.description,
+                topic = excluded.topic,
+                pilotage_url = excluded.pilotage_url,
+                collection_id = excluded.collection_id
+        """, (dashboard_id, name, description, topic, pilotage_url, collection_id))
+
+    def clear_dashboards(self):
+        """Clear all dashboards."""
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM dashboards")
+        cursor.execute("DELETE FROM dashboard_cards")
         self.conn.commit()
 
 
