@@ -76,3 +76,177 @@ This baseline is essential for comparing feature-specific usage. For example, if
 
 Query visit-scoped dimensions with `idDimension=1`.
 Query action-scoped dimensions with `idDimension=3` (org) or `idDimension=4` (dept).
+
+## Matomo Events
+
+Scraped from codebase 2026-01-03. ~108 events tracked.
+
+### Implementation
+
+- **Template tag:** `{% matomo_event "category" "action" "name" %}`
+- **JS handler:** `/itou/static/js/matomo.js` - catches clicks on `data-matomo-*` elements
+- **Context processor:** sets custom dimensions (user kind, org kind, department)
+
+### Event Categories
+
+#### candidature (47 events)
+Core application workflow. Most important category.
+
+| Action | Name | Description |
+|--------|------|-------------|
+| clic | start_application | User starts a job application |
+| clic | postuler-pour-ce-candidat | Prescriber applies on behalf of candidate |
+| clic | accept_application | Employer accepts application |
+| clic | refuse_application | Employer refuses application |
+| clic | postpone_application | Employer postpones decision |
+| submit | accept_application_confirmation | Confirms acceptance |
+| submit | processing_application | Submits processing action |
+| clic-onglet | informations-generales | Views general info tab |
+| clic-onglet | appointments | Views appointments tab |
+| clic-onglet | historique | Views history tab |
+| clic | proposer-rdv | Proposes appointment |
+| clic | ajout-commentaire-sidebar | Adds comment |
+| exports | export-siae | SIAE exports applications |
+| exports | export-prescripteur | Prescriber exports applications |
+| submit | batch-*-submit | Batch operations (process, archive, refuse, etc.) |
+
+#### employeurs (16 events)
+Employer dashboard and company management.
+
+| Action | Name | Description |
+|--------|------|-------------|
+| clic | structure-presentation | Views company presentation |
+| clic | modifier-infos-entreprise | Edits company info |
+| clic | voir-liste-candidatures | Views received applications |
+| clic | voir-liste-agrements | Views PASS IAE approvals |
+| clic | voir-liste-fiches-salaries | Views ASP employee records |
+| clic | creer-fiche-de-poste | Creates job description |
+| clic | declarer-embauche | Declares a hire |
+
+#### connexion (7 events)
+Authentication flows.
+
+| Action | Name | Description |
+|--------|------|-------------|
+| clic | se-connecter-avec-pro-connect | ProConnect login |
+| clic | se-connecter-avec-pe | France Travail (ex-Pôle emploi) login |
+| clic | se-connecter-avec-france-connect | FranceConnect login |
+
+#### inscription-candidat
+Job seeker registration.
+
+| Action | Name | Description |
+|--------|------|-------------|
+| clic | je-n-ai-pas-d-adresse-email | No email option |
+| clic | creer-un-compte-candidat | Create account CTA |
+
+#### prescribers (4 events)
+Prescriber organization management.
+
+| Action | Name | Description |
+|--------|------|-------------|
+| clic | organisation-presentation | Views org presentation |
+| clic | gerer-collaborateurs | Manages team members |
+
+#### gps (6 events)
+GPS referral network feature.
+
+| Action | Name | Description |
+|--------|------|-------------|
+| clic | displayed_member_phone | Shows member phone |
+| clic | copied_user_email | Copies user email |
+| clic | consulter_fiche_candidat | Views candidate file |
+
+#### dashboard (4 events)
+Main dashboard navigation.
+
+| Action | Name | Description |
+|--------|------|-------------|
+| clic-onglet | vue-d-ensemble | Overview tab |
+| clic-onglet | statistiques | Statistics tab |
+| clic | candidats-sans-solution | Views stalled candidates |
+
+#### salaries (4 events)
+Employee/contract management.
+
+| Action | Name | Description |
+|--------|------|-------------|
+| clic | details-salarie | Views employee details |
+| clic | edit_jobseeker_infos | Edits job seeker info |
+
+#### help (7 events)
+Documentation and support links.
+
+| Action | Name | Description |
+|--------|------|-------------|
+| clic | footer_documentation | Footer doc link |
+| clic | header_documentation | Header doc link |
+| clic | zendesk_form | Support contact form |
+
+#### offcanvasNav
+Mobile/sidebar navigation clicks. All use `clic` action with menu item names:
+- mes-candidatures, candidatures, candidatures-envoyees
+- salaries-pass-iae, fiches-salaries-asp
+- structure-presentation, metiers-recrutement
+- collaborateurs, etc.
+
+#### recherche (2 events)
+Search functionality.
+
+| Action | Name | Description |
+|--------|------|-------------|
+| clic | enregistrer-une-recherche | Saves search |
+| clic | clic-sur-recherche-enregistree | Uses saved search |
+
+### Dynamic Event Patterns
+
+Several events use dynamic names constructed at runtime:
+
+#### Category: `connexion {account_type}`
+Built from `MATOMO_ACCOUNT_TYPE` enum in `itou/users/enums.py`:
+- `connexion prescripteur` (44k events/month)
+- `connexion employeur inclusif` (38k events/month)
+
+Template: `{% matomo_event "connexion "|add:matomo_account_type "clic" "..." %}`
+
+#### Name: `voir-liste-candidatures-{status}`
+Dashboard links append status name:
+- `voir-liste-candidatures-À traiter` (32k)
+- `voir-liste-candidatures-En attente` (4k)
+- `voir-liste-candidatures-Vivier`
+
+Template: `{% matomo_event "employeurs" "clic" "voir-liste-candidatures-"|add:category.name %}`
+
+#### Name: `candidature_{user_kind}`
+Application submission appends user type:
+- `candidature_prescripteur` (31k) - prescriber submitting for candidate
+- `candidature_candidat` (7k) - job seeker submitting themselves
+
+Template: `matomo_name="candidature_"|add:request.user.get_kind_display`
+
+#### Multi-step wizard: `batch-refuse-application-{step}-submit`
+Refuse wizard fires per step:
+- `batch-refuse-application-reason-submit` (11k)
+- `batch-refuse-application-job-seeker-answer-submit` (11k)
+- `batch-refuse-application-prescriber-answer-submit` (9k)
+
+Code: `matomo_event_name = f"batch-refuse-application-{self.step}-submit"`
+
+### Additional Categories (from Matomo Dec 2025)
+
+| Category | Events | Description |
+|----------|--------|-------------|
+| fiches-salarié | 8k | Employee record creation (ASP). Uses `création` event. |
+| modale-nouveautes | 9k | News modal popup |
+| compte-candidat | 4k | Job seeker account creation |
+| nir-temporaire | 1k | Temporary NIR (social security) skip |
+| partners | 2k | External partner links (Diagoriente) |
+| telechargement-pdf | 241 | PDF downloads (PASS IAE) |
+| employers | 696 | English variant (legacy?) |
+| salarie | 94 | Singular variant (legacy?) |
+
+### Notes
+
+- French/English mix: `employeurs` vs `employers`, `salaries` vs `salarie`
+- Accents preserved: `fiches-salarié`, `À traiter`, `création`
+- Top events by volume: `clic-metiers` (83k), `se-connecter-avec-pro-connect` (83k), `start_application` (62k)
