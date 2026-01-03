@@ -182,6 +182,120 @@ class TestFormatDataSource:
         assert "idDimension=1" in result
 
 
+class TestGetDimensionByWeek:
+    """Tests for get_dimension_by_week date iteration logic."""
+
+    @pytest.fixture
+    def api(self):
+        from scripts.matomo import MatomoAPI
+        return MatomoAPI(url="matomo.example.com", token="test_token")
+
+    def test_iterates_all_weeks_in_month(self, api):
+        """Calls get_dimension for each week in the month."""
+        from unittest.mock import patch
+
+        with patch.object(api, 'get_dimension', return_value=[]) as mock:
+            result = api.get_dimension_by_week(
+                site_id=117, dimension_id=1, year=2025, month=1
+            )
+
+            # January 2025 has 5 weeks (1st, 8th, 15th, 22nd, 29th)
+            assert mock.call_count == 5
+            dates_called = [call.kwargs['date'] for call in mock.call_args_list]
+            assert dates_called == [
+                '2025-01-01', '2025-01-08', '2025-01-15', '2025-01-22', '2025-01-29'
+            ]
+
+    def test_handles_february_non_leap_year(self, api):
+        """February 2025 (non-leap) ends on 28th."""
+        from unittest.mock import patch
+
+        with patch.object(api, 'get_dimension', return_value=[]) as mock:
+            result = api.get_dimension_by_week(
+                site_id=117, dimension_id=1, year=2025, month=2
+            )
+
+            # Feb 2025: 1st, 8th, 15th, 22nd (28th is last day, 29th would exceed)
+            assert mock.call_count == 4
+            dates_called = [call.kwargs['date'] for call in mock.call_args_list]
+            assert dates_called[-1] == '2025-02-22'
+
+    def test_handles_february_leap_year(self, api):
+        """February 2024 (leap) ends on 29th."""
+        from unittest.mock import patch
+
+        with patch.object(api, 'get_dimension', return_value=[]) as mock:
+            result = api.get_dimension_by_week(
+                site_id=117, dimension_id=1, year=2024, month=2
+            )
+
+            # Feb 2024: 1st, 8th, 15th, 22nd, 29th (leap year)
+            assert mock.call_count == 5
+
+    def test_handles_december_year_boundary(self, api):
+        """December correctly calculates end as Dec 31, not Jan 1."""
+        from unittest.mock import patch
+
+        with patch.object(api, 'get_dimension', return_value=[]) as mock:
+            result = api.get_dimension_by_week(
+                site_id=117, dimension_id=1, year=2025, month=12
+            )
+
+            # Dec 2025: 1st, 8th, 15th, 22nd, 29th (31 is last day)
+            assert mock.call_count == 5
+            dates_called = [call.kwargs['date'] for call in mock.call_args_list]
+            assert all(d.startswith('2025-12-') for d in dates_called)
+
+    def test_returns_dict_keyed_by_week_date(self, api):
+        """Result is keyed by week start date."""
+        from unittest.mock import patch
+
+        with patch.object(api, 'get_dimension', return_value=[{'label': 'test'}]):
+            result = api.get_dimension_by_week(
+                site_id=117, dimension_id=1, year=2025, month=4
+            )
+
+            assert isinstance(result, dict)
+            assert '2025-04-01' in result
+            assert result['2025-04-01'] == [{'label': 'test'}]
+
+    def test_captures_api_errors_in_result(self, api):
+        """MatomoError for a week is captured, not raised."""
+        from scripts.matomo import MatomoError
+        from unittest.mock import patch
+
+        def raise_on_second_call(*args, **kwargs):
+            if raise_on_second_call.count == 1:
+                raise_on_second_call.count += 1
+                raise MatomoError("Timeout")
+            raise_on_second_call.count += 1
+            return []
+        raise_on_second_call.count = 0
+
+        with patch.object(api, 'get_dimension', side_effect=raise_on_second_call):
+            result = api.get_dimension_by_week(
+                site_id=117, dimension_id=1, year=2025, month=4
+            )
+
+            # Second week should have error captured
+            values = list(result.values())
+            assert any('error' in v for v in values if isinstance(v, dict))
+
+    def test_passes_segment_and_limit(self, api):
+        """Segment and limit are passed through to get_dimension."""
+        from unittest.mock import patch
+
+        with patch.object(api, 'get_dimension', return_value=[]) as mock:
+            api.get_dimension_by_week(
+                site_id=117, dimension_id=1, year=2025, month=1,
+                segment='pageUrl=@/test/', limit=50
+            )
+
+            for call in mock.call_args_list:
+                assert call.kwargs['segment'] == 'pageUrl=@/test/'
+                assert call.kwargs['limit'] == 50
+
+
 class TestMatomoAPIMocked:
     """Tests for MatomoAPI class with mocked HTTP."""
 
