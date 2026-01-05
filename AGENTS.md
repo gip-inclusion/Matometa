@@ -122,8 +122,64 @@ Format:
 `MethodName.get?idSite=...` / `SELECT * FROM...`
 ```
 
-Use `format_data_source()` from `scripts/matomo.py` to generate these for Matomo queries.
+Use `format_data_source()` from `skills/matomo_query/scripts/matomo.py` to generate these for Matomo queries.
 The function maps API methods to their corresponding web UI categories and handles URL encoding.
+
+#### Avoiding Matomo timeouts
+
+Matomo queries with segments on large date ranges frequently timeout (30s limit). When this
+happens, the server returns an HTML error page instead of JSON, breaking jq parsing.
+
+**Symptoms:**
+- `jq: parse error: Invalid numeric literal at line 1, column 10`
+- Response starts with `<!DOCTYPE html>` or `<html>`
+
+**Prevention strategies:**
+
+1. **Query month-by-month instead of year ranges:**
+   ```bash
+   # BAD: times out
+   curl "...&date=2025-01-01,2025-12-31&segment=pageUrl%3D%40%2Fgps%2F"
+
+   # GOOD: query each month separately
+   for month in 01 02 03 04 05 06 07 08 09 10 11 12; do
+     curl "...&date=2025-${month}-01&period=month&segment=..."
+   done
+   ```
+
+2. **Use simpler segments first, add complexity incrementally:**
+   ```bash
+   # Start simple (no segment)
+   curl "...&period=month&date=2025-12-01"
+
+   # Then add segment
+   curl "...&period=month&date=2025-12-01&segment=pageUrl%3D%40%2Fgps%2F"
+
+   # Complex segments on single months only
+   curl "...&period=month&date=2025-12-01&segment=pageUrl%3D%40%2Fgps%2F%3Bdimension1%3D%3Dprescriber"
+   ```
+
+3. **Check response before piping to jq:**
+   ```bash
+   response=$(curl -s "...")
+   if echo "$response" | grep -q "DOCTYPE"; then
+     echo "Timeout - query too expensive"
+   else
+     echo "$response" | jq .
+   fi
+   ```
+
+4. **Use the Python client** which has built-in timeout handling:
+   ```python
+   from skills.matomo_query.scripts.matomo import MatomoAPI, MatomoError
+   # Or simply: from scripts.matomo import MatomoAPI, MatomoError
+
+   api = MatomoAPI()
+   try:
+       data = api.get_visits(site_id=117, period="month", date="2025-12-01", segment="pageUrl=@/gps/")
+   except MatomoError as e:
+       print(f"Query failed: {e}")
+   ```
 
 ### Context and resources
 
@@ -235,3 +291,47 @@ You write for two audiences:
 This means that the content of the reports needs to be easily parsed and reused. If you
 create a table with data, the data must feature a date range and URLs to check the data
 or run the query again.
+
+#### Visualizations with Mermaid
+
+Use Mermaid charts to illustrate data in reports. Mermaid renders natively on GitHub,
+making reports visually rich without external dependencies.
+
+**Supported chart types (GitHub-compatible):**
+
+```mermaid
+pie showData
+    title Distribution example
+    "Category A" : 45
+    "Category B" : 30
+    "Category C" : 25
+```
+
+```mermaid
+xychart-beta
+    title "Time series example"
+    x-axis [Jan, Feb, Mar, Apr, May, Jun]
+    y-axis "Value" 0 --> 100
+    bar [23, 45, 67, 34, 89, 56]
+```
+
+```mermaid
+flowchart LR
+    A["Step 1"] --> B["Step 2"]
+    B --> C["Step 3"]
+    B --> D["Step 4"]
+```
+
+**Best practices:**
+
+1. **Use `pie showData`** for distributions (user types, geographic breakdown, referrer sources)
+2. **Use `xychart-beta`** for time series and comparisons (monthly evolution, before/after)
+3. **Use `flowchart LR`** for user journeys and page flows
+4. **Avoid special characters** in labels: no accents (use `e` not `é`), no `<br/>` tags, no slashes
+5. **Keep labels short** - add a legend table below for full descriptions if needed
+6. **Quote all labels** with double quotes for safety: `"Label text"`
+
+**Do NOT use:**
+- ASCII art charts (hard to read, inconsistent rendering)
+- Complex Mermaid features unsupported by GitHub (gantt with advanced syntax, etc.)
+- Inline HTML in Mermaid blocks

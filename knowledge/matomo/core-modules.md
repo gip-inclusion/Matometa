@@ -158,6 +158,21 @@ DevicesDetection.getBrowserVersions(idSite, period, date, segment = '')
 DevicesDetection.getBrowserEngines(idSite, period, date, segment = '')
 ```
 
+## Resolution
+
+```
+Resolution.getResolution(idSite, period, date, segment = '')
+Resolution.getConfiguration(idSite, period, date, segment = '')
+```
+
+Returns screen resolutions (e.g., "1920x1080", "390x844") with visit metrics. Useful for:
+- Identifying desktop vs mobile usage patterns
+- Detecting device fragmentation by user segment
+- UX/design decisions (breakpoints, mobile-first priorities)
+
+**Segmentation tip:** Combine with custom dimensions to analyze by user type:
+`segment=dimension1==job_seeker` reveals mobile-heavy audiences vs desktop-heavy ones.
+
 ## UserCountry
 
 ```

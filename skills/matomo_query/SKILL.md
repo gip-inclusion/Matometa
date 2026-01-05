@@ -1,5 +1,5 @@
 ---
-name: querying-matomo
+name: matomo_query
 description: Query the Matomo analytics API to get visitor stats, page views, custom dimensions, and segmented data. Use this skill whenever you need to retrieve web analytics data.
 ---
 
@@ -26,10 +26,14 @@ Before querying, you MUST:
 
 ## Quick start with Python
 
-Use the helper library in `scripts/matomo.py`:
+Use the helper library in `skills/matomo_query/scripts/matomo.py`:
 
 ```python
+# From project root (recommended):
 from scripts.matomo import MatomoAPI
+
+# Or directly:
+from skills.matomo_query.scripts.matomo import MatomoAPI
 
 api = MatomoAPI()  # loads credentials from .env
 
@@ -246,10 +250,53 @@ social = api.get_referrer_socials(site_id=117, period="month", date="2025-12-01"
 
 ## Handling timeouts
 
-Segment queries on large date ranges can timeout. Strategies:
-1. Use `period=week` and query each week separately
-2. Add `filter_limit` to reduce response size
-3. Use more specific segments
+Segment queries on large date ranges frequently timeout (30s server limit).
+
+**Symptoms:**
+- curl returns HTML instead of JSON (`<!DOCTYPE html>`)
+- jq fails with "parse error: Invalid numeric literal at line 1, column 10"
+- Python client raises `MatomoError`
+
+**Strategies:**
+
+1. **Query single months, not ranges:**
+   ```bash
+   # BAD: year-long range with segment
+   date=2025-01-01,2025-12-31&segment=pageUrl%3D%40%2Fgps%2F
+
+   # GOOD: single month
+   date=2025-12-01&period=month&segment=pageUrl%3D%40%2Fgps%2F
+   ```
+
+2. **Use `period=week` for expensive queries:**
+   ```python
+   # Month query times out? Try weekly:
+   data = api.get_dimension_by_week(site_id=117, dimension_id=1, year=2025, month=12, segment="pageUrl=@/gps/")
+   ```
+
+3. **Reduce segment complexity:**
+   - Start with no segment, add incrementally
+   - Avoid combining multiple segment conditions on large date ranges
+
+4. **Add `filter_limit` to reduce response size:**
+   ```bash
+   &filter_limit=20  # only top 20 results
+   ```
+
+5. **Check response type before parsing:**
+   ```bash
+   response=$(curl -s "...")
+   if echo "$response" | grep -q "DOCTYPE"; then
+     echo "Timeout error"
+   else
+     echo "$response" | jq .
+   fi
+   ```
+
+**Known expensive queries:**
+- `CustomDimensions.getCustomDimension` with URL segment on multi-month ranges
+- `Events.getName` with segment
+- Any query combining `segment=` with `date=YYYY-MM-DD,YYYY-MM-DD` ranges
 
 ## Data freshness
 
