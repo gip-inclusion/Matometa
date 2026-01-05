@@ -13,9 +13,12 @@ AGENT_BACKEND = os.getenv("AGENT_BACKEND", "cli")
 CLAUDE_CLI = os.getenv("CLAUDE_CLI", "claude")
 
 # Allowed tools for the agent (safe subset)
-# Bash patterns: sqlite3, curl, python, rg, grep, cat, ls, head, tail
+# Bash patterns: sqlite3, curl, python/python3, rg, grep, cat, ls, head, tail, jq, source
 ALLOWED_TOOLS = os.getenv("ALLOWED_TOOLS",
-    "Read,Write,Edit,Glob,Grep,Bash(sqlite3:*),Bash(curl:*),Bash(python:*),Bash(rg:*),Bash(grep:*),Bash(cat:*),Bash(ls:*),Bash(head:*),Bash(tail:*),Bash(wc:*)"
+    "Read,Write,Edit,Glob,Grep,"
+    "Bash(sqlite3:*),Bash(curl:*),Bash(python:*),Bash(python3:*),"
+    "Bash(rg:*),Bash(grep:*),Bash(cat:*),Bash(ls:*),Bash(head:*),Bash(tail:*),Bash(wc:*),"
+    "Bash(jq:*),Bash(source:*)"
 )
 
 # Web server settings
