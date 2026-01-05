@@ -2,17 +2,13 @@
 <html lang="fr">
 <head>
   <title>Matometa{% block title_suffix %}{% endblock %}</title>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <!-- Itou design system -->
-  <link rel="stylesheet" href="https://emplois.inclusion.beta.gouv.fr/static/css/itou.css">
+  <link rel="shortcut icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/ico">
 
-  <!-- Bootstrap JS dependencies -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-
-  <!-- Remix Icons -->
-  <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet">
+  <!-- Itou Theme CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/gip-inclusion/itou-theme@v1.4.5/dist/stylesheets/app.css">
 
   <!-- App styles -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
@@ -20,8 +16,7 @@
   {% block head %}{% endblock %}
 </head>
 
-<body class="l-authenticated">
-  <!-- Skip links -->
+<body class="l-nexus">
   <nav role="navigation" aria-label="Acces rapide" tabindex="0" class="c-skiplinks">
     <ul>
       <li><a href="#nav-primary">Aller au menu principal</a></li>
@@ -29,71 +24,93 @@
     </ul>
   </nav>
 
-  <!-- Header -->
   <header role="banner" id="header">
-    <section class="s-header-authenticated">
-      <div class="s-header-authenticated__container container">
-        <div class="s-header-authenticated__row row">
-          <div class="s-header-authenticated__col s-header-authenticated__col--logo-service col-auto d-flex align-items-center pe-0">
-            <a href="/"><span class="logo-text">Matometa</span></a>
-          </div>
-          <div class="s-header-authenticated__col s-header-authenticated__col--nav col d-flex align-items-center justify-content-end pe-0">
-            <nav role="navigation" id="nav-primary" aria-label="Navigation principale">
-              <ul>
-                <li class="d-none d-lg-inline-block">
-                  <span class="badge bg-light text-dark">
-                    <i class="ri-terminal-line"></i>
-                    Local
-                  </span>
-                </li>
-              </ul>
-            </nav>
-          </div>
-          <div class="s-header-authenticated__col s-header-authenticated__col--burger col-auto d-flex align-items-center ps-0">
-            <button type="button" class="btn btn-link btn-ico pe-0" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNav" aria-controls="offcanvasNav" aria-label="Ouvrir le menu">
+    <section class="s-header-nexus">
+      <div class="s-header-nexus__container container">
+        <div class="s-header-nexus__row row">
+          <div class="s-header-nexus__col s-header-nexus__col--logo-service col-auto d-flex align-items-center">
+            <button type="button" class="btn btn-lg btn-ico-only btn-nexus" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNexus" aria-controls="offcanvasNexus" aria-label="Ouvrir le menu de navigation">
               <i class="ri-menu-line" aria-hidden="true"></i>
-              <span>Menu</span>
+              <span class="visually-hidden">Menu</span>
             </button>
+            <a href="/" class="d-flex align-items-center text-decoration-none">
+              <span class="fs-lg fw-bold text-white ms-2">Matometa</span>
+            </a>
+          </div>
+          <div class="s-header-nexus__col s-header-nexus__col--nav col-auto d-flex align-items-center">
+            <span class="badge bg-light text-dark me-2">
+              <i class="ri-terminal-line"></i>
+              Local
+            </span>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Offcanvas menu -->
-    <div class="offcanvas offcanvas-start" id="offcanvasNav" aria-label="Navigation principale">
-      <div class="offcanvas-header">
-        <h5 class="offcanvas-title">Matometa</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Fermer"></button>
-      </div>
-      <div class="offcanvas-body d-flex flex-column">
-        <nav class="flex-grow-1" role="navigation" aria-label="Navigation principale">
-          <ul class="nav nav-tabs flex-column menu-nav" id="menuList">
-            <li class="nav-item">
-              <a href="/explorations" class="nav-link {% if section == 'explorations' %}active{% endif %}">
+    <!-- Offcanvas sidebar -->
+    <div class="offcanvas" id="offcanvasNexus">
+      <div class="offcanvas-body">
+        <nav role="navigation" id="nav-primary" aria-label="Navigation principale">
+          <div class="d-flex align-items-center mb-1">
+            <strong class="flex-grow-1 mb-0">MATOMETA</strong>
+            <div class="d-md-none">
+              <button type="button" class="btn btn-lg btn-ico-only btn-nexus justify-content-center" data-bs-dismiss="offcanvas" aria-label="Fermer le menu">
+                <i class="ri-close-line" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+
+          <strong>EXPLORER</strong>
+          <ul>
+            <li>
+              <a href="/explorations" class="btn btn-lg btn-ico btn-nexus {% if section == 'explorations' %}active{% endif %}">
                 <i class="ri-compass-discover-line" aria-hidden="true"></i>
-                <span>Explorations</span>
+                <span class="d-md-none d-xl-inline-flex flex-grow-1">Explorations</span>
               </a>
             </li>
-            <li class="nav-item">
-              <a href="/connaissances" class="nav-link {% if section == 'connaissances' %}active{% endif %}">
+          </ul>
+
+          <strong>CONTEXTE</strong>
+          <ul>
+            <li>
+              <a href="/connaissances" class="btn btn-lg btn-ico btn-nexus {% if section == 'connaissances' %}active{% endif %}">
                 <i class="ri-book-open-line" aria-hidden="true"></i>
-                <span>Connaissances</span>
+                <span class="d-md-none d-xl-inline-flex flex-grow-1">Connaissances</span>
               </a>
             </li>
           </ul>
         </nav>
+
+        <ul>
+          <li>
+            <a href="/" class="d-md-none d-xl-inline-block px-1">
+              <span class="fs-lg fw-bold">Matometa</span>
+            </a>
+          </li>
+        </ul>
       </div>
     </div>
   </header>
 
-  <!-- Main content -->
-  <main class="s-main" role="main" id="main">
+  <main class="s-main" id="main" role="main">
     {% block content %}{% endblock %}
   </main>
 
+  <footer role="contentinfo" id="footer">
+    <section class="s-footer-legal">
+      <div class="s-footer-legal__container container">
+        <div class="s-footer-legal__row row">
+          <div class="s-footer-legal__col col-12">
+            <p class="mb-0 text-muted small">Matometa - Outil d'analyse de donnees</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </footer>
+
   <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.min.js"></script>
 
   <!-- App JS -->
   <script src="{{ url_for('static', filename='js/chat.js') }}"></script>

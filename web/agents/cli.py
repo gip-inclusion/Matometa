@@ -44,7 +44,7 @@ class CLIBackend(AgentBackend):
 
         # Build command
         prompt = self._build_prompt(message, history)
-        cmd = [config.CLAUDE_CLI, "--output-format", "stream-json", "-p", prompt]
+        cmd = [config.CLAUDE_CLI, "--output-format", "stream-json", "--verbose", "-p", prompt]
 
         # Add resume flag if we have a session
         if session_id:
