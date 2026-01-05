@@ -1,5 +1,5 @@
 """
-Matomo API client for cyberputois.
+Matomo API client for Matometa.
 
 Usage:
     from scripts.matomo import MatomoAPI
