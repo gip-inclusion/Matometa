@@ -12,11 +12,12 @@ AGENT_BACKEND = os.getenv("AGENT_BACKEND", "cli")
 # Claude CLI path (uses system default if not set)
 CLAUDE_CLI = os.getenv("CLAUDE_CLI", "claude")
 
-# Allowed tools for the agent (safe subset)
-# Using permissive Bash access since we control the environment
-# The agent needs: API calls, SQL queries, Python scripts, file inspection
+# Allowed tools for the agent
+# Bash patterns must match the START of the command
 ALLOWED_TOOLS = os.getenv("ALLOWED_TOOLS",
-    "Read,Write,Edit,Glob,Grep,Bash"
+    "Read,Write,Edit,Glob,Grep,"
+    "Bash(curl:*),Bash(jq:*),Bash(sqlite3:*),"
+    "Bash(.venv/bin/python:*)"  # Run scripts with venv
 )
 
 # Web server settings

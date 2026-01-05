@@ -207,6 +207,31 @@ DO NOT launch a query without having read the relevant domain knowledge.
 The ./skills folder contains skills, in the "AI agent skills" sense of the word.
 You MUST get acquainted with the list of available skills before you begin working.
 
+### Running scripts and commands
+
+**Available commands** (via Bash tool):
+- `.venv/bin/python <script.py>` — Run Python scripts with project dependencies
+- `curl` — API calls to Matomo/Metabase
+- `jq` — Parse JSON responses
+- `sqlite3` — Database queries
+
+**DO NOT use heredocs** (`<< 'EOF'`). Instead, write scripts to files and run them.
+
+**Use existing scripts:**
+- `skills/matomo_query/scripts/matomo.py` — MatomoAPI client (uses urllib, no requests needed)
+- `skills/metabase_query/scripts/metabase.py` — MetabaseAPI client (uses urllib)
+
+Example usage:
+```python
+# In a script file
+from skills.metabase_query.scripts.metabase import MetabaseAPI
+api = MetabaseAPI()
+result = api.execute_sql("SELECT * FROM table LIMIT 10")
+print(result.to_markdown())
+```
+
+Then run: `.venv/bin/python scripts/my_query.py`
+
 ### Learning
 
 You learn continuously about the subject matter and the way the sites work. As such, you
