@@ -73,12 +73,51 @@
       <div class="offcanvas-body d-flex flex-column">
         <nav class="flex-grow-1" role="navigation" aria-label="Navigation principale">
           <ul class="nav nav-tabs flex-column" id="menuList">
+            <!-- Explorations section -->
             <li class="nav-item">
               <a href="/explorations" class="nav-link {% if section == 'explorations' %}active{% endif %}">
                 <i class="ri-compass-discover-line fw-medium" aria-hidden="true"></i>
                 <span>Explorations</span>
               </a>
+              <!-- Conversation sub-list -->
+              <ul class="nav-sublist" id="conversationList">
+                <li class="nav-subitem nav-subitem-new">
+                  <a href="/explorations" class="nav-sublink" onclick="startFreshConversation(); return false;">
+                    <i class="ri-add-line"></i>
+                    <span>Nouvelle conversation</span>
+                  </a>
+                </li>
+                {% for conv in conversations %}
+                <li class="nav-subitem">
+                  <a href="/explorations?conv={{ conv.id }}" class="nav-sublink {% if current_conv == conv.id %}active{% endif %}" data-conv-id="{{ conv.id }}">
+                    <i class="ri-chat-3-line"></i>
+                    <span>{{ conv.title or 'Sans titre' }}</span>
+                  </a>
+                </li>
+                {% endfor %}
+              </ul>
             </li>
+            <!-- Reports section -->
+            <li class="nav-item">
+              <a href="#" class="nav-link nav-link-collapse {% if section == 'reports' %}active{% endif %}" data-bs-toggle="collapse" data-bs-target="#reportsSublist">
+                <i class="ri-file-text-line fw-medium" aria-hidden="true"></i>
+                <span>Rapports</span>
+                <i class="ri-arrow-down-s-line nav-collapse-icon"></i>
+              </a>
+              <ul class="nav-sublist collapse {% if section == 'reports' %}show{% endif %}" id="reportsSublist">
+                {% for report in reports %}
+                <li class="nav-subitem">
+                  <a href="/api/reports/{{ report.filename }}" target="_blank" class="nav-sublink">
+                    <i class="ri-article-line"></i>
+                    <span>{{ report.title }}</span>
+                  </a>
+                </li>
+                {% else %}
+                <li class="nav-subitem text-muted small px-3 py-2">Aucun rapport</li>
+                {% endfor %}
+              </ul>
+            </li>
+            <!-- Connaissances section -->
             <li class="nav-item">
               <a href="/connaissances" class="nav-link {% if section == 'connaissances' %}active{% endif %}">
                 <i class="ri-book-open-line fw-medium" aria-hidden="true"></i>

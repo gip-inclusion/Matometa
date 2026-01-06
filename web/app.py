@@ -29,22 +29,54 @@ def get_agent_instance():
 # -----------------------------------------------------------------------------
 
 
+def get_sidebar_data():
+    """Get data for sidebar (conversations and reports)."""
+    # Recent conversations
+    conversations = store.list_recent(limit=10)
+
+    # Reports from filesystem
+    reports = []
+    reports_dir = config.BASE_DIR / "reports"
+    if reports_dir.exists():
+        for f in sorted(reports_dir.glob("*.md"), reverse=True)[:10]:
+            title = f.stem
+            try:
+                content = f.read_text()
+                if content.startswith("---"):
+                    import re
+                    match = re.search(r"^---\n.*?^---\n", content, re.MULTILINE | re.DOTALL)
+                    if match:
+                        fm = match.group()
+                        title_match = re.search(r"^query category:\s*(.+)$", fm, re.MULTILINE)
+                        if title_match:
+                            title = title_match.group(1).strip()
+            except Exception:
+                pass
+            reports.append({"filename": f.name, "title": title})
+
+    return {"conversations": conversations, "reports": reports}
+
+
 @app.route("/")
 def index():
     """Redirect to explorations."""
-    return render_template("explorations.html", section="explorations")
+    data = get_sidebar_data()
+    return render_template("explorations.html", section="explorations", **data)
 
 
 @app.route("/explorations")
 def explorations():
     """Explorations section - chat interface."""
-    return render_template("explorations.html", section="explorations")
+    data = get_sidebar_data()
+    current_conv = request.args.get("conv")
+    return render_template("explorations.html", section="explorations", current_conv=current_conv, **data)
 
 
 @app.route("/connaissances")
 def connaissances():
     """Connaissances section - placeholder."""
-    return render_template("connaissances.html", section="connaissances")
+    data = get_sidebar_data()
+    return render_template("connaissances.html", section="connaissances", **data)
 
 
 # -----------------------------------------------------------------------------

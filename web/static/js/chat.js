@@ -24,6 +24,13 @@ function initChat() {
 
   if (!input || !sendBtn) return;
 
+  // Check for conversation ID in URL
+  const urlParams = new URLSearchParams(window.location.search);
+  const convId = urlParams.get('conv');
+  if (convId) {
+    loadConversation(convId);
+  }
+
   // Auto-grow textarea
   input.addEventListener('input', () => autoGrow(input));
 
@@ -679,5 +686,72 @@ function scrollToBottom() {
   const chatOutput = document.getElementById('chatOutput');
   if (chatOutput) {
     chatOutput.scrollTop = chatOutput.scrollHeight;
+  }
+}
+
+/**
+ * Load an existing conversation by ID
+ */
+async function loadConversation(convId) {
+  try {
+    const response = await fetch(`/api/conversations/${convId}`);
+    if (!response.ok) {
+      console.error('Failed to load conversation:', response.status);
+      return;
+    }
+
+    const conv = await response.json();
+    currentConversationId = conv.id;
+
+    // Hide empty state
+    hideEmptyState();
+
+    // Render existing messages
+    const chatOutput = document.getElementById('chatOutput');
+    if (chatOutput && conv.messages) {
+      for (const msg of conv.messages) {
+        if (msg.role === 'user') {
+          appendEvent('user', { content: msg.content });
+        } else if (msg.role === 'assistant') {
+          appendEvent('assistant', { content: msg.content });
+        }
+      }
+    }
+
+    // Update URL without reload
+    window.history.replaceState({}, '', `/explorations?conv=${convId}`);
+
+  } catch (error) {
+    console.error('Failed to load conversation:', error);
+  }
+}
+
+/**
+ * Start a fresh conversation (clear current state)
+ */
+function startFreshConversation() {
+  currentConversationId = null;
+  lastUserMessage = null;
+  retryCount = 0;
+
+  // Clear chat output
+  const chatOutput = document.getElementById('chatOutput');
+  if (chatOutput) {
+    chatOutput.innerHTML = `
+      <div class="empty-state" id="emptyState">
+        <i class="ri-chat-3-line ri-4x text-disabled mb-3"></i>
+        <p class="mb-0 text-muted">Posez une question pour commencer</p>
+        <p class="small text-muted">Ex : « Combien de visiteurs sur les Emplois en décembre ? »</p>
+      </div>
+    `;
+  }
+
+  // Update URL
+  window.history.replaceState({}, '', '/explorations');
+
+  // Focus input
+  const input = document.getElementById('chatInput');
+  if (input) {
+    input.focus();
   }
 }

@@ -575,3 +575,78 @@
     height: 42px;
   }
 }
+
+/* ==========================================================================
+   Sidebar sub-lists for conversations and reports
+   ========================================================================== */
+.nav-sublist {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.5rem 0;
+}
+
+.nav-subitem {
+  margin: 0;
+}
+
+.nav-sublink {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem 0.5rem 2.5rem;
+  color: var(--bs-gray-700);
+  text-decoration: none;
+  font-size: 0.875rem;
+  border-left: 2px solid transparent;
+  transition: all 0.15s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-sublink:hover {
+  background: var(--bs-gray-100);
+  color: var(--bs-primary);
+}
+
+.nav-sublink.active {
+  background: var(--bs-primary-bg-subtle);
+  border-left-color: var(--bs-primary);
+  color: var(--bs-primary);
+  font-weight: 500;
+}
+
+.nav-sublink i {
+  flex-shrink: 0;
+  font-size: 1rem;
+  opacity: 0.7;
+}
+
+.nav-sublink span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* New conversation item */
+.nav-subitem-new .nav-sublink {
+  color: var(--bs-primary);
+  font-weight: 500;
+}
+
+.nav-subitem-new .nav-sublink:hover {
+  background: var(--bs-primary-bg-subtle);
+}
+
+/* Collapsible sections */
+.nav-link-collapse {
+  cursor: pointer;
+}
+
+.nav-link-collapse .nav-collapse-icon {
+  margin-left: auto;
+  transition: transform 0.2s;
+}
+
+.nav-link-collapse[aria-expanded="true"] .nav-collapse-icon {
+  transform: rotate(180deg);
+}

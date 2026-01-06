@@ -138,5 +138,6 @@ class ConversationStore:
         return False
 
 
-# Global store instance
-store = ConversationStore()
+# Global store instance - use SQLite for persistence
+from .database import SQLiteConversationStore
+store = SQLiteConversationStore()
