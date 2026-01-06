@@ -230,7 +230,10 @@ result = api.execute_sql("SELECT * FROM table LIMIT 10")
 print(result.to_markdown())
 ```
 
-Then run: `.venv/bin/python scripts/my_query.py`
+Then run: `PYTHONPATH=. .venv/bin/python scripts/my_query.py`
+
+**Preferred approach:** Use Python scripts over direct curl commands. The Python clients
+handle authentication automatically and curl commands may be blocked by permission settings.
 
 ### Learning
 
@@ -291,7 +294,9 @@ serves as a way for operators to audit and follow your progress.
 ### Output
 
 **Language: French by default.** Most users query Matometa in French. All reports
-MUST be written in French unless the user explicitly requests another language.
+MUST be written in French unless the user explicitly requests another language. Whenever
+you have to chat in French, use "vous" with the user. Never use "tu", even if the user does
+it themselves.
 
 Write down your reports in ./reports.
 Name the reports using the format YYYY-MM-parameterized-name.md.

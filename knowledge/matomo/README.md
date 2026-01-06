@@ -64,3 +64,22 @@ Optional modifiers:
 - `flat=1` - Flatten hierarchical results
 - `expanded=1` - Include subtables inline
 - `filter_limit=N` - Max rows to return
+
+## Python Client Quick Reference
+
+```python
+from skills.matomo_query.scripts.matomo import MatomoAPI
+api = MatomoAPI()  # loads credentials from .env
+
+# Core methods
+api.get_visits(site_id, period, date, segment=None)           # VisitsSummary.get
+api.get_dimension(site_id, dimension_id, period, date, segment=None)  # CustomDimensions
+api.get_pages(site_id, period, date, pattern=None, segment=None)      # Actions.getPageUrls
+api.get_event_categories(site_id, period, date, segment=None)         # Events.getCategory
+api.get_event_actions(site_id, period, date, segment=None)            # Events.getAction
+api.get_event_names(site_id, period, date, segment=None)              # Events.getName
+api.get_referrers(site_id, period, date, segment=None)                # Referrers.getReferrerType
+api.get_transitions(site_id, period, date, page_url, segment=None)    # Transitions
+
+# Run scripts with: PYTHONPATH=. .venv/bin/python scripts/my_script.py
+```
