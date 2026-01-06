@@ -2,8 +2,9 @@
 
 from .base import AgentBackend, AgentMessage
 from .cli import CLIBackend
+from .sdk import SDKBackend
 
-__all__ = ["AgentBackend", "AgentMessage", "CLIBackend", "get_agent"]
+__all__ = ["AgentBackend", "AgentMessage", "CLIBackend", "SDKBackend", "get_agent"]
 
 
 def get_agent() -> AgentBackend:
@@ -11,7 +12,6 @@ def get_agent() -> AgentBackend:
     from .. import config
 
     if config.AGENT_BACKEND == "sdk":
-        from .sdk import SDKBackend
         return SDKBackend()
     else:
         return CLIBackend()
