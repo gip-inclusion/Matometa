@@ -109,9 +109,26 @@ https://{MATOMO_URL}/?module=API&method={METHOD}&format=JSON&token_auth={API_KEY
 
 ### Segments
 
-Segments filter the data to a subset of visits. Format: `dimension==value` or `dimension=@value` (contains).
+Segments filter the data to a subset of visits.
 
-Common segments:
+**IMPORTANT: Use saved segments whenever possible.** Each site has pre-defined segments
+(listed in `## Saved Segments` in the site's knowledge file) that are optimized and
+pre-archived by Matomo. These are much faster than custom segments and avoid timeouts.
+
+Check the site knowledge file first:
+- `knowledge/sites/emplois.md` → 39 saved segments
+- `knowledge/sites/dora.md` → 29 saved segments
+- etc.
+
+Common saved segment patterns across sites:
+- `RETENTION - dernière visite 30j` — returning users within 30 days
+- `PROFILE - connecté` / `PROFILE - Logged in` — authenticated users
+- `DEVICE - mobile` / `DEVICE - Smartphone` — mobile visitors
+- `SOURCE - ...` — traffic from specific sources
+
+**Custom segments** (when no saved segment fits) use format `dimension==value` or `dimension=@value` (contains).
+
+Common custom segments:
 ```
 pageUrl=@/gps/              # visits that viewed any /gps/ page
 pageUrl==/exact/path        # visits that viewed exactly this path
@@ -259,7 +276,15 @@ Segment queries on large date ranges frequently timeout (30s server limit).
 
 **Strategies:**
 
-1. **Query single months, not ranges:**
+1. **Use saved segments instead of custom ones:**
+   Saved segments (listed in each site's knowledge file) are pre-archived by Matomo
+   and return instantly. Custom segments must be computed on-the-fly and often timeout.
+   ```python
+   # Check knowledge/sites/{site}.md for available saved segments
+   # Use the segment definition from the "Saved Segments" table
+   ```
+
+2. **Query single months, not ranges:**
    ```bash
    # BAD: year-long range with segment
    date=2025-01-01,2025-12-31&segment=pageUrl%3D%40%2Fgps%2F
@@ -268,22 +293,22 @@ Segment queries on large date ranges frequently timeout (30s server limit).
    date=2025-12-01&period=month&segment=pageUrl%3D%40%2Fgps%2F
    ```
 
-2. **Use `period=week` for expensive queries:**
+3. **Use `period=week` for expensive queries:**
    ```python
    # Month query times out? Try weekly:
    data = api.get_dimension_by_week(site_id=117, dimension_id=1, year=2025, month=12, segment="pageUrl=@/gps/")
    ```
 
-3. **Reduce segment complexity:**
+4. **Reduce segment complexity:**
    - Start with no segment, add incrementally
    - Avoid combining multiple segment conditions on large date ranges
 
-4. **Add `filter_limit` to reduce response size:**
+5. **Add `filter_limit` to reduce response size:**
    ```bash
    &filter_limit=20  # only top 20 results
    ```
 
-5. **Check response type before parsing:**
+6. **Check response type before parsing:**
    ```bash
    response=$(curl -s "...")
    if echo "$response" | grep -q "DOCTYPE"; then
