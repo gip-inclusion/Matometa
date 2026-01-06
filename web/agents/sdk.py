@@ -134,11 +134,16 @@ class SDKBackend(AgentBackend):
 
         elif isinstance(sdk_message, SystemMessage):
             subtype = getattr(sdk_message, 'subtype', None)
+            data = getattr(sdk_message, 'data', {}) or {}
             message_content = getattr(sdk_message, 'message', None) or subtype or 'system'
             messages.append(AgentMessage(
                 type="system",
                 content=message_content,
-                raw={"subtype": subtype}
+                raw={
+                    "subtype": subtype,
+                    "session_id": data.get('session_id'),
+                    "data": data,
+                }
             ))
 
         elif isinstance(sdk_message, ResultMessage):

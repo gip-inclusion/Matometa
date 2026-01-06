@@ -196,6 +196,13 @@ def stream_conversation(conv_id: str):
                         session_id=conv.session_id,
                     ):
                         event_queue.put(("event", event))
+
+                        # Capture session_id from system init message
+                        if event.type == "system" and event.raw.get("subtype") == "init":
+                            new_session_id = event.raw.get("session_id")
+                            if new_session_id:
+                                store.update_session_id(conv_id, new_session_id)
+
                 except Exception as e:
                     error_holder[0] = e
                 finally:
