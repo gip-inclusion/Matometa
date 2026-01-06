@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import re
+import threading
 from flask import Flask, Response, jsonify, render_template, request, send_from_directory
 
 from . import config
@@ -11,6 +12,38 @@ from .storage import store
 from .agents import get_agent
 
 app = Flask(__name__)
+
+
+def generate_conversation_title(user_message: str, conv_id: str) -> None:
+    """Generate a smart title for a conversation using Claude (async, in background)."""
+    try:
+        from anthropic import Anthropic
+    except ImportError:
+        return
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        return
+
+    def _generate():
+        try:
+            client = Anthropic(api_key=api_key)
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=50,
+                messages=[{
+                    "role": "user",
+                    "content": f"Write a concise summary (max 6 words, no quotes) of this user request:\n\n{user_message[:500]}"
+                }]
+            )
+            title = response.content[0].text.strip()[:60]
+            if title:
+                store.update_title(conv_id, title)
+        except Exception as e:
+            app.logger.warning(f"Failed to generate title: {e}")
+
+    # Run in background thread to not block response
+    threading.Thread(target=_generate, daemon=True).start()
 
 # Global agent instance
 _agent = None
@@ -164,7 +197,12 @@ def send_message(conv_id: str):
         return jsonify({"error": "Conversation already running"}), 409
 
     # Add user message to conversation
+    is_first_message = len(conv.messages) == 0
     store.append_message(conv_id, "user", content)
+
+    # Generate smart title for new conversations (in background)
+    if is_first_message:
+        generate_conversation_title(content, conv_id)
 
     return jsonify(
         {

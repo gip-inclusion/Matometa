@@ -183,6 +183,15 @@ class SQLiteConversationStore:
             )
             return cursor.rowcount > 0
 
+    def update_title(self, conv_id: str, title: str) -> bool:
+        """Update the title for a conversation."""
+        with get_db() as conn:
+            cursor = conn.execute(
+                "UPDATE conversations SET title = ? WHERE id = ?",
+                (title, conv_id)
+            )
+            return cursor.rowcount > 0
+
     def list_recent(
         self, user_id: Optional[str] = None, limit: int = 20
     ) -> list[Conversation]:

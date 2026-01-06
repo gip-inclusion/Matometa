@@ -55,6 +55,7 @@ body.has-sidebar {
   display: flex;
   flex-direction: column;
   z-index: 1000;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -89,6 +90,8 @@ body.has-sidebar {
 
 .sidebar-nav .nav-item {
   margin-bottom: 0.25rem;
+  width: 100%;
+  min-width: 0;
 }
 
 .sidebar-nav .nav-link {
@@ -101,6 +104,9 @@ body.has-sidebar {
   font-weight: 500;
   border-left: 3px solid transparent;
   transition: all 0.15s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sidebar-nav .nav-link:hover {
@@ -474,10 +480,10 @@ body.has-sidebar {
    View modes (segmented control)
    ========================================================================== */
 
-/* Minimal: Only reports and final messages */
+/* Minimal: Only reports and final answers */
 .chat-output.view-minimal .event-tool_use,
 .chat-output.view-minimal .event-tool_result,
-.chat-output.view-minimal .event-assistant:not(.event-report) {
+.chat-output.view-minimal .event-assistant:not(.event-report):not(.event-final-answer) {
   display: none;
 }
 

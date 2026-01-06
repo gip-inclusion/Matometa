@@ -14,6 +14,10 @@ class Message:
     content: str  # text content
     timestamp: datetime = field(default_factory=datetime.now)
     raw_events: list[dict] = field(default_factory=list)  # full agent events
+    # TODO: Add is_final_answer: bool field to distinguish intermediate assistant
+    # messages from final answers. Needed for "minimal" view mode to work correctly
+    # when loading old conversations. Currently all assistant text is joined into
+    # one message, but streaming shows multiple blocks.
 
 
 @dataclass
@@ -108,6 +112,14 @@ class ConversationStore:
         if not conv:
             return False
         conv.session_id = session_id
+        return True
+
+    def update_title(self, conv_id: str, title: str) -> bool:
+        """Update the title for a conversation."""
+        conv = self._conversations.get(conv_id)
+        if not conv:
+            return False
+        conv.title = title
         return True
 
     def list_recent(

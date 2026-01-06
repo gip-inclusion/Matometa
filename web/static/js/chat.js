@@ -69,6 +69,11 @@ function initChat() {
       chatOutput.classList.remove('view-minimal', 'view-normal', 'view-verbose');
       chatOutput.classList.add(`view-${mode}`);
 
+      // Ensure final answers are marked for minimal mode
+      if (mode === 'minimal') {
+        markFinalAnswersInConversation();
+      }
+
       // Update label
       if (viewModeLabel) {
         viewModeLabel.textContent = label;
@@ -195,6 +200,7 @@ function startStream() {
     setStreamingState(false);
     hideLoading();
     removeProgressIndicator();
+    markFinalAnswer();
   });
 
   // Handle errors
@@ -450,6 +456,49 @@ function removeProgressIndicator() {
     progressIndicator.remove();
     progressIndicator = null;
     progressDots = '';
+  }
+}
+
+/**
+ * Mark the last assistant message as a final answer
+ * Called when streaming completes
+ */
+function markFinalAnswer() {
+  const chatOutput = document.getElementById('chatOutput');
+  if (!chatOutput) return;
+
+  // Find the last assistant message (that's not already a report)
+  const assistantMessages = chatOutput.querySelectorAll('.event-assistant:not(.event-report)');
+  if (assistantMessages.length > 0) {
+    const lastAssistant = assistantMessages[assistantMessages.length - 1];
+    lastAssistant.classList.add('event-final-answer');
+  }
+}
+
+/**
+ * Mark final answers in a loaded conversation
+ * Final answer = last assistant message before each user message, or the very last one
+ */
+function markFinalAnswersInConversation() {
+  const chatOutput = document.getElementById('chatOutput');
+  if (!chatOutput) return;
+
+  const blocks = chatOutput.querySelectorAll('.event-block');
+  let lastAssistant = null;
+
+  blocks.forEach((block) => {
+    if (block.classList.contains('event-assistant') && !block.classList.contains('event-report')) {
+      lastAssistant = block;
+    } else if (block.classList.contains('event-user') && lastAssistant) {
+      // Mark the last assistant before this user message as final
+      lastAssistant.classList.add('event-final-answer');
+      lastAssistant = null;
+    }
+  });
+
+  // Mark the very last assistant message if any
+  if (lastAssistant) {
+    lastAssistant.classList.add('event-final-answer');
   }
 }
 
@@ -716,6 +765,8 @@ async function loadConversation(convId) {
           appendEvent('assistant', { content: msg.content });
         }
       }
+      // Mark final answers for minimal view mode
+      markFinalAnswersInConversation();
     }
 
     // Update URL without reload
@@ -733,6 +784,9 @@ function startFreshConversation() {
   currentConversationId = null;
   lastUserMessage = null;
   retryCount = 0;
+
+  // Deselect active conversation in sidebar
+  document.querySelectorAll('.nav-sublink.active').forEach(el => el.classList.remove('active'));
 
   // Clear chat output
   const chatOutput = document.getElementById('chatOutput');
