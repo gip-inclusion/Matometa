@@ -1,16 +1,16 @@
 ---
-date: 2025-01-05
+date: 2025-01-06
 website: Emplois
 original_query: "Génère un rapport, avec des illustrations, sur l'évolution de l'utilisation de la fonction GPS / réseau d'intervenants, sur les Emplois."
 query_category: Analyse de fonctionnalité - GPS
-indicator_type: [pages_vues, events, segmentation_utilisateurs, geographie]
+indicator_type: [pages_vues, events, segmentation_utilisateurs, geographie, entry_pages, impact_ux]
 ---
 
 # Évolution de l'utilisation du GPS / Réseau d'intervenants
 
 **Site :** les Emplois (emplois.inclusion.beta.gouv.fr)
 **Période analysée :** Janvier - Décembre 2025
-**Date du rapport :** 5 janvier 2026
+**Date du rapport :** 6 janvier 2026 (mise à jour)
 
 ## Résumé exécutif
 
@@ -345,26 +345,114 @@ pie showData
 
 ---
 
-## 8. Synthèse et recommandations
+## 8. Comment les utilisateurs accèdent au GPS
 
-### 8.1 Points forts
+### 8.1 Pages d'entrée (décembre 2025)
+
+D'où viennent les utilisateurs qui consultent le GPS ?
+
+```mermaid
+pie showData
+    title "Sources d acces au GPS"
+    "Dashboard" : 77.2
+    "GPS direct" : 9.7
+    "Liste candidatures SIAE" : 3.3
+    "Autres" : 9.8
+```
+
+| Page d'entrée | Visites | % |
+|---------------|--------:|--:|
+| `/dashboard/` | 2 670 | 77,2% |
+| `/gps/groups/list` (accès direct/favori) | 334 | 9,7% |
+| `/apply/siae/list` (liste candidatures reçues) | 114 | 3,3% |
+| `/job-seekers/<session>/sender/check-nir` | 64 | 1,8% |
+| `/apply/prescriptions/list` | 56 | 1,6% |
+| `/apply/*/siae/details` (fiche candidature) | 39 | 1,1% |
+| `/job-seekers/list` | 35 | 1,0% |
+| Autres | ~148 | 4,3% |
+
+**Data source:** [View in Matomo](https://stats.inclusion.beta.gouv.fr/index.php?module=CoreHome&action=index&idSite=117&period=month&date=2025-12-01#?idSite=117&period=month&date=2025-12-01&segment=pageUrl%253D%2540%252Fgps%252F&category=General_Actions&subcategory=Actions_SubmenuPagesEntry) | `Actions.getEntryPageUrls?idSite=117&period=month&date=2025-12-01&segment=pageUrl%3D%40%2Fgps%2F&flat=1`
+
+**Interprétation :** Le **dashboard est la porte d'entrée principale** (77%) vers le GPS. L'accès depuis les fiches candidature (`/apply/*/siae/details`) reste marginal (1,1%), malgré l'ajout récent d'un lien.
+
+### 8.2 Impact du déplacement du lien vers le menu (25 novembre 2025)
+
+Le 25 novembre, le lien vers la liste des bénéficiaires GPS a été déplacé du dashboard vers la sidebar (menu principal). Ce clic déclenche l'événement `tdb_liste_beneficiaires`.
+
+**Évolution hebdomadaire :**
+
+| Semaine | `tdb_liste_beneficiaires` | Commentaire |
+|---------|-------------------------:|-------------|
+| Oct 28 - Nov 3 | 163 | Baseline |
+| Nov 3-9 | 156 | Baseline |
+| Nov 10-16 | 127 | Baseline |
+| Nov 17-23 | 165 | **Dernière semaine avant changement** |
+| **Nov 24-30** | **818** | **⬆️ Changement le 25** |
+| Déc 1-7 | 719 | Nouveau niveau |
+| Déc 8-14 | 986 | Nouveau niveau |
+| Déc 15-21 | 920 | Nouveau niveau |
+| Déc 22-28 | 350 | Fêtes |
+
+```mermaid
+xychart-beta
+    title "Evenement tdb_liste_beneficiaires par semaine"
+    x-axis ["Oct 28", "Nov 3", "Nov 10", "Nov 17", "Nov 24", "Dec 1", "Dec 8", "Dec 15", "Dec 22"]
+    y-axis "Evenements" 0 --> 1100
+    bar [163, 156, 127, 165, 818, 719, 986, 920, 350]
+```
+
+**Résultat :**
+- **Avant** (7 semaines) : 1 114 événements, soit **159/semaine** en moyenne
+- **Après** (4 semaines) : 3 443 événements, soit **861/semaine** en moyenne
+- **Augmentation : +441%**
+
+Le déplacement vers le menu a multiplié par **5x** l'utilisation du lien.
+
+**Data source:** [View in Matomo](https://stats.inclusion.beta.gouv.fr/index.php?module=CoreHome&action=index&idSite=117&period=week&date=2025-11-24#?idSite=117&period=week&date=2025-11-24&category=General_Actions&subcategory=Events_Events) | `Events.getName?idSite=117&period=week&date=2025-11-24`
+
+### 8.3 Accès depuis les fiches candidature
+
+Un lien vers le GPS a été ajouté sur les pages `/apply/*/siae/details` (fiche détaillée d'une candidature côté SIAE).
+
+**Évolution hebdomadaire des entrées GPS depuis cette page :**
+
+| Semaine | Entrées depuis `/apply/*/siae/details` | Total GPS | % |
+|---------|--------------------------------------:|----------:|--:|
+| Nov 3-9 | 1 | 968 | 0,1% |
+| Nov 10-16 | 2 | 176 | 1,1% |
+| Nov 17-23 | 1 | 165 | 0,6% |
+| Nov 24-30 | 12 | 628 | 1,9% |
+| Déc 1-7 | 6 | 568 | 1,1% |
+| Déc 8-14 | 9 | 874 | 1,0% |
+| Déc 15-21 | 15 | 1 236 | 1,2% |
+
+**Constat :** L'accès depuis les fiches candidature reste **très marginal** (1-2% des entrées GPS). Le lien existe mais n'est pas un vecteur significatif d'acquisition vers le GPS.
+
+---
+
+## 9. Synthèse et recommandations
+
+### 9.1 Points forts
 
 1. **Croissance explosive T4 2025** : le GPS passe d'un outil de niche (~700 utilisateurs) à une fonctionnalité majeure (3 000+ utilisateurs)
 2. **Engagement exceptionnel** : 35+ actions/visite, 20+ minutes de temps passé
 3. **Fidélité remarquable** : 98% d'utilisateurs récurrents
 4. **Adoption par les prescripteurs** : le profil cible principal utilise massivement l'outil
+5. **Impact UX mesuré** : le déplacement du lien vers la sidebar (+441% de clics) prouve l'efficacité des changements de navigation
 
-### 8.2 Points d'attention
+### 9.2 Points d'attention
 
 1. **Concentration géographique forte** : 10 départements = 90% du trafic. Quid des autres territoires ?
 2. **Faible acquisition de nouveaux utilisateurs** : seulement 1.7% de nouveaux en décembre
 3. **Creux estival marqué** : -50% d'usage en août
+4. **Lien candidature → GPS peu utilisé** : l'accès depuis les fiches candidature reste marginal (1%)
 
-### 8.3 Pistes d'investigation
+### 9.3 Pistes d'investigation
 
 - **Octobre 2025** : Qu'est-ce qui explique le doublement du trafic ? Déploiement ? Formation ? Communication ?
-- **Décembre 2025** : Même question pour l'explosion (+85% vs novembre)
+- **Décembre 2025** : L'explosion (+85% vs novembre) coïncide avec le déplacement du lien dans la sidebar (25 nov), mais l'augmentation des clics sur ce lien n'explique pas tout le gain de trafic
 - **Nord (59)** : Pourquoi ce département représente 16% du trafic GPS ?
+- **Lien fiche candidature** : Pourquoi si peu utilisé ? Visibilité insuffisante ? Contexte d'usage différent ?
 
 ---
 
