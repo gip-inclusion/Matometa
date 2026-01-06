@@ -23,7 +23,7 @@ from unittest.mock import patch, MagicMock
 
 def test_matomo_module_imports():
     """Module imports without errors."""
-    from skills.querying.scripts import matomo
+    from skills.matomo_query.scripts import matomo
     assert hasattr(matomo, 'MatomoAPI')
     assert hasattr(matomo, 'MatomoError')
     assert hasattr(matomo, 'get_ui_url')
@@ -33,7 +33,7 @@ def test_matomo_module_imports():
 
 def test_ui_mapping_module_imports():
     """UI mapping module imports without errors."""
-    from skills.querying.scripts import ui_mapping
+    from skills.matomo_query.scripts import ui_mapping
     assert hasattr(ui_mapping, 'UI_MAPPING')
     assert hasattr(ui_mapping, 'get_ui_url')
     assert hasattr(ui_mapping, 'format_data_source')
@@ -41,7 +41,7 @@ def test_ui_mapping_module_imports():
 
 def test_ui_mapping_is_dict():
     """UI_MAPPING is a non-empty dict with correct structure."""
-    from skills.querying.scripts.ui_mapping import UI_MAPPING
+    from skills.matomo_query.scripts.ui_mapping import UI_MAPPING
     assert isinstance(UI_MAPPING, dict)
     assert len(UI_MAPPING) > 0
     for method, (category, subcategory) in UI_MAPPING.items():
@@ -53,7 +53,7 @@ def test_ui_mapping_is_dict():
 
 def test_matomo_api_class_has_expected_methods():
     """MatomoAPI class has all expected public methods."""
-    from skills.querying.scripts.matomo import MatomoAPI
+    from skills.matomo_query.scripts.matomo import MatomoAPI
     expected_methods = [
         'get_sites',
         'get_visits',
@@ -90,7 +90,7 @@ class TestGetUiUrl:
     """Tests for get_ui_url function."""
 
     def test_basic_url(self):
-        from skills.querying.scripts.ui_mapping import get_ui_url
+        from skills.matomo_query.scripts.ui_mapping import get_ui_url
         url = get_ui_url(
             base_url="matomo.example.com",
             method="VisitsSummary.get",
@@ -106,7 +106,7 @@ class TestGetUiUrl:
         assert "subcategory=General_Overview" in url
 
     def test_url_with_segment(self):
-        from skills.querying.scripts.ui_mapping import get_ui_url
+        from skills.matomo_query.scripts.ui_mapping import get_ui_url
         url = get_ui_url(
             base_url="matomo.example.com",
             method="VisitsSummary.get",
@@ -121,7 +121,7 @@ class TestGetUiUrl:
         assert "gps" in url
 
     def test_custom_dimension_url(self):
-        from skills.querying.scripts.ui_mapping import get_ui_url
+        from skills.matomo_query.scripts.ui_mapping import get_ui_url
         url = get_ui_url(
             base_url="matomo.example.com",
             method="CustomDimensions.getCustomDimension",
@@ -133,7 +133,7 @@ class TestGetUiUrl:
         assert "subcategory=customdimension1" in url
 
     def test_unknown_method_falls_back_to_dashboard(self):
-        from skills.querying.scripts.ui_mapping import get_ui_url
+        from skills.matomo_query.scripts.ui_mapping import get_ui_url
         url = get_ui_url(
             base_url="matomo.example.com",
             method="Unknown.method",
@@ -148,7 +148,7 @@ class TestFormatDataSource:
     """Tests for format_data_source function."""
 
     def test_returns_markdown(self):
-        from skills.querying.scripts.ui_mapping import format_data_source
+        from skills.matomo_query.scripts.ui_mapping import format_data_source
         result = format_data_source(
             base_url="matomo.example.com",
             method="VisitsSummary.get",
@@ -158,7 +158,7 @@ class TestFormatDataSource:
         assert "`VisitsSummary.get?" in result
 
     def test_includes_segment_in_api_call(self):
-        from skills.querying.scripts.ui_mapping import format_data_source
+        from skills.matomo_query.scripts.ui_mapping import format_data_source
         result = format_data_source(
             base_url="matomo.example.com",
             method="VisitsSummary.get",
@@ -172,7 +172,7 @@ class TestFormatDataSource:
         assert "segment=pageUrl=@/gps/" in result
 
     def test_includes_dimension_id(self):
-        from skills.querying.scripts.ui_mapping import format_data_source
+        from skills.matomo_query.scripts.ui_mapping import format_data_source
         result = format_data_source(
             base_url="matomo.example.com",
             method="CustomDimensions.getCustomDimension",
@@ -187,7 +187,7 @@ class TestGetDimensionByWeek:
 
     @pytest.fixture
     def api(self):
-        from skills.querying.scripts.matomo import MatomoAPI
+        from skills.matomo_query.scripts.matomo import MatomoAPI
         return MatomoAPI(url="matomo.example.com", token="test_token")
 
     def test_iterates_all_weeks_in_month(self, api):
@@ -261,7 +261,7 @@ class TestGetDimensionByWeek:
 
     def test_captures_api_errors_in_result(self, api):
         """MatomoError for a week is captured, not raised."""
-        from skills.querying.scripts.matomo import MatomoError
+        from skills.matomo_query.scripts.matomo import MatomoError
         from unittest.mock import patch
 
         def raise_on_second_call(*args, **kwargs):
@@ -301,7 +301,7 @@ class TestMatomoAPIMocked:
 
     @pytest.fixture
     def api(self):
-        from skills.querying.scripts.matomo import MatomoAPI
+        from skills.matomo_query.scripts.matomo import MatomoAPI
         return MatomoAPI(url="matomo.example.com", token="test_token")
 
     def test_init_with_explicit_credentials(self, api):
@@ -347,7 +347,7 @@ class TestMatomoAPIMocked:
 
     @patch('urllib.request.urlopen')
     def test_api_error_raises_exception(self, mock_urlopen, api):
-        from skills.querying.scripts.matomo import MatomoError
+        from skills.matomo_query.scripts.matomo import MatomoError
         mock_response = MagicMock()
         mock_response.read.return_value = json.dumps({
             "result": "error",
@@ -406,7 +406,7 @@ class TestMatomoAPIIntegration:
 
     @pytest.fixture
     def api(self):
-        from skills.querying.scripts.matomo import MatomoAPI
+        from skills.matomo_query.scripts.matomo import MatomoAPI
         try:
             return MatomoAPI()
         except (FileNotFoundError, ValueError) as e:
@@ -493,7 +493,7 @@ class TestMatomoAPIIntegration:
 
     def test_get_cohorts_returns_data(self, api, site_id, period, date):
         """Cohorts.get returns data (premium plugin, may fail if not installed)."""
-        from skills.querying.scripts.matomo import MatomoError
+        from skills.matomo_query.scripts.matomo import MatomoError
         try:
             result = api.get_cohorts(site_id=site_id, period=period, date=date)
             # If it succeeds, just verify we got something
