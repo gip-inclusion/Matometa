@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Sync knowledge base with fresh Matomo data.
+Sync site knowledge files with fresh Matomo data.
 
 Usage:
-    python -m skills.setup_knowledge_sync.scripts.sync_sites
-    python -m skills.setup_knowledge_sync.scripts.sync_sites --baselines-only
-    python -m skills.setup_knowledge_sync.scripts.sync_sites --site emplois
-    python -m skills.setup_knowledge_sync.scripts.sync_sites --dry-run
+    python -m skills.sync_sites.scripts.sync_sites
+    python -m skills.sync_sites.scripts.sync_sites --baselines-only
+    python -m skills.sync_sites.scripts.sync_sites --site emplois
+    python -m skills.sync_sites.scripts.sync_sites --dry-run
 """
 
 import argparse

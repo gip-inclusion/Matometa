@@ -1,26 +1,26 @@
 ---
-name: metabase-sync
-description: Sync Metabase cards inventory to SQLite database
+name: sync_metabase
+description: Sync Metabase cards inventory to SQLite database or markdown files (project)
 ---
 
 # Metabase Sync Skill
 
-Synchronize Metabase cards from specified collections to a local SQLite database for fast querying.
+Synchronize Metabase cards from specified collections to a local SQLite database or markdown directory for fast querying.
 
 ## Usage
 
 ```bash
 # Full sync with AI categorization
-python -m skills.metabase_sync.scripts.sync_inventory
+python -m skills.sync_metabase.scripts.sync_inventory
 
 # Quick sync without AI categorization
-python -m skills.metabase_sync.scripts.sync_inventory --skip-categorize
+python -m skills.sync_metabase.scripts.sync_inventory --skip-categorize
 
 # Sync specific collections
-python -m skills.metabase_sync.scripts.sync_inventory --collections 453 452
+python -m skills.sync_metabase.scripts.sync_inventory --collections 453 452
 
 # Clear and resync
-python -m skills.metabase_sync.scripts.sync_inventory --clear
+python -m skills.sync_metabase.scripts.sync_inventory --clear
 ```
 
 ## What it does

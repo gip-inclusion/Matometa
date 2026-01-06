@@ -1,6 +1,6 @@
 ---
 name: matomo_query
-description: Query the Matomo analytics API to get visitor stats, page views, custom dimensions, and segmented data. Use this skill whenever you need to retrieve web analytics data.
+description: Query the Matomo analytics API to get visitor stats, page views, custom dimensions, and segmented data. Use this skill whenever you need to retrieve web analytics data. (project)
 ---
 
 # Querying the Matomo API

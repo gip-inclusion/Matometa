@@ -3,7 +3,7 @@
 Sync Metabase dashboards to SQLite database.
 
 Usage:
-    python -m skills.metabase_sync.scripts.sync_dashboards
+    python -m skills.sync_metabase.scripts.sync_dashboards
 
 This script:
 1. Fetches dashboards from Metabase (based on cards' dashboard_ids)

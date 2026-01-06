@@ -1,6 +1,6 @@
 ---
-name: metabase-query
-description: Query Metabase for IAE employment data
+name: metabase_query
+description: Query Metabase for IAE employment data (project)
 ---
 
 # Metabase Query Skill

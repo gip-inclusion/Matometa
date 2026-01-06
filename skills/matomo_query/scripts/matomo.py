@@ -6,6 +6,9 @@ Usage:
 
     api = MatomoAPI()  # loads from .env
     summary = api.get_visits(site_id=117, period="month", date="2025-12-01")
+
+    # For any Matomo API method, use request() with **kwargs:
+    events = api.request("Events.getName", idSite=211, period="month", date="2025-12-01")
 """
 
 import os
@@ -75,6 +78,27 @@ class MatomoAPI:
                 return data
         except urllib.error.URLError as e:
             raise MatomoError(f"Request failed: {e}")
+
+    def request(self, method: str, timeout: int = 180, **params) -> Any:
+        """
+        Make a raw API request to any Matomo method.
+
+        Use this when high-level methods don't expose the parameters you need,
+        or for API methods not wrapped by this client.
+
+        Args:
+            method: Matomo API method (e.g., "Events.getName", "VisitsSummary.get")
+            timeout: Request timeout in seconds (default 180)
+            **params: Any parameters to pass to the API (idSite, period, date, etc.)
+
+        Returns:
+            API response (typically list or dict)
+
+        Example:
+            api.request("Events.getName", idSite=211, period="month", date="2025-12-01",
+                        secondaryDimension="eventCategory", flat=1)
+        """
+        return self._request(method, params, timeout)
 
     def get_api_url(self, method: str, params: dict) -> str:
         """

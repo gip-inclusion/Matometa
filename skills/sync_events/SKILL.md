@@ -1,6 +1,11 @@
-# Sync Events Skill
+---
+name: sync_events
+description: Synchronize Matomo event documentation with codebase tracking. Methodology guide, script planned. (project)
+---
 
-Synchronize Matomo event documentation with actual codebase tracking.
+# Sync Events
+
+Methodology for synchronizing Matomo event documentation with actual codebase tracking.
 
 ## When to Use
 

@@ -3,9 +3,9 @@
 Sync Metabase cards inventory to SQLite database.
 
 Usage:
-    python -m skills.metabase_sync.scripts.sync_inventory
-    python -m skills.metabase_sync.scripts.sync_inventory --skip-categorize
-    python -m skills.metabase_sync.scripts.sync_inventory --collections 453 452
+    python -m skills.sync_metabase.scripts.sync_inventory
+    python -m skills.sync_metabase.scripts.sync_inventory --skip-categorize
+    python -m skills.sync_metabase.scripts.sync_inventory --collections 453 452
 
 This script:
 1. Fetches cards metadata from Metabase collections
