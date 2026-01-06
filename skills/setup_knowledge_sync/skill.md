@@ -1,6 +1,6 @@
 ---
-name: knowledge-sync
-description: Sync knowledge base with fresh Matomo baselines and events data
+name: setup_knowledge_sync
+description: Sync knowledge base with fresh Matomo baselines and events data (project)
 ---
 
 # Knowledge Sync Skill
@@ -44,16 +44,16 @@ The baselines section will be fully replaced on each sync.
 
 ```bash
 # Full sync (all sites, baselines + events)
-python -m skills.knowledge_sync.scripts.sync_sites
+python -m skills.setup_knowledge_sync.scripts.sync_sites
 
 # Baselines only (faster)
-python -m skills.knowledge_sync.scripts.sync_sites --baselines-only
+python -m skills.setup_knowledge_sync.scripts.sync_sites --baselines-only
 
 # Single site
-python -m skills.knowledge_sync.scripts.sync_sites --site emplois
+python -m skills.setup_knowledge_sync.scripts.sync_sites --site emplois
 
 # Dry run (show what would be updated)
-python -m skills.knowledge_sync.scripts.sync_sites --dry-run
+python -m skills.setup_knowledge_sync.scripts.sync_sites --dry-run
 ```
 
 ## What it syncs
@@ -118,7 +118,7 @@ When documenting events, search for these patterns in codebases:
 Run every Monday morning:
 ```bash
 # Cron entry
-0 8 * * 1 cd /path/to/Matometa && python -m skills.knowledge_sync.scripts.sync_sites
+0 8 * * 1 cd /path/to/Matometa && python -m skills.setup_knowledge_sync.scripts.sync_sites
 ```
 
 Or via launchd on macOS.

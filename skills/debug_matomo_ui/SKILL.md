@@ -1,6 +1,6 @@
 ---
-name: exploring-web-ui
-description: Test and discover Matomo web UI URLs. Use this skill to find correct category/subcategory values for UI links.
+name: debug_matomo_ui
+description: Test and discover Matomo web UI URLs. Use this skill to find correct category/subcategory values for UI links. (project)
 ---
 
 # Exploring Matomo Web UI
