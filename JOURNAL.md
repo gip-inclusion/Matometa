@@ -3,6 +3,9 @@
 > Here are all the updates to the context engine (ie, AGENTS.md, ./knowledge and ./skills).
 > New entries are added to the top of the list.
 
+- 2026-01-06. Removed scripts/api-linker.py (web UI and reports sufficient). Fixed AGENTS.md Quick Start: now leads with Python client usage instead of "run a script", clarified that ./scripts/ contains agent-produced one-off queries.
+- 2026-01-06. Restructured AGENTS.md: added Quick Start section, reorganized into 7 logical sections (Quick Start, Domain Context, Query Workflow, Behavioral Guidelines, Technical Reference, Output & Reports, Site Documentation Methodology). Removed redundancy, fixed heading hierarchy, front-loaded essential commands. Reduced from 378 to 307 lines.
+- 2026-01-06. Added "Web UI" section to AGENTS.md: documents how to start the Flask web server (`.venv/bin/python -m web.app`, runs at http://127.0.0.1:5000).
 - 2026-01-06. Added `## Event Names` section to emplois.md: auto-generated table with top 50 events from Matomo API (146 total), sorted by volume. Includes `tdb_liste_beneficiaires` (3,298 events) which was missing from manual documentation. Complements existing `## Matomo Events` section which has descriptions.
 - 2026-01-06. Fixed GPS events in emplois.md: updated from 3 events to 6 real events from Matomo data. Added `tdb_liste_beneficiaires` (click "Réseau d'intervenants" from menu), `displayed_member_email`, `copied_user_phone`, `copied_user_pe_id`. Noted that GPS events are defined in Django Python code using `matomo_event_name=` patterns, not HTML templates.
 - 2026-01-06. Restructured emplois.md to separate auto-generated from manual content: moved seasonal patterns, user type proportions, and GPS insights from `## Traffic Baselines` to new `## Baseline Interpretations` section. Prevents manual analyses from being overwritten by sync.
