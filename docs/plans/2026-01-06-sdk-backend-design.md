@@ -41,10 +41,14 @@ The Agent SDK is the programmatic equivalent of Claude Code:
 ### SDK Installation
 
 ```bash
+# 1. Install Claude Code CLI as runtime component
+npm install -g @anthropic-ai/claude-code
+
+# 2. Install the SDK
 pip install claude-agent-sdk
 ```
 
-**Note:** The SDK still requires Claude Code CLI as a runtime. For true cloud deployment without CLI, we may need to use the raw Anthropic API with manual tool handling.
+**Architecture:** The SDK spawns Claude Code as a subprocess and controls it programmatically. You never interact with the CLI directly - your code uses the SDK's Python API. The CLI handles API calls and tool execution internally.
 
 ### Two Usage Patterns
 
@@ -211,14 +215,33 @@ def build_system_prompt() -> str:
 
 ## Deployment Considerations
 
-### Local Development
+### Local Development (CLI backend)
 ```bash
 AGENT_BACKEND=cli .venv/bin/python -m web.app
 ```
 
-### Cloud Deployment
+### Cloud Deployment (SDK backend)
+
+**Server requirements:**
+- Node.js 18+
+- Claude Code CLI: `npm install -g @anthropic-ai/claude-code`
+- Python 3.10+
+- `pip install claude-agent-sdk`
+
 ```bash
-AGENT_BACKEND=sdk python -m web.app
+AGENT_BACKEND=sdk ANTHROPIC_API_KEY=sk-... python -m web.app
+```
+
+**Docker example:**
+```dockerfile
+FROM python:3.11-slim
+RUN apt-get update && apt-get install -y nodejs npm
+RUN npm install -g @anthropic-ai/claude-code
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . /app
+WORKDIR /app
+CMD ["python", "-m", "web.app"]
 ```
 
 ### Security
@@ -283,13 +306,13 @@ class SessionStore:
 
 ## Open Questions
 
-1. **CLI dependency:** SDK requires Claude Code CLI. For true serverless deployment, may need raw Anthropic API with manual tool loop. Acceptable?
+1. **Tool permissions:** Which tools should be enabled in cloud? Bash is powerful but risky.
 
-2. **Tool permissions:** Which tools should be enabled in cloud? Bash is powerful but risky.
+2. **Session storage:** In-memory OK for MVP? When to add SQLite?
 
-3. **Session storage:** In-memory OK for MVP? When to add SQLite?
+3. **Cost management:** Per-user budgets? Organization-wide limits?
 
-4. **Cost management:** Per-user budgets? Organization-wide limits?
+4. **Container deployment:** Docker image with Node.js + Claude Code CLI + Python SDK?
 
 ---
 
