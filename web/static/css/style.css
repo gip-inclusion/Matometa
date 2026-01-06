@@ -204,8 +204,11 @@ body.has-sidebar {
 
 .section-body {
   flex: 1;
-  padding: 2rem 0;
+  padding: 2rem 1.5rem;
   padding-bottom: 120px; /* Space for chat bar */
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 /* ==========================================================================
@@ -270,14 +273,20 @@ body.has-sidebar {
   right: 0;
   background: white;
   border-top: 1px solid #dee2e6;
-  padding: 1rem 0;
+  padding: 1rem 1.5rem;
   z-index: 100;
   box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.chat-bar-container .container {
+  max-width: 900px;
+  padding: 0;
 }
 
 @media (max-width: 991.98px) {
   .chat-bar-container {
     left: 0;
+    padding: 1rem;
   }
 }
 
@@ -347,7 +356,7 @@ body.has-sidebar {
 .chat-output {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
 /* Empty state */
@@ -369,29 +378,33 @@ body.has-sidebar {
    Event blocks (chat messages)
    ========================================================================== */
 .event-block {
-  padding: 1rem;
+  padding: 1rem 1.25rem;
   border-radius: 0.5rem;
   border: 1px solid var(--bs-border-color);
 }
 
+/* User messages - right-aligned bubble */
 .event-user {
   background: var(--bs-primary-bg-subtle);
   border-color: var(--bs-primary-border-subtle);
-  margin-left: 3rem;
+  margin-left: 4rem;
+  border-radius: 1rem 1rem 0.25rem 1rem;
 }
 
 .event-user::before {
   content: "Vous";
   display: block;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 600;
   color: var(--bs-primary);
   margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
-/* Assistant messages flow naturally - no box */
+/* Assistant messages - clean, no box */
 .event-assistant {
-  padding: 0;
+  padding: 0.5rem 0;
   border: none;
   border-radius: 0;
   background: transparent;
@@ -401,14 +414,16 @@ body.has-sidebar {
   display: none;
 }
 
+/* Tool blocks - subtle, indented */
 .event-tool_use,
 .event-tool_result {
   background: var(--bs-tertiary-bg);
   border-color: var(--bs-border-color-translucent);
   font-family: var(--bs-font-monospace);
-  font-size: 0.875rem;
-  margin-left: 1.5rem;
-  margin-right: 1.5rem;
+  font-size: 0.8125rem;
+  margin-left: 1rem;
+  margin-right: 1rem;
+  border-radius: 0.375rem;
 }
 
 .event-tool_use::before {
@@ -701,11 +716,12 @@ body.has-sidebar {
   }
 
   .section-body {
+    padding: 1.5rem 1rem;
     padding-bottom: 100px;
   }
 
   .event-user {
-    margin-left: 1rem;
+    margin-left: 2rem;
   }
 
   .event-tool_use,
