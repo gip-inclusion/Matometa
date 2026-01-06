@@ -202,11 +202,7 @@ class CLIBackend(AgentBackend):
 
             for block in content_blocks:
                 if block.get("type") == "tool_result":
-                    # Truncate long results
                     result_content = block.get("content", "")
-                    if isinstance(result_content, str) and len(result_content) > 500:
-                        result_content = result_content[:500] + "..."
-
                     return AgentMessage(
                         type="tool_result",
                         content={

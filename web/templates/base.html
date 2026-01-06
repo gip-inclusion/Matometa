@@ -7,7 +7,8 @@
 
   <link rel="shortcut icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/ico">
 
-  <!-- Itou Theme CSS -->
+  <!-- Itou Theme CSS (exact same as autoplatformer) -->
+  <link rel="stylesheet" href="https://emplois.inclusion.beta.gouv.fr/static/css/itou.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/gip-inclusion/itou-theme@v1.4.5/dist/stylesheets/app.css">
 
   <!-- App styles -->
@@ -16,8 +17,8 @@
   {% block head %}{% endblock %}
 </head>
 
-<body class="l-nexus">
-  <nav role="navigation" aria-label="Acces rapide" tabindex="0" class="c-skiplinks">
+<body id="top" class="l-authenticated">
+  <nav role="navigation" aria-label="Accès rapide" tabindex="0" class="c-skiplinks">
     <ul>
       <li><a href="#nav-primary">Aller au menu principal</a></li>
       <li><a href="#main">Aller au contenu principal</a></li>
@@ -25,92 +26,78 @@
   </nav>
 
   <header role="banner" id="header">
-    <section class="s-header-nexus">
-      <div class="s-header-nexus__container container">
-        <div class="s-header-nexus__row row">
-          <div class="s-header-nexus__col s-header-nexus__col--logo-service col-auto d-flex align-items-center">
-            <button type="button" class="btn btn-lg btn-ico-only btn-nexus" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNexus" aria-controls="offcanvasNexus" aria-label="Ouvrir le menu de navigation">
-              <i class="ri-menu-line" aria-hidden="true"></i>
-              <span class="visually-hidden">Menu</span>
-            </button>
-            <a href="/" class="d-flex align-items-center text-decoration-none">
-              <span class="fs-lg fw-bold text-white ms-2">Matometa</span>
-            </a>
+    <section class="s-header-authenticated">
+      <div class="s-header-authenticated__container container">
+        <div class="s-header-authenticated__row row">
+          <div class="s-header-authenticated__col s-header-authenticated__col--logo-service col-auto d-flex align-items-center pe-0">
+            <a href="/"><span class="h4 mb-0 text-primary fw-bold">Matometa</span></a>
           </div>
-          <div class="s-header-nexus__col s-header-nexus__col--nav col-auto d-flex align-items-center">
-            <span class="badge bg-light text-dark me-2">
-              <i class="ri-terminal-line"></i>
-              Local
-            </span>
+          <div class="s-header-authenticated__col s-header-authenticated__col--nav col d-flex align-items-center justify-content-end pe-0">
+            <nav role="navigation" id="nav-primary" aria-label="Navigation principale">
+              <ul>
+                <li class="d-none d-lg-inline-block dropdown dropdown-structure">
+                  <button type="button" class="btn btn-outline-primary btn-ico bg-white dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-controls="switchUserDropdown" aria-expanded="false">
+                    <i class="ri-bar-chart-box-line" aria-hidden="true"></i>
+                    <span>Analytics</span>
+                  </button>
+                </li>
+              </ul>
+            </nav>
+          </div>
+          <div class="s-header-authenticated__col s-header-authenticated__col--burger col-auto d-flex align-items-center ps-0">
+            <button type="button" class="btn btn-link btn-ico pe-0" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNav" aria-controls="offcanvasNav" aria-label="Ouvrir le menu de navigation principale">
+              <i class="ri-menu-line" aria-hidden="true"></i>
+              <span>Menu</span>
+            </button>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Offcanvas sidebar -->
-    <div class="offcanvas" id="offcanvasNexus">
-      <div class="offcanvas-body">
-        <nav role="navigation" id="nav-primary" aria-label="Navigation principale">
-          <div class="d-flex align-items-center mb-1">
-            <strong class="flex-grow-1 mb-0">MATOMETA</strong>
-            <div class="d-md-none">
-              <button type="button" class="btn btn-lg btn-ico-only btn-nexus justify-content-center" data-bs-dismiss="offcanvas" aria-label="Fermer le menu">
-                <i class="ri-close-line" aria-hidden="true"></i>
-              </button>
-            </div>
+    <!-- Offcanvas menu (exact copy from autoplatformer) -->
+    <div class="offcanvas" id="offcanvasNav" aria-label="Navigation principale">
+      <div class="offcanvas-header offcanvas-header--structure">
+        <div class="dropdown dropdown-structure flex-grow-1 py-4">
+          <div class="dropdown-toggle dropdown-toggle__summary" data-bs-toggle="dropdown" aria-haspopup="true" aria-controls="switchUserDropdown" aria-expanded="false">
+            <i class="ri-bar-chart-box-line" aria-hidden="true"></i>
+            <span>ANALYTICS</span>
+            <strong>Matometa</strong>
           </div>
-
-          <strong>EXPLORER</strong>
-          <ul>
-            <li>
-              <a href="/explorations" class="btn btn-lg btn-ico btn-nexus {% if section == 'explorations' %}active{% endif %}">
-                <i class="ri-compass-discover-line" aria-hidden="true"></i>
-                <span class="d-md-none d-xl-inline-flex flex-grow-1">Explorations</span>
+        </div>
+        <div class="border-start border-nuance-08 d-xl-none">
+          <button type="button" class="btn-link ps-4 pt-5 pe-2 me-n2" data-bs-dismiss="offcanvas" aria-label="Fermer">
+            <i class="ri-close-line" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+      <div class="offcanvas-body d-flex flex-column">
+        <nav class="flex-grow-1" role="navigation" aria-label="Navigation principale">
+          <ul class="nav nav-tabs flex-column" id="menuList">
+            <li class="nav-item">
+              <a href="/explorations" class="nav-link {% if section == 'explorations' %}active{% endif %}">
+                <i class="ri-compass-discover-line fw-medium" aria-hidden="true"></i>
+                <span>Explorations</span>
               </a>
             </li>
-          </ul>
-
-          <strong>CONTEXTE</strong>
-          <ul>
-            <li>
-              <a href="/connaissances" class="btn btn-lg btn-ico btn-nexus {% if section == 'connaissances' %}active{% endif %}">
-                <i class="ri-book-open-line" aria-hidden="true"></i>
-                <span class="d-md-none d-xl-inline-flex flex-grow-1">Connaissances</span>
+            <li class="nav-item">
+              <a href="/connaissances" class="nav-link {% if section == 'connaissances' %}active{% endif %}">
+                <i class="ri-book-open-line fw-medium" aria-hidden="true"></i>
+                <span>Connaissances</span>
               </a>
             </li>
           </ul>
         </nav>
-
-        <ul>
-          <li>
-            <a href="/" class="d-md-none d-xl-inline-block px-1">
-              <span class="fs-lg fw-bold">Matometa</span>
-            </a>
-          </li>
-        </ul>
       </div>
     </div>
   </header>
 
-  <main class="s-main" id="main" role="main">
+  <main class="s-main" role="main" id="main">
     {% block content %}{% endblock %}
   </main>
 
-  <footer role="contentinfo" id="footer">
-    <section class="s-footer-legal">
-      <div class="s-footer-legal__container container">
-        <div class="s-footer-legal__row row">
-          <div class="s-footer-legal__col col-12">
-            <p class="mb-0 text-muted small">Matometa - Outil d'analyse de donnees</p>
-          </div>
-        </div>
-      </div>
-    </section>
-  </footer>
-
   <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.min.js"></script>
 
   <!-- App JS -->
   <script src="{{ url_for('static', filename='js/chat.js') }}"></script>

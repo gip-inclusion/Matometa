@@ -1,69 +1,65 @@
 {% extends "base.html" %}
 
-{% block title_suffix %} - Explorations{% endblock %}
+{% block title_suffix %} – Explorations{% endblock %}
 
 {% block content %}
-<section class="s-title-02">
-  <div class="s-title-02__container container">
-    <div class="s-title-02__row row">
-      <div class="s-title-02__col col-12">
-        <div class="c-title">
-          <div class="c-title__main">
-            <h1>
-              <i class="ri-compass-discover-line ri-xl fw-normal text-disabled"></i>
-              Explorations
-            </h1>
+<section class="section-content" id="section-explorations">
+  <!-- Sticky section header -->
+  <div class="section-header">
+    <div class="container">
+      <div class="d-flex align-items-center justify-content-between gap-3">
+        <div class="d-flex align-items-center gap-3">
+          <i class="ri-compass-discover-line ri-2x text-primary"></i>
+          <div>
+            <h1 class="mb-0">Explorations</h1>
+            <p class="text-muted mb-0">Posez vos questions sur les données</p>
           </div>
+        </div>
+        <div class="view-mode-wrapper">
+          <div class="segmented-control" id="viewModeControl">
+            <button type="button" class="segmented-btn" data-mode="minimal" data-label="Rapports uniquement" title="Rapports uniquement">
+              <i class="ri-file-text-line"></i>
+            </button>
+            <button type="button" class="segmented-btn active" data-mode="normal" data-label="Réponses et rapports" title="Réponses et rapports">
+              <i class="ri-chat-3-line"></i>
+            </button>
+            <button type="button" class="segmented-btn" data-mode="verbose" data-label="Tout afficher" title="Tout afficher">
+              <i class="ri-code-line"></i>
+            </button>
+          </div>
+          <div class="view-mode-label" id="viewModeLabel">Réponses et rapports</div>
         </div>
       </div>
     </div>
   </div>
-</section>
 
-<section class="s-section s-section--chat">
-  <div class="s-section__container container">
-    <div class="s-section__row row">
-      <div class="s-section__col col-12">
-        <!-- Controls -->
-        <div class="d-flex align-items-center justify-content-end mb-3">
-          <div class="form-check form-switch mb-0">
-            <input class="form-check-input" type="checkbox" id="hideToolsToggle">
-            <label class="form-check-label small text-muted" for="hideToolsToggle">
-              Masquer les details techniques
-            </label>
-          </div>
-        </div>
+  <!-- Main content area - scrolls with page -->
+  <div class="container section-body">
+    <div class="chat-output view-normal" id="chatOutput">
+      <div class="empty-state" id="emptyState">
+        <i class="ri-chat-3-line ri-4x text-disabled mb-3"></i>
+        <p class="mb-0 text-muted">Posez une question pour commencer</p>
+        <p class="small text-muted">Ex : « Combien de visiteurs sur les Emplois en décembre ? »</p>
+      </div>
+    </div>
+  </div>
 
-        <!-- Chat output -->
-        <div class="c-box chat-box">
-          <div class="chat-output" id="chatOutput">
-            <div class="empty-state" id="emptyState">
-              <i class="ri-chat-3-line ri-3x text-disabled mb-3"></i>
-              <p class="mb-0 text-muted">Posez une question pour commencer</p>
-              <p class="small text-muted">Ex: "Combien de visiteurs sur les Emplois en decembre ?"</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Chat input -->
-        <div class="chat-input-container mt-3">
-          <div class="d-flex gap-2">
-            <textarea
-              class="form-control chat-input"
-              id="chatInput"
-              placeholder="Posez une question sur vos donnees Matomo ou Metabase..."
-              rows="1"
-            ></textarea>
-            <button type="button" class="btn btn-primary btn-ico chat-send-btn" id="chatSendBtn" title="Envoyer">
-              <i class="ri-send-plane-fill" aria-hidden="true"></i>
-              <span class="visually-hidden">Envoyer</span>
-            </button>
-            <button type="button" class="btn btn-danger btn-ico chat-cancel-btn" id="chatCancelBtn" title="Annuler" style="display: none;">
-              <i class="ri-stop-fill" aria-hidden="true"></i>
-              <span class="visually-hidden">Annuler</span>
-            </button>
-          </div>
-        </div>
+  <!-- Fixed chat bar at bottom -->
+  <div class="chat-bar-container">
+    <div class="container">
+      <div class="chat-bar">
+        <textarea
+          class="chat-input"
+          id="chatInput"
+          placeholder="Posez une question sur vos données Matomo ou Metabase…"
+          rows="1"
+        ></textarea>
+        <button type="button" class="chat-send-btn" id="chatSendBtn" title="Envoyer">
+          <i class="ri-send-plane-fill"></i>
+        </button>
+        <button type="button" class="chat-cancel-btn" id="chatCancelBtn" title="Annuler" style="display: none;">
+          <i class="ri-stop-fill"></i>
+        </button>
       </div>
     </div>
   </div>
@@ -71,7 +67,13 @@
 {% endblock %}
 
 {% block scripts %}
+<!-- Markdown rendering -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<!-- Mermaid diagrams -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
 <script>
+  mermaid.initialize({ startOnLoad: false, theme: 'default' });
+
   document.addEventListener('DOMContentLoaded', () => {
     initChat();
   });

@@ -1,48 +1,223 @@
-/* Matometa Web - App-specific styles */
-/* The itou-theme handles most styling; these are chat-specific additions */
+/* Matometa Web - Styles following autoplatformer pattern */
 
-/* Chat section layout */
-.s-section--chat {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+/* ==========================================================================
+   Skip links - hidden until focused
+   ========================================================================== */
+.c-skiplinks {
+  position: absolute;
+  top: -100%;
+  left: 0;
+  z-index: 9999;
 }
 
-.s-section--chat .s-section__col {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
+.c-skiplinks:focus-within {
+  top: 0;
+  background: var(--bs-primary);
+  padding: 0.5rem 1rem;
+  width: 100%;
 }
 
-/* Chat box */
-.chat-box {
-  flex: 1;
-  min-height: 400px;
-  max-height: calc(100vh - 350px);
+.c-skiplinks ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
-  flex-direction: column;
+  gap: 1rem;
 }
 
+.c-skiplinks a {
+  color: white;
+}
+
+/* ==========================================================================
+   Offcanvas - NO custom styles, use itou-theme defaults like autoplatformer
+   ========================================================================== */
+/* The itou-theme CSS handles all offcanvas styling */
+
+/* ==========================================================================
+   Section layout (from autoplatformer)
+   ========================================================================== */
+.section-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.section-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  padding: 1.5rem 0;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.section-header h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: #212529;
+}
+
+.section-body {
+  flex: 1;
+  padding: 2rem 0;
+  padding-bottom: 120px; /* Space for chat bar */
+}
+
+/* ==========================================================================
+   Segmented control for view modes
+   ========================================================================== */
+.segmented-control {
+  display: inline-flex;
+  background: #e9ecef;
+  border-radius: 0.5rem;
+  padding: 0.25rem;
+  gap: 0.125rem;
+}
+
+.segmented-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2rem;
+  border: none;
+  background: transparent;
+  border-radius: 0.375rem;
+  color: #6c757d;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.segmented-btn:hover {
+  color: #212529;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.segmented-btn.active {
+  background: white;
+  color: #000091;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.segmented-btn i {
+  font-size: 1rem;
+}
+
+.view-mode-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.view-mode-label {
+  font-size: 0.75rem;
+  color: #6c757d;
+}
+
+/* ==========================================================================
+   Chat bar - fixed at bottom
+   ========================================================================== */
+.chat-bar-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  border-top: 1px solid #dee2e6;
+  padding: 1rem 0;
+  z-index: 100;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.chat-bar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.chat-input {
+  flex: 1;
+  padding: 0.875rem 1.25rem;
+  border: 2px solid #dee2e6;
+  border-radius: 2rem;
+  font-size: 1rem;
+  resize: none;
+  max-height: 150px;
+  transition: all 0.2s;
+}
+
+.chat-input:focus {
+  outline: none;
+  border-color: #000091;
+  box-shadow: 0 0 0 3px rgba(0, 0, 145, 0.1);
+}
+
+.chat-input::placeholder {
+  color: #adb5bd;
+}
+
+.chat-send-btn,
+.chat-cancel-btn {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000091;
+  border: none;
+  border-radius: 50%;
+  color: white;
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.chat-send-btn:hover {
+  background: #6a6af4;
+  transform: scale(1.05);
+}
+
+.chat-send-btn:active {
+  transform: scale(0.95);
+}
+
+.chat-cancel-btn {
+  background: #dc3545;
+}
+
+.chat-cancel-btn:hover {
+  background: #c82333;
+}
+
+/* ==========================================================================
+   Chat output
+   ========================================================================== */
 .chat-output {
-  flex: 1;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  padding: 1rem;
 }
 
 /* Empty state */
 .empty-state {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  padding: 4rem 2rem;
   text-align: center;
+  color: #6c757d;
 }
 
-/* Event blocks */
+.empty-state i {
+  opacity: 0.5;
+}
+
+/* ==========================================================================
+   Event blocks (chat messages)
+   ========================================================================== */
 .event-block {
   padding: 1rem;
   border-radius: 0.5rem;
@@ -64,18 +239,16 @@
   margin-bottom: 0.5rem;
 }
 
+/* Assistant messages flow naturally - no box */
 .event-assistant {
-  background: var(--bs-body-bg);
-  margin-right: 3rem;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
 .event-assistant::before {
-  content: "Matometa";
-  display: block;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--bs-secondary);
-  margin-bottom: 0.5rem;
+  display: none;
 }
 
 .event-tool_use,
@@ -100,7 +273,7 @@
 }
 
 .event-tool_result::before {
-  content: "Resultat";
+  content: "Résultat";
   display: block;
   font-size: 0.7rem;
   font-weight: 600;
@@ -110,10 +283,9 @@
   letter-spacing: 0.05em;
 }
 
+/* System messages are never shown */
 .event-system {
-  background: var(--bs-warning-bg-subtle);
-  border-color: var(--bs-warning-border-subtle);
-  font-size: 0.875rem;
+  display: none !important;
 }
 
 .event-error {
@@ -131,30 +303,219 @@
   margin-top: 0.5rem;
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 300px;
-  overflow-y: auto;
 }
 
-/* Hide tools toggle - hides all technical events */
-.chat-output.hide-tools .event-tool_use,
-.chat-output.hide-tools .event-tool_result,
-.chat-output.hide-tools .event-system {
+/* ==========================================================================
+   View modes (segmented control)
+   ========================================================================== */
+
+/* Minimal: Only reports and final messages */
+.chat-output.view-minimal .event-tool_use,
+.chat-output.view-minimal .event-tool_result,
+.chat-output.view-minimal .event-assistant:not(.event-report) {
   display: none;
 }
 
-/* Chat input */
-.chat-input {
-  resize: none;
-  max-height: 150px;
+/* Normal (default): Agent responses and reports, hide tools */
+.chat-output.view-normal .event-tool_use,
+.chat-output.view-normal .event-tool_result {
+  display: none;
 }
 
-.chat-send-btn,
-.chat-cancel-btn {
-  min-width: 48px;
-  height: 48px;
+/* Verbose: Show everything */
+.chat-output.view-verbose .event-tool_use,
+.chat-output.view-verbose .event-tool_result {
+  display: block;
 }
 
-/* Loading indicator */
+/* Progress indicator for hidden tool activity */
+.progress-indicator {
+  display: inline-flex;
+  align-items: center;
+  color: var(--bs-secondary);
+  font-size: 0.875rem;
+  padding: 0.25rem 0;
+}
+
+.progress-indicator .dots {
+  font-family: var(--bs-font-monospace);
+  letter-spacing: 0.1em;
+}
+
+/* ==========================================================================
+   Markdown rendering in assistant messages
+   ========================================================================== */
+.event-assistant h1,
+.event-assistant h2,
+.event-assistant h3 {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.event-assistant h1:first-child,
+.event-assistant h2:first-child,
+.event-assistant h3:first-child {
+  margin-top: 0;
+}
+
+.event-assistant pre {
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.375rem;
+  padding: 1rem;
+  overflow-x: auto;
+}
+
+.event-assistant code {
+  font-size: 0.875em;
+}
+
+.event-assistant p code {
+  background: var(--bs-tertiary-bg);
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+}
+
+.event-assistant table {
+  width: 100%;
+  margin: 1rem 0;
+  border-collapse: collapse;
+}
+
+.event-assistant th,
+.event-assistant td {
+  border: 1px solid var(--bs-border-color);
+  padding: 0.5rem;
+  text-align: left;
+}
+
+.event-assistant th {
+  background: var(--bs-tertiary-bg);
+  font-weight: 600;
+}
+
+.event-assistant blockquote {
+  border-left: 4px solid var(--bs-primary);
+  margin: 1rem 0;
+  padding-left: 1rem;
+  color: var(--bs-secondary);
+}
+
+.event-assistant ul,
+.event-assistant ol {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
+/* Mermaid diagrams */
+.event-assistant .mermaid {
+  background: var(--bs-body-bg);
+  padding: 1rem;
+  margin: 1rem 0;
+  border-radius: 0.375rem;
+  overflow-x: auto;
+}
+
+/* ==========================================================================
+   Report styling - visually distinct from regular chat
+   ========================================================================== */
+.event-report {
+  background: white;
+  border: 2px solid var(--bs-primary);
+  border-radius: 0.5rem;
+  padding: 0;
+  margin: 1.5rem 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 145, 0.1);
+}
+
+.report-header {
+  background: linear-gradient(135deg, var(--bs-primary) 0%, #6a6af4 100%);
+  color: white;
+  padding: 1rem 1.5rem;
+  border-radius: 0.375rem 0.375rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+.report-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.report-title i {
+  font-size: 1.25rem;
+}
+
+.report-meta {
+  font-size: 0.875rem;
+  opacity: 0.9;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.report-link {
+  margin-left: auto;
+  color: white;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  transition: background 0.2s;
+}
+
+.report-link:hover {
+  background: rgba(255, 255, 255, 0.3);
+  color: white;
+}
+
+.report-body {
+  padding: 1.5rem;
+  max-height: none;
+  overflow: visible;
+}
+
+/* Override assistant styles inside reports */
+.event-report h1,
+.event-report h2,
+.event-report h3 {
+  color: var(--bs-gray-900);
+  border-bottom: 1px solid var(--bs-border-color);
+  padding-bottom: 0.5rem;
+}
+
+.event-report h1 {
+  font-size: 1.5rem;
+}
+
+.event-report h2 {
+  font-size: 1.25rem;
+}
+
+.event-report h3 {
+  font-size: 1.1rem;
+}
+
+.event-report table {
+  margin: 1rem 0;
+}
+
+.event-report pre {
+  background: var(--bs-gray-100);
+}
+
+/* ==========================================================================
+   Loading indicator
+   ========================================================================== */
 .loading-indicator {
   display: flex;
   align-items: center;
@@ -177,24 +538,40 @@
   to { transform: rotate(360deg); }
 }
 
-/* Active nav link in sidebar */
-.btn-nexus.active {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-/* Responsive */
+/* ==========================================================================
+   Responsive adjustments
+   ========================================================================== */
 @media (max-width: 767.98px) {
-  .event-user {
-    margin-left: 1rem;
+  .section-header {
+    padding: 1rem 0;
   }
 
-  .event-assistant {
-    margin-right: 1rem;
+  .section-header h1 {
+    font-size: 1.5rem;
+  }
+
+  .section-body {
+    padding-bottom: 100px;
+  }
+
+  .event-user {
+    margin-left: 1rem;
   }
 
   .event-tool_use,
   .event-tool_result {
     margin-left: 0.5rem;
     margin-right: 0.5rem;
+  }
+
+  .chat-input {
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+  }
+
+  .chat-send-btn,
+  .chat-cancel-btn {
+    width: 42px;
+    height: 42px;
   }
 }

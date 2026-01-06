@@ -17,7 +17,8 @@ CLAUDE_CLI = os.getenv("CLAUDE_CLI", "claude")
 ALLOWED_TOOLS = os.getenv("ALLOWED_TOOLS",
     "Read,Write,Edit,Glob,Grep,"
     "Bash(curl:*),Bash(jq:*),Bash(sqlite3:*),"
-    "Bash(.venv/bin/python:*)"  # Run scripts with venv
+    "Bash(.venv/bin/python:*),"  # Run scripts with venv
+    "Bash(PYTHONPATH=.:*)"  # Run scripts with PYTHONPATH set
 )
 
 # Web server settings

@@ -2,7 +2,9 @@
 
 import asyncio
 import json
-from flask import Flask, Response, jsonify, render_template, request
+import os
+import re
+from flask import Flask, Response, jsonify, render_template, request, send_from_directory
 
 from . import config
 from .storage import store
@@ -243,6 +245,62 @@ def cancel_conversation(conv_id: str):
         return jsonify({"status": "cancelled"})
     else:
         return jsonify({"status": "not_running"})
+
+
+# -----------------------------------------------------------------------------
+# API Routes - Reports
+# -----------------------------------------------------------------------------
+
+
+@app.route("/api/reports", methods=["GET"])
+def list_reports():
+    """List available reports from ./reports directory."""
+    reports_dir = config.BASE_DIR / "reports"
+    if not reports_dir.exists():
+        return jsonify({"reports": []})
+
+    reports = []
+    for f in sorted(reports_dir.glob("*.md"), reverse=True):
+        # Read first few lines to extract title from front-matter
+        title = f.stem
+        try:
+            content = f.read_text()
+            # Try to extract title from YAML front-matter
+            if content.startswith("---"):
+                match = re.search(r"^---\n.*?^---\n", content, re.MULTILINE | re.DOTALL)
+                if match:
+                    fm = match.group()
+                    title_match = re.search(r"^query category:\s*(.+)$", fm, re.MULTILINE)
+                    if title_match:
+                        title = title_match.group(1).strip()
+        except Exception:
+            pass
+
+        reports.append({
+            "filename": f.name,
+            "title": title,
+            "modified": f.stat().st_mtime,
+            "links": {"self": f"/api/reports/{f.name}"},
+        })
+
+    return jsonify({"reports": reports})
+
+
+@app.route("/api/reports/<filename>", methods=["GET"])
+def get_report(filename: str):
+    """Get a specific report file."""
+    reports_dir = config.BASE_DIR / "reports"
+
+    # Security: prevent path traversal
+    if ".." in filename or "/" in filename:
+        return jsonify({"error": "Invalid filename"}), 400
+
+    report_path = reports_dir / filename
+    if not report_path.exists() or not report_path.is_file():
+        return jsonify({"error": "Report not found"}), 404
+
+    content = report_path.read_text()
+    return Response(content, mimetype="text/markdown")
 
 
 # -----------------------------------------------------------------------------
