@@ -108,6 +108,14 @@ async function sendMessage() {
       const response = await fetch('/api/conversations', { method: 'POST' });
       const data = await response.json();
       currentConversationId = data.id;
+
+      // Redirect to conversation view if we're on the list view
+      const chatOutput = document.getElementById('chatOutput');
+      if (!chatOutput) {
+        // We're on list view, redirect to conversation
+        window.location.href = `/explorations?conv=${currentConversationId}&message=${encodeURIComponent(message)}`;
+        return;
+      }
     } catch (error) {
       console.error('Failed to create conversation:', error);
       showError('Impossible de créer la conversation');
@@ -752,6 +760,12 @@ async function loadConversation(convId) {
     const conv = await response.json();
     currentConversationId = conv.id;
 
+    // Clear loading indicator
+    const loadingIndicator = document.getElementById('loadingConversation');
+    if (loadingIndicator) {
+      loadingIndicator.remove();
+    }
+
     // Hide empty state
     hideEmptyState();
 
@@ -759,11 +773,12 @@ async function loadConversation(convId) {
     const chatOutput = document.getElementById('chatOutput');
     if (chatOutput && conv.messages) {
       for (const msg of conv.messages) {
-        if (msg.role === 'user') {
+        if (msg.type === 'user') {
           appendEvent('user', { content: msg.content });
-        } else if (msg.role === 'assistant') {
+        } else if (msg.type === 'assistant') {
           appendEvent('assistant', { content: msg.content });
         }
+        // Skip tool_use and tool_result for now (they're in the DB but not needed for replay)
       }
       // Mark final answers for minimal view mode
       markFinalAnswersInConversation();

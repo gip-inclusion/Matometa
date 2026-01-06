@@ -11,6 +11,9 @@
   <link rel="stylesheet" href="https://emplois.inclusion.beta.gouv.fr/static/css/itou.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/gip-inclusion/itou-theme@v1.4.5/dist/stylesheets/app.css">
 
+  <!-- htmx -->
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+
   <!-- App styles -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
@@ -36,55 +39,17 @@
 
     <nav class="sidebar-nav" role="navigation" id="nav-primary" aria-label="Navigation principale">
       <ul class="nav flex-column">
-        <!-- Explorations section -->
         <li class="nav-item">
-          <a href="/explorations" class="nav-link {% if section == 'explorations' %}active{% endif %}">
+          <a href="/explorations" class="nav-link {% if section == 'explorations' %}active{% endif %}"
+             hx-get="/explorations" hx-target="#main" hx-push-url="true">
             <i class="ri-compass-discover-line" aria-hidden="true"></i>
             <span>Explorations</span>
           </a>
-          <!-- Conversation sub-list -->
-          <ul class="nav-sublist" id="conversationList">
-            <li class="nav-subitem nav-subitem-new">
-              <a href="/explorations" class="nav-sublink" onclick="startFreshConversation(); return false;">
-                <i class="ri-add-line"></i>
-                <span>Nouvelle conversation</span>
-              </a>
-            </li>
-            {% for conv in conversations %}
-            <li class="nav-subitem">
-              <a href="/explorations?conv={{ conv.id }}" class="nav-sublink {% if current_conv == conv.id %}active{% endif %}" data-conv-id="{{ conv.id }}">
-                <i class="ri-chat-3-line"></i>
-                <span>{{ conv.title or 'Sans titre' }}</span>
-              </a>
-            </li>
-            {% endfor %}
-          </ul>
         </li>
 
-        <!-- Reports section -->
         <li class="nav-item">
-          <a href="#" class="nav-link nav-link-collapse" data-bs-toggle="collapse" data-bs-target="#reportsSublist" aria-expanded="true">
-            <i class="ri-file-text-line" aria-hidden="true"></i>
-            <span>Rapports</span>
-            <i class="ri-arrow-down-s-line nav-collapse-icon ms-auto"></i>
-          </a>
-          <ul class="nav-sublist collapse show" id="reportsSublist">
-            {% for report in reports %}
-            <li class="nav-subitem">
-              <a href="/api/reports/{{ report.filename }}" target="_blank" class="nav-sublink">
-                <i class="ri-article-line"></i>
-                <span>{{ report.title }}</span>
-              </a>
-            </li>
-            {% else %}
-            <li class="nav-subitem nav-subitem-empty">Aucun rapport</li>
-            {% endfor %}
-          </ul>
-        </li>
-
-        <!-- Connaissances section -->
-        <li class="nav-item">
-          <a href="/connaissances" class="nav-link {% if section == 'connaissances' %}active{% endif %}">
+          <a href="/connaissances" class="nav-link {% if section == 'connaissances' %}active{% endif %}"
+             hx-get="/connaissances" hx-target="#main" hx-push-url="true">
             <i class="ri-book-open-line" aria-hidden="true"></i>
             <span>Connaissances</span>
           </a>

@@ -1,4 +1,4 @@
-"""SQLite database for conversation persistence."""
+"""SQLite database for conversation and report persistence."""
 
 import json
 import sqlite3
@@ -6,12 +6,15 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+import uuid
 
 from . import config
-from .storage import Conversation, Message
 
 # Database path
 DB_PATH = config.BASE_DIR / "data" / "matometa.db"
+
+# Schema version for migrations
+SCHEMA_VERSION = 2
 
 
 def get_connection() -> sqlite3.Connection:
@@ -19,6 +22,7 @@ def get_connection() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
@@ -33,50 +37,201 @@ def get_db():
         conn.close()
 
 
+def get_schema_version(conn: sqlite3.Connection) -> int:
+    """Get current schema version."""
+    try:
+        row = conn.execute("SELECT version FROM schema_version").fetchone()
+        return row["version"] if row else 0
+    except sqlite3.OperationalError:
+        return 0
+
+
 def init_db():
-    """Initialize database schema."""
+    """Initialize or migrate database schema."""
     with get_db() as conn:
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS conversations (
-                id TEXT PRIMARY KEY,
-                user_id TEXT,
-                title TEXT,
-                session_id TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
+        current_version = get_schema_version(conn)
 
-            CREATE TABLE IF NOT EXISTS messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                conversation_id TEXT NOT NULL,
-                role TEXT NOT NULL,
-                content TEXT NOT NULL,
-                raw_events TEXT,
-                timestamp TEXT NOT NULL,
-                FOREIGN KEY (conversation_id) REFERENCES conversations(id)
-            );
+        if current_version < 1:
+            _create_schema_v1(conn)
 
-            CREATE INDEX IF NOT EXISTS idx_messages_conversation
-                ON messages(conversation_id);
-
-            CREATE INDEX IF NOT EXISTS idx_conversations_updated
-                ON conversations(updated_at DESC);
-        """)
+        if current_version < 2:
+            _migrate_to_v2(conn)
 
 
-class SQLiteConversationStore:
-    """SQLite-backed conversation store."""
+def _create_schema_v1(conn: sqlite3.Connection):
+    """Create initial schema (v1 - legacy)."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS schema_version (
+            version INTEGER PRIMARY KEY
+        );
+
+        CREATE TABLE IF NOT EXISTS conversations (
+            id TEXT PRIMARY KEY,
+            user_id TEXT,
+            title TEXT,
+            session_id TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            raw_events TEXT,
+            timestamp TEXT NOT NULL,
+            FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_messages_conversation
+            ON messages(conversation_id);
+
+        CREATE INDEX IF NOT EXISTS idx_conversations_updated
+            ON conversations(updated_at DESC);
+
+        INSERT OR REPLACE INTO schema_version (version) VALUES (1);
+    """)
+
+
+def _migrate_to_v2(conn: sqlite3.Connection):
+    """Migrate to v2 schema: add type to messages, add reports table."""
+    # Check if we need to migrate messages
+    cursor = conn.execute("PRAGMA table_info(messages)")
+    columns = {row["name"] for row in cursor.fetchall()}
+
+    if "type" not in columns:
+        # Add type column, rename role to type
+        conn.execute("ALTER TABLE messages ADD COLUMN type TEXT")
+        conn.execute("UPDATE messages SET type = role")
+        # Note: SQLite doesn't support DROP COLUMN easily, keep role for now
+
+    # Create reports table
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id TEXT NOT NULL,
+            message_id INTEGER,
+            title TEXT NOT NULL,
+            website TEXT,
+            category TEXT,
+            tags TEXT,
+            original_query TEXT,
+            version INTEGER DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (conversation_id) REFERENCES conversations(id),
+            FOREIGN KEY (message_id) REFERENCES messages(id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_reports_conversation
+            ON reports(conversation_id);
+
+        CREATE INDEX IF NOT EXISTS idx_reports_updated
+            ON reports(updated_at DESC);
+
+        UPDATE schema_version SET version = 2;
+    """)
+
+
+# =============================================================================
+# Data Classes
+# =============================================================================
+
+from dataclasses import dataclass, field
+
+
+@dataclass
+class Message:
+    """A single message in a conversation."""
+    id: Optional[int] = None
+    conversation_id: Optional[str] = None
+    type: str = "user"  # user, assistant, tool_use, tool_result
+    content: str = ""
+    created_at: datetime = field(default_factory=datetime.now)
+
+
+@dataclass
+class Report:
+    """A report generated from a conversation."""
+    id: Optional[int] = None
+    conversation_id: Optional[str] = None
+    message_id: Optional[int] = None
+    title: str = ""
+    website: Optional[str] = None
+    category: Optional[str] = None
+    tags: list[str] = field(default_factory=list)
+    original_query: Optional[str] = None
+    version: int = 1
+    created_at: datetime = field(default_factory=datetime.now)
+    updated_at: datetime = field(default_factory=datetime.now)
+
+
+@dataclass
+class Conversation:
+    """A conversation with its messages and optional report."""
+    id: str = ""
+    user_id: Optional[str] = None
+    title: Optional[str] = None
+    session_id: Optional[str] = None
+    messages: list[Message] = field(default_factory=list)
+    report: Optional[Report] = None
+    created_at: datetime = field(default_factory=datetime.now)
+    updated_at: datetime = field(default_factory=datetime.now)
+
+    @property
+    def has_report(self) -> bool:
+        return self.report is not None
+
+    def to_dict(self) -> dict:
+        """Convert to JSON-serializable dict."""
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "title": self.title,
+            "session_id": self.session_id,
+            "has_report": self.has_report,
+            "messages": [
+                {
+                    "id": m.id,
+                    "type": m.type,
+                    "content": m.content,
+                    "created_at": m.created_at.isoformat(),
+                }
+                for m in self.messages
+            ],
+            "report": {
+                "id": self.report.id,
+                "title": self.report.title,
+                "website": self.report.website,
+                "category": self.report.category,
+                "tags": self.report.tags,
+                "version": self.report.version,
+            } if self.report else None,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+        }
+
+
+# =============================================================================
+# Store
+# =============================================================================
+
+class ConversationStore:
+    """SQLite-backed conversation and report store."""
 
     def __init__(self):
         init_db()
 
-    def create(self, user_id: Optional[str] = None) -> Conversation:
+    # -------------------------------------------------------------------------
+    # Conversations
+    # -------------------------------------------------------------------------
+
+    def create_conversation(self, user_id: Optional[str] = None) -> Conversation:
         """Create a new conversation."""
-        import uuid
         conv = Conversation(
             id=str(uuid.uuid4()),
             user_id=user_id,
-            title=None,
         )
 
         with get_db() as conn:
@@ -89,8 +244,8 @@ class SQLiteConversationStore:
 
         return conv
 
-    def get(self, conv_id: str) -> Optional[Conversation]:
-        """Get a conversation by ID with all messages."""
+    def get_conversation(self, conv_id: str, include_messages: bool = True) -> Optional[Conversation]:
+        """Get a conversation by ID."""
         with get_db() as conn:
             row = conn.execute(
                 "SELECT * FROM conversations WHERE id = ?", (conv_id,)
@@ -99,21 +254,45 @@ class SQLiteConversationStore:
             if not row:
                 return None
 
-            # Load messages
-            msg_rows = conn.execute(
-                "SELECT * FROM messages WHERE conversation_id = ? ORDER BY timestamp",
-                (conv_id,)
-            ).fetchall()
+            messages = []
+            if include_messages:
+                msg_rows = conn.execute(
+                    """SELECT id, conversation_id, COALESCE(type, role) as type, content, timestamp
+                       FROM messages WHERE conversation_id = ? ORDER BY timestamp""",
+                    (conv_id,)
+                ).fetchall()
 
-            messages = [
-                Message(
-                    role=m["role"],
-                    content=m["content"],
-                    timestamp=datetime.fromisoformat(m["timestamp"]),
-                    raw_events=json.loads(m["raw_events"]) if m["raw_events"] else [],
+                messages = [
+                    Message(
+                        id=m["id"],
+                        conversation_id=m["conversation_id"],
+                        type=m["type"],
+                        content=m["content"],
+                        created_at=datetime.fromisoformat(m["timestamp"]),
+                    )
+                    for m in msg_rows
+                ]
+
+            # Load report if exists
+            report_row = conn.execute(
+                "SELECT * FROM reports WHERE conversation_id = ?", (conv_id,)
+            ).fetchone()
+
+            report = None
+            if report_row:
+                report = Report(
+                    id=report_row["id"],
+                    conversation_id=report_row["conversation_id"],
+                    message_id=report_row["message_id"],
+                    title=report_row["title"],
+                    website=report_row["website"],
+                    category=report_row["category"],
+                    tags=json.loads(report_row["tags"]) if report_row["tags"] else [],
+                    original_query=report_row["original_query"],
+                    version=report_row["version"],
+                    created_at=datetime.fromisoformat(report_row["created_at"]),
+                    updated_at=datetime.fromisoformat(report_row["updated_at"]),
                 )
-                for m in msg_rows
-            ]
 
             return Conversation(
                 id=row["id"],
@@ -121,22 +300,92 @@ class SQLiteConversationStore:
                 title=row["title"],
                 messages=messages,
                 session_id=row["session_id"],
+                report=report,
                 created_at=datetime.fromisoformat(row["created_at"]),
                 updated_at=datetime.fromisoformat(row["updated_at"]),
             )
 
-    def append_message(
+    def list_conversations(
+        self, user_id: Optional[str] = None, limit: int = 50
+    ) -> list[Conversation]:
+        """List recent conversations with report info."""
+        with get_db() as conn:
+            query = """
+                SELECT c.*, r.id as report_id, r.title as report_title
+                FROM conversations c
+                LEFT JOIN reports r ON r.conversation_id = c.id
+                {where}
+                ORDER BY c.updated_at DESC
+                LIMIT ?
+            """
+
+            if user_id:
+                rows = conn.execute(
+                    query.format(where="WHERE c.user_id = ?"),
+                    (user_id, limit)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    query.format(where=""),
+                    (limit,)
+                ).fetchall()
+
+            return [
+                Conversation(
+                    id=row["id"],
+                    user_id=row["user_id"],
+                    title=row["title"],
+                    messages=[],
+                    session_id=row["session_id"],
+                    report=Report(id=row["report_id"], title=row["report_title"] or "") if row["report_id"] else None,
+                    created_at=datetime.fromisoformat(row["created_at"]),
+                    updated_at=datetime.fromisoformat(row["updated_at"]),
+                )
+                for row in rows
+            ]
+
+    def update_conversation(self, conv_id: str, **kwargs) -> bool:
+        """Update conversation fields."""
+        allowed = {"title", "session_id", "user_id"}
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return False
+
+        updates["updated_at"] = datetime.now().isoformat()
+
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        values = list(updates.values()) + [conv_id]
+
+        with get_db() as conn:
+            cursor = conn.execute(
+                f"UPDATE conversations SET {set_clause} WHERE id = ?",
+                values
+            )
+            return cursor.rowcount > 0
+
+    def delete_conversation(self, conv_id: str) -> bool:
+        """Delete a conversation and all related data."""
+        with get_db() as conn:
+            conn.execute("DELETE FROM reports WHERE conversation_id = ?", (conv_id,))
+            conn.execute("DELETE FROM messages WHERE conversation_id = ?", (conv_id,))
+            cursor = conn.execute("DELETE FROM conversations WHERE id = ?", (conv_id,))
+            return cursor.rowcount > 0
+
+    # -------------------------------------------------------------------------
+    # Messages
+    # -------------------------------------------------------------------------
+
+    def add_message(
         self,
         conv_id: str,
-        role: str,
+        type: str,
         content: str,
-        raw_events: Optional[list[dict]] = None,
     ) -> Optional[Message]:
-        """Append a message to a conversation."""
+        """Add a message to a conversation. Returns the message with ID."""
         msg = Message(
-            role=role,
+            conversation_id=conv_id,
+            type=type,
             content=content,
-            raw_events=raw_events or [],
         )
 
         with get_db() as conn:
@@ -148,19 +397,18 @@ class SQLiteConversationStore:
                 return None
 
             # Insert message
-            conn.execute(
-                """INSERT INTO messages (conversation_id, role, content, raw_events, timestamp)
+            cursor = conn.execute(
+                """INSERT INTO messages (conversation_id, type, role, content, timestamp)
                    VALUES (?, ?, ?, ?, ?)""",
-                (conv_id, role, content,
-                 json.dumps(raw_events) if raw_events else None,
-                 msg.timestamp.isoformat())
+                (conv_id, type, type, content, msg.created_at.isoformat())
             )
+            msg.id = cursor.lastrowid
 
-            # Update conversation
+            # Update conversation timestamp
             now = datetime.now().isoformat()
 
             # Auto-generate title from first user message
-            if row["title"] is None and role == "user":
+            if row["title"] is None and type == "user":
                 title = content[:50] + ("..." if len(content) > 50 else "")
                 conn.execute(
                     "UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?",
@@ -174,67 +422,178 @@ class SQLiteConversationStore:
 
         return msg
 
-    def update_session_id(self, conv_id: str, session_id: str) -> bool:
-        """Update the agent session ID for a conversation."""
+    def get_messages(
+        self,
+        conv_id: str,
+        types: Optional[list[str]] = None,
+        limit: Optional[int] = None,
+    ) -> list[Message]:
+        """Get messages for a conversation, optionally filtered by type."""
         with get_db() as conn:
-            cursor = conn.execute(
-                "UPDATE conversations SET session_id = ? WHERE id = ?",
-                (session_id, conv_id)
-            )
-            return cursor.rowcount > 0
+            query = """SELECT id, conversation_id, COALESCE(type, role) as type, content, timestamp
+                       FROM messages WHERE conversation_id = ?"""
+            params = [conv_id]
 
-    def update_title(self, conv_id: str, title: str) -> bool:
-        """Update the title for a conversation."""
-        with get_db() as conn:
-            cursor = conn.execute(
-                "UPDATE conversations SET title = ? WHERE id = ?",
-                (title, conv_id)
-            )
-            return cursor.rowcount > 0
+            if types:
+                placeholders = ",".join("?" * len(types))
+                query += f" AND COALESCE(type, role) IN ({placeholders})"
+                params.extend(types)
 
-    def list_recent(
-        self, user_id: Optional[str] = None, limit: int = 20
-    ) -> list[Conversation]:
-        """List recent conversations (without loading all messages)."""
-        with get_db() as conn:
-            if user_id:
-                rows = conn.execute(
-                    """SELECT c.*, COUNT(m.id) as message_count
-                       FROM conversations c
-                       LEFT JOIN messages m ON m.conversation_id = c.id
-                       WHERE c.user_id = ?
-                       GROUP BY c.id
-                       ORDER BY c.updated_at DESC
-                       LIMIT ?""",
-                    (user_id, limit)
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    """SELECT c.*, COUNT(m.id) as message_count
-                       FROM conversations c
-                       LEFT JOIN messages m ON m.conversation_id = c.id
-                       GROUP BY c.id
-                       ORDER BY c.updated_at DESC
-                       LIMIT ?""",
-                    (limit,)
-                ).fetchall()
+            query += " ORDER BY timestamp"
+
+            if limit:
+                query += " LIMIT ?"
+                params.append(limit)
+
+            rows = conn.execute(query, params).fetchall()
 
             return [
-                Conversation(
+                Message(
+                    id=m["id"],
+                    conversation_id=m["conversation_id"],
+                    type=m["type"],
+                    content=m["content"],
+                    created_at=datetime.fromisoformat(m["timestamp"]),
+                )
+                for m in rows
+            ]
+
+    # -------------------------------------------------------------------------
+    # Reports
+    # -------------------------------------------------------------------------
+
+    def create_report(
+        self,
+        conv_id: str,
+        message_id: int,
+        title: str,
+        website: Optional[str] = None,
+        category: Optional[str] = None,
+        tags: Optional[list[str]] = None,
+        original_query: Optional[str] = None,
+    ) -> Optional[Report]:
+        """Create a report linked to a conversation and message."""
+        report = Report(
+            conversation_id=conv_id,
+            message_id=message_id,
+            title=title,
+            website=website,
+            category=category,
+            tags=tags or [],
+            original_query=original_query,
+        )
+
+        with get_db() as conn:
+            cursor = conn.execute(
+                """INSERT INTO reports
+                   (conversation_id, message_id, title, website, category, tags, original_query, version, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (conv_id, message_id, title, website, category,
+                 json.dumps(tags) if tags else None, original_query,
+                 1, report.created_at.isoformat(), report.updated_at.isoformat())
+            )
+            report.id = cursor.lastrowid
+
+        return report
+
+    def get_report(self, report_id: int) -> Optional[Report]:
+        """Get a report by ID."""
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT * FROM reports WHERE id = ?", (report_id,)
+            ).fetchone()
+
+            if not row:
+                return None
+
+            return Report(
+                id=row["id"],
+                conversation_id=row["conversation_id"],
+                message_id=row["message_id"],
+                title=row["title"],
+                website=row["website"],
+                category=row["category"],
+                tags=json.loads(row["tags"]) if row["tags"] else [],
+                original_query=row["original_query"],
+                version=row["version"],
+                created_at=datetime.fromisoformat(row["created_at"]),
+                updated_at=datetime.fromisoformat(row["updated_at"]),
+            )
+
+    def list_reports(
+        self,
+        website: Optional[str] = None,
+        category: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[Report]:
+        """List reports with optional filtering."""
+        with get_db() as conn:
+            query = "SELECT * FROM reports WHERE 1=1"
+            params = []
+
+            if website:
+                query += " AND website = ?"
+                params.append(website)
+
+            if category:
+                query += " AND category = ?"
+                params.append(category)
+
+            query += " ORDER BY updated_at DESC LIMIT ?"
+            params.append(limit)
+
+            rows = conn.execute(query, params).fetchall()
+
+            return [
+                Report(
                     id=row["id"],
-                    user_id=row["user_id"],
+                    conversation_id=row["conversation_id"],
+                    message_id=row["message_id"],
                     title=row["title"],
-                    messages=[],  # Not loaded for list view
-                    session_id=row["session_id"],
+                    website=row["website"],
+                    category=row["category"],
+                    tags=json.loads(row["tags"]) if row["tags"] else [],
+                    original_query=row["original_query"],
+                    version=row["version"],
                     created_at=datetime.fromisoformat(row["created_at"]),
                     updated_at=datetime.fromisoformat(row["updated_at"]),
                 )
                 for row in rows
             ]
 
-    def delete(self, conv_id: str) -> bool:
-        """Delete a conversation and its messages."""
+    def update_report(self, report_id: int, **kwargs) -> bool:
+        """Update report fields, incrementing version."""
+        allowed = {"title", "website", "category", "tags", "original_query"}
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return False
+
+        # Handle tags serialization
+        if "tags" in updates:
+            updates["tags"] = json.dumps(updates["tags"])
+
+        updates["updated_at"] = datetime.now().isoformat()
+
         with get_db() as conn:
-            conn.execute("DELETE FROM messages WHERE conversation_id = ?", (conv_id,))
-            cursor = conn.execute("DELETE FROM conversations WHERE id = ?", (conv_id,))
+            # Increment version
+            conn.execute(
+                "UPDATE reports SET version = version + 1 WHERE id = ?",
+                (report_id,)
+            )
+
+            set_clause = ", ".join(f"{k} = ?" for k in updates)
+            values = list(updates.values()) + [report_id]
+
+            cursor = conn.execute(
+                f"UPDATE reports SET {set_clause} WHERE id = ?",
+                values
+            )
             return cursor.rowcount > 0
+
+
+# =============================================================================
+# Backwards compatibility
+# =============================================================================
+
+# Alias for old code
+store = ConversationStore()

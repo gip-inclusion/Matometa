@@ -9,12 +9,18 @@
     <div class="container">
       <div class="d-flex align-items-center justify-content-between gap-3">
         <div class="d-flex align-items-center gap-3">
+          {% if current_conv %}
+          <a href="/explorations" class="btn btn-link p-0 me-2" hx-get="/explorations" hx-target="#main" hx-push-url="true">
+            <i class="ri-arrow-left-line ri-xl"></i>
+          </a>
+          {% endif %}
           <i class="ri-compass-discover-line ri-2x text-primary"></i>
           <div>
-            <h1 class="mb-0">Explorations</h1>
-            <p class="text-muted mb-0">Posez vos questions sur les données</p>
+            <h1 class="mb-0">{% if current_conv %}Conversation{% else %}Explorations{% endif %}</h1>
+            <p class="text-muted mb-0">{% if current_conv %}Continuez votre exploration{% else %}Posez vos questions sur les données{% endif %}</p>
           </div>
         </div>
+        {% if current_conv %}
         <div class="view-mode-wrapper">
           <div class="segmented-control" id="viewModeControl">
             <button type="button" class="segmented-btn" data-mode="minimal" data-label="Rapports et réponses" title="Rapports et réponses finales">
@@ -29,19 +35,56 @@
           </div>
           <div class="view-mode-label" id="viewModeLabel">Réponses et rapports</div>
         </div>
+        {% endif %}
       </div>
     </div>
   </div>
 
-  <!-- Main content area - scrolls with page -->
+  <!-- Main content area -->
   <div class="container section-body">
+    {% if current_conv %}
+    <!-- Conversation detail view -->
     <div class="chat-output view-normal" id="chatOutput">
-      <div class="empty-state" id="emptyState">
-        <i class="ri-chat-3-line ri-4x text-disabled mb-3"></i>
-        <p class="mb-0 text-muted">Posez une question pour commencer</p>
-        <p class="small text-muted">Ex : « Combien de visiteurs sur les Emplois en décembre ? »</p>
+      <div class="loading-indicator" id="loadingConversation">
+        <div class="spinner"></div> Chargement...
       </div>
     </div>
+    {% else %}
+    <!-- Conversation list view -->
+    <div class="conversation-list" id="conversationList">
+      {% if conversations %}
+      <div class="row g-3">
+        {% for conv in conversations %}
+        <div class="col-12 col-md-6 col-lg-4">
+          <a href="/explorations?conv={{ conv.id }}" class="card conversation-card h-100"
+             hx-get="/explorations?conv={{ conv.id }}" hx-target="#main" hx-push-url="true">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-start mb-2">
+                <h5 class="card-title mb-0">{{ conv.title or 'Sans titre' }}</h5>
+                {% if conv.has_report %}
+                <span class="badge bg-primary">
+                  <i class="ri-file-text-line"></i> Rapport
+                </span>
+                {% endif %}
+              </div>
+              <p class="card-text text-muted small mb-0">
+                <i class="ri-time-line"></i>
+                {{ conv.updated_at.strftime('%d/%m/%Y %H:%M') }}
+              </p>
+            </div>
+          </a>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-state" id="emptyState">
+        <i class="ri-chat-3-line ri-4x text-disabled mb-3"></i>
+        <p class="mb-0 text-muted">Aucune conversation</p>
+        <p class="small text-muted">Posez une question pour commencer</p>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
   </div>
 
   <!-- Fixed chat bar at bottom -->
@@ -75,7 +118,41 @@
   mermaid.initialize({ startOnLoad: false, theme: 'default' });
 
   document.addEventListener('DOMContentLoaded', () => {
+    {% if current_conv %}
+    // Load existing conversation
+    currentConversationId = '{{ current_conv }}';
+    loadConversation('{{ current_conv }}').then(() => {
+      // Check if there's a pending message to send
+      const urlParams = new URLSearchParams(window.location.search);
+      const pendingMessage = urlParams.get('message');
+      if (pendingMessage) {
+        // Remove message param from URL
+        urlParams.delete('message');
+        const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+        window.history.replaceState({}, '', newUrl);
+        // Send the message
+        document.getElementById('chatInput').value = pendingMessage;
+        sendMessage();
+      }
+    });
+    {% endif %}
     initChat();
+  });
+
+  // Re-init chat after htmx swaps
+  document.body.addEventListener('htmx:afterSwap', (e) => {
+    if (e.detail.target.id === 'main') {
+      initChat();
+      // Check if we're on a conversation page
+      const urlParams = new URLSearchParams(window.location.search);
+      const convId = urlParams.get('conv');
+      if (convId) {
+        currentConversationId = convId;
+        loadConversation(convId);
+      } else {
+        currentConversationId = null;
+      }
+    }
   });
 </script>
 {% endblock %}
