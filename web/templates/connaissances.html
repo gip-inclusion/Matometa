@@ -148,13 +148,6 @@
 {% endblock %}
 
 {% block scripts %}
-<!-- Markdown rendering -->
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<!-- Mermaid diagrams -->
-<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
-<script>
-  mermaid.initialize({ startOnLoad: false, theme: 'default' });
-</script>
 <script>
 document.addEventListener('DOMContentLoaded', async () => {
   {% if current_file %}

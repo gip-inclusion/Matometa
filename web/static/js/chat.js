@@ -16,6 +16,7 @@ const RETRY_DELAY_MS = 1000;
 document.body.addEventListener('htmx:afterSwap', (e) => {
   if (e.detail.target.id === 'main') {
     initChat();
+    initKnowledge();
     // Check if we're on a conversation page
     const urlParams = new URLSearchParams(window.location.search);
     const convId = urlParams.get('conv');
@@ -27,6 +28,43 @@ document.body.addEventListener('htmx:afterSwap', (e) => {
     }
   }
 });
+
+/**
+ * Initialize knowledge page markdown rendering
+ */
+async function initKnowledge() {
+  const markdownContent = document.getElementById('markdownContent');
+  const rawContentScript = document.getElementById('knowledgeRawContent');
+
+  if (!markdownContent || !rawContentScript) return;
+
+  // Render markdown
+  if (typeof marked !== 'undefined') {
+    marked.setOptions({
+      breaks: true,
+      gfm: true,
+    });
+
+    const rawContent = rawContentScript.textContent;
+    markdownContent.innerHTML = marked.parse(rawContent);
+
+    // Render mermaid diagrams if present
+    if (typeof mermaid !== 'undefined') {
+      const mermaidBlocks = markdownContent.querySelectorAll('pre code.language-mermaid');
+      for (const block of mermaidBlocks) {
+        const container = document.createElement('div');
+        container.className = 'mermaid';
+        container.textContent = block.textContent;
+        block.parentElement.replaceWith(container);
+      }
+      try {
+        await mermaid.run();
+      } catch (e) {
+        console.warn('Mermaid rendering failed:', e);
+      }
+    }
+  }
+}
 
 /**
  * Initialize the chat interface
