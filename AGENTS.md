@@ -210,35 +210,36 @@ Web UI mode and CLI mode.
 
 **DO NOT write report files** to `./reports/`. That folder is archived.
 
-**Use the save_report skill:**
+**Use the save_report skill (file-based to avoid escaping issues):**
 
-```python
-from skills.save_report.scripts.save_report import save_report, update_report, append_report, list_reports
+```bash
+# Step 1: Write report to a temp file (use Write tool - handles escaping)
+# Step 2: Run CLI to save to database
 
-# Create new report (creates new conversation)
-result = save_report(
-    title="Monthly traffic analysis",
-    content="---\ndate: 2026-01-07\n...\n---\n\n# Report\n\nContent...",
-    website="emplois",
-    category="Traffic analysis",
-    original_query="What was the traffic in December?"
-)
+# Create new report
+.venv/bin/python skills/save_report/scripts/save_report.py \
+    --file /tmp/report.md \
+    --title "Monthly traffic analysis" \
+    --website emplois \
+    --category "Traffic analysis"
 
-# Update existing report (increments version)
-result = update_report(report_id=42, content="Updated content...")
+# Update existing report
+.venv/bin/python skills/save_report/scripts/save_report.py \
+    --file /tmp/report.md --report-id 42
 
-# Append to existing conversation
-result = append_report(conversation_id="uuid-here", title="Follow-up", content="...")
+# Append to conversation
+.venv/bin/python skills/save_report/scripts/save_report.py \
+    --file /tmp/report.md --conversation-id "uuid" --title "Follow-up"
 
-# List existing reports
-reports = list_reports(website="emplois", limit=10)
+# List reports
+.venv/bin/python skills/save_report/scripts/save_report.py --list
 ```
 
 Include YAML front-matter at the start of report content:
 ```yaml
 ---
 date: 2025-01-15
-website: emplois  # or array: [emplois, dora]
+website: emplois
 original_query: "verbatim user query"
 query_category: "short category description"
 indicator_type: [tag1, tag2]
