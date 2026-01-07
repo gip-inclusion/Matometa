@@ -14,8 +14,8 @@ RUN apt-get update && apt-get install -y \
 # Install Claude Code CLI globally
 RUN npm install -g @anthropic-ai/claude-code
 
-# Create non-root user
-RUN useradd -m -s /bin/bash matometa
+# Create non-root user (UID 1004 to match host for volume permissions)
+RUN useradd -m -s /bin/bash -u 1004 matometa
 
 # Set up app directory
 WORKDIR /app
