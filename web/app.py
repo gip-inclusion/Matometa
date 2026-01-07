@@ -525,6 +525,46 @@ def stream_conversation(conv_id: str):
     if not last_message:
         return jsonify({"error": "No user message to respond to"}), 400
 
+    # Inject knowledge editing context for knowledge conversations
+    if conv.conv_type == "knowledge" and conv.file_path:
+        staging_dir = get_staging_dir(conv_id)
+        original_path = KNOWLEDGE_ROOT / conv.file_path
+        staged_path = staging_dir / conv.file_path
+
+        # Check if this is the first user message (no prior user messages in history)
+        is_first_message = not any(m.type == "user" for m in conv.messages[:-1])
+
+        if is_first_message:
+            # Read current file content for first message
+            if staged_path.exists():
+                file_content = staged_path.read_text()
+            elif original_path.exists():
+                file_content = original_path.read_text()
+            else:
+                file_content = "(fichier introuvable)"
+
+            knowledge_context = f"""You are editing a knowledge file.
+
+IMPORTANT: Write ALL changes to the staging directory:
+  {staging_dir}/
+
+The original file is at: knowledge/{conv.file_path}
+Your working copy is at: {staged_path}
+
+Current content of {conv.file_path}:
+---
+{file_content}
+---
+
+User request: """
+        else:
+            # For follow-up messages, just remind about the staging directory
+            knowledge_context = f"""(Reminder: write changes to {staged_path})
+
+User request: """
+
+        last_message = knowledge_context + last_message
+
     def generate():
         """Generate SSE events from agent."""
         agent = get_agent_instance()
@@ -864,16 +904,24 @@ def commit_knowledge_changes(conv_id: str):
             shutil.copy2(src, dst)
             committed_files.append(rel_path)
 
-    # Append to JOURNAL.md
+    # Prepend to JOURNAL.md (new entries on top)
     journal_path = config.BASE_DIR / "JOURNAL.md"
-    journal_entry = f"\n\n## {datetime.now().strftime('%Y-%m-%d %H:%M')} - Knowledge Update\n\n"
-    journal_entry += "Files modified:\n"
-    for f in committed_files:
-        journal_entry += f"- {f}\n"
-    journal_entry += f"\nSummary: {summary}\n"
+    files_list = ", ".join(committed_files)
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    journal_entry = f"- {date_str}. {summary} ({files_list})\n"
 
-    with open(journal_path, "a") as f:
-        f.write(journal_entry)
+    # Read existing content and prepend new entry after the header
+    existing = journal_path.read_text() if journal_path.exists() else ""
+    # Find the end of the header (after the blockquote section)
+    header_end = existing.find("\n\n- ")
+    if header_end == -1:
+        # No entries yet, find end of header by looking for double newline after blockquote
+        header_end = existing.find("\n\n", existing.find(">"))
+        if header_end == -1:
+            header_end = len(existing)
+
+    new_content = existing[:header_end] + "\n\n" + journal_entry + existing[header_end + 2:]
+    journal_path.write_text(new_content)
 
     # Clean up staging directory
     shutil.rmtree(staging_dir, ignore_errors=True)
@@ -909,6 +957,51 @@ def abandon_knowledge_changes(conv_id: str):
         "status": "abandoned",
         "conversation_id": conv_id,
     })
+
+
+@app.route("/api/knowledge/conversations/<conv_id>/preview/<path:file_path>")
+def preview_staged_file(conv_id: str, file_path: str):
+    """Preview a staged file as rendered HTML."""
+    import markdown
+
+    conv = store.get_conversation(conv_id, include_messages=False)
+    if not conv or conv.conv_type != "knowledge":
+        return "Knowledge conversation not found", 404
+
+    staging_dir = get_staging_dir(conv_id)
+    staged_file = staging_dir / file_path
+
+    if not staged_file.exists():
+        return "Staged file not found", 404
+
+    # Read and render markdown
+    content = staged_file.read_text()
+    html_content = markdown.markdown(content, extensions=["fenced_code", "tables", "toc"])
+
+    # Return a simple HTML page with the rendered content
+    return f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <title>Aperçu: {file_path}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <style>
+        body {{ padding: 2rem; max-width: 800px; margin: 0 auto; }}
+        pre {{ background: #f8f9fa; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; }}
+        code {{ font-size: 0.875rem; }}
+        table {{ width: 100%; margin-bottom: 1rem; }}
+        th, td {{ padding: 0.5rem; border: 1px solid #dee2e6; }}
+    </style>
+</head>
+<body>
+    <nav class="mb-4">
+        <small class="text-muted">{file_path}</small>
+    </nav>
+    <article class="markdown-body">
+        {html_content}
+    </article>
+</body>
+</html>"""
 
 
 # -----------------------------------------------------------------------------

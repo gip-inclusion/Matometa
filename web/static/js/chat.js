@@ -108,6 +108,9 @@ function initChat() {
 
   if (!input || !sendBtn) return;
 
+  // Skip on knowledge pages - they have their own chat handling
+  if (document.getElementById('knowledgeContent')) return;
+
   // Check for conversation ID in URL (skip if already loaded by inline script)
   const urlParams = new URLSearchParams(window.location.search);
   const convId = urlParams.get('conv');

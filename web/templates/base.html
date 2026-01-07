@@ -112,6 +112,21 @@
   <!-- App JS -->
   <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
 
+  <!-- Sidebar active state management -->
+  <script>
+  function updateSidebarActive() {
+    const path = window.location.pathname;
+    document.querySelectorAll('.sidebar-nav .nav-link, .offcanvas .nav-link').forEach(link => {
+      const href = link.getAttribute('href');
+      const isActive = path === href || path.startsWith(href + '?');
+      link.classList.toggle('active', isActive);
+    });
+  }
+  // Update on page load and htmx navigation
+  document.addEventListener('DOMContentLoaded', updateSidebarActive);
+  document.body.addEventListener('htmx:pushedIntoHistory', updateSidebarActive);
+  </script>
+
   {% block scripts %}{% endblock %}
 </body>
 </html>

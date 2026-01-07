@@ -20,6 +20,31 @@
             <p class="text-muted mb-0">{% if current_file %}{{ current_file }}{% else %}Fichiers de référence{% endif %}</p>
           </div>
         </div>
+        {% if current_file %}
+        <div class="d-flex align-items-center gap-3">
+          <!-- Staged files indicator (in header) -->
+          <div class="view-mode-wrapper" id="stagedFilesIndicator" {% if not staged_files %}style="display: none;"{% endif %}>
+            <button type="button" class="btn btn-primary btn-sm" id="stagedFilesBtn"
+                    data-bs-toggle="popover" data-bs-placement="bottom" data-bs-html="true"
+                    data-bs-content="<div id='stagedFilesPopover'></div>">
+              <i class="ri-file-edit-line"></i>
+              <span id="stagedFilesLabel">{% if staged_files %}{{ staged_files|length }} fichier{{ 's' if staged_files|length > 1 else '' }} modifié{{ 's' if staged_files|length > 1 else '' }}{% else %}0 fichier modifié{% endif %}</span>
+            </button>
+          </div>
+
+          <div class="view-mode-wrapper">
+            <div class="segmented-control" id="viewModeControl">
+              <button type="button" class="segmented-btn active" data-mode="normal" data-label="Réponses" title="Réponses">
+                <i class="ri-chat-3-line"></i>
+              </button>
+              <button type="button" class="segmented-btn" data-mode="verbose" data-label="Tout afficher" title="Tout afficher">
+                <i class="ri-code-line"></i>
+              </button>
+            </div>
+            <div class="view-mode-label" id="viewModeLabel">Réponses</div>
+          </div>
+        </div>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -34,62 +59,31 @@
   <div class="container section-body">
     {% if current_file %}
     <!-- File detail view -->
-    <div class="row">
-      <div class="col-12 {% if staged_files %}col-lg-8{% endif %}">
-        <div class="knowledge-content" id="knowledgeContent">
-          <div class="knowledge-header">
-            <div class="knowledge-title">
-              <i class="ri-file-text-line"></i>
-              {{ current_file.split('/')[-1].replace('.md', '').replace('-', ' ').replace('_', ' ').title() }}
-            </div>
-            <div class="knowledge-meta">
-              <i class="ri-folder-line"></i> {{ current_file.split('/')[0] }}
-            </div>
-            <div class="knowledge-meta">
-              <i class="ri-file-line"></i> {{ current_file }}
-            </div>
-          </div>
-          <div class="markdown-body" id="markdownContent"></div>
+    <div class="knowledge-content" id="knowledgeContent">
+      <div class="knowledge-header">
+        <div class="knowledge-title">
+          <i class="ri-file-text-line"></i>
+          {{ current_file.split('/')[-1].replace('.md', '').replace('-', ' ').replace('_', ' ').title() }}
         </div>
-        <script id="knowledgeRawContent" type="text/plain">{{ file_content|safe }}</script>
-
-        <!-- Chat output for conversation -->
-        {% if current_conv %}
-        <div class="chat-output view-normal mt-4" id="chatOutput">
-          <div class="loading-indicator" id="loadingConversation">
-            <div class="spinner"></div> Chargement...
-          </div>
+        <div class="knowledge-meta">
+          <i class="ri-folder-line"></i> {{ current_file.split('/')[0] }}
         </div>
-        {% endif %}
+        <div class="knowledge-meta">
+          <i class="ri-file-line"></i> {{ current_file }}
+        </div>
       </div>
+      <div class="markdown-body" id="markdownContent"></div>
+    </div>
+    <script id="knowledgeRawContent" type="text/plain">{{ file_content|replace('</script>', '<\\/script>')|safe }}</script>
 
-      {% if staged_files %}
-      <!-- Staged files panel -->
-      <div class="col-12 col-lg-4">
-        <div class="card staged-files-panel sticky-top" style="top: 80px;">
-          <div class="card-header">
-            <h5 class="mb-0">
-              <i class="ri-file-edit-line"></i>
-              Fichiers modifiés ({{ staged_files|length }})
-            </h5>
-          </div>
-          <ul class="list-group list-group-flush">
-            {% for file in staged_files %}
-            <li class="list-group-item d-flex align-items-center">
-              <i class="ri-file-text-line me-2 text-primary"></i>
-              <span class="small">{{ file }}</span>
-            </li>
-            {% endfor %}
-          </ul>
-          <div class="card-footer d-flex gap-2">
-            <button type="button" class="btn btn-primary btn-sm flex-fill" id="commitBtn">
-              <i class="ri-check-line"></i> Valider
-            </button>
-            <button type="button" class="btn btn-outline-danger btn-sm" id="abandonBtn">
-              <i class="ri-close-line"></i> Abandonner
-            </button>
-          </div>
-        </div>
+    <!-- Staged files data for popover (hidden, used by JS) -->
+    <script id="stagedFilesData" type="application/json">{{ staged_files | tojson if staged_files else '[]' }}</script>
+
+    <!-- Chat output for conversation (hidden until first message if no existing conv) -->
+    <div class="chat-output view-normal mt-4" id="chatOutput" {% if not current_conv %}style="display: none;"{% endif %}>
+      {% if current_conv %}
+      <div class="loading-indicator" id="loadingConversation">
+        <div class="spinner"></div> Chargement...
       </div>
       {% endif %}
     </div>
@@ -114,7 +108,7 @@
             </a>
             {% if file.path in active_files %}
             <div class="card-footer-row">
-              <span class="badge bg-warning text-dark">
+              <span class="badge bg-warning text-white">
                 <i class="ri-edit-line"></i> En cours d'édition
               </span>
             </div>
@@ -173,7 +167,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       gfm: true,
     });
 
-    const rawContent = rawContentScript.textContent;
+    // Unescape script tag that was escaped for HTML safety
+    const rawContent = rawContentScript.textContent.replace(/<\\\/script>/g, '<\/script>');
     markdownContent.innerHTML = marked.parse(rawContent);
 
     // Render mermaid diagrams if present
@@ -189,13 +184,136 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  // View mode toggle
+  const viewModeControl = document.getElementById('viewModeControl');
+  const chatOutput = document.getElementById('chatOutput');
+  if (viewModeControl && chatOutput) {
+    const viewModeLabel = document.getElementById('viewModeLabel');
+    viewModeControl.addEventListener('click', (e) => {
+      const btn = e.target.closest('.segmented-btn');
+      if (!btn) return;
+      const mode = btn.dataset.mode;
+      const label = btn.dataset.label;
+      viewModeControl.querySelectorAll('.segmented-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      chatOutput.classList.remove('view-minimal', 'view-normal', 'view-verbose');
+      chatOutput.classList.add(`view-${mode}`);
+      if (viewModeLabel) viewModeLabel.textContent = label;
+    });
+  }
+
+  // Staged files popover
+  const stagedFilesBtn = document.getElementById('stagedFilesBtn');
+  const stagedFilesDataEl = document.getElementById('stagedFilesData');
+  let stagedFiles = stagedFilesDataEl ? JSON.parse(stagedFilesDataEl.textContent) : [];
+  let popover = null;
+  let isProcessing = false;  // Track if agent is currently processing
+
+  function buildPopoverContent() {
+    if (!stagedFiles.length) return '<p class="text-muted mb-0">Aucun fichier modifié</p>';
+    let html = '<ul class="list-unstyled mb-2">';
+    for (const file of stagedFiles) {
+      html += `<li class="d-flex align-items-center gap-2 py-1">
+        <i class="ri-file-text-line text-primary"></i>
+        <a href="#" class="staged-file-link small text-decoration-none" data-file="${file}">${file}</a>
+      </li>`;
+    }
+    html += '</ul>';
+    // Only include actions div if not processing
+    if (!isProcessing && currentConversationId && stagedFiles.length) {
+      html += `<div class="d-flex gap-2 pt-2 border-top" id="popoverActions">
+        <button type="button" class="btn btn-primary btn-sm flex-fill" id="popoverCommitBtn">
+          <i class="ri-check-line"></i> Valider
+        </button>
+        <button type="button" class="btn btn-outline-danger btn-sm" id="popoverAbandonBtn">
+          <i class="ri-close-line"></i> Abandonner
+        </button>
+      </div>`;
+    }
+    return html;
+  }
+
+  if (stagedFilesBtn) {
+    popover = new bootstrap.Popover(stagedFilesBtn, {
+      html: true,
+      sanitize: false,
+      content: buildPopoverContent,
+      trigger: 'click',
+    });
+
+    // Handle clicks inside popover
+    stagedFilesBtn.addEventListener('shown.bs.popover', () => {
+      const popoverEl = document.querySelector('.popover-body');
+      if (!popoverEl) return;
+
+      // File links - open in new window
+      popoverEl.querySelectorAll('.staged-file-link').forEach(link => {
+        link.addEventListener('click', async (e) => {
+          e.preventDefault();
+          const file = link.dataset.file;
+          if (currentConversationId) {
+            window.open(`/api/knowledge/conversations/${currentConversationId}/preview/${encodeURIComponent(file)}`, '_blank');
+          }
+        });
+      });
+
+      // Commit button
+      const commitBtn = popoverEl.querySelector('#popoverCommitBtn');
+      if (commitBtn) {
+        commitBtn.addEventListener('click', async () => {
+          const summary = prompt('Résumé des modifications (optionnel):') || 'Mise à jour';
+          const resp = await fetch(`/api/knowledge/conversations/${currentConversationId}/commit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ summary }),
+          });
+          if (resp.ok) {
+            alert('Modifications validées !');
+            window.location.href = '/connaissances';
+          } else {
+            const err = await resp.json();
+            alert('Erreur: ' + err.error);
+          }
+        });
+      }
+
+      // Abandon button
+      const abandonBtn = popoverEl.querySelector('#popoverAbandonBtn');
+      if (abandonBtn) {
+        abandonBtn.addEventListener('click', async () => {
+          if (!confirm('Abandonner les modifications ?')) return;
+          const resp = await fetch(`/api/knowledge/conversations/${currentConversationId}/abandon`, {
+            method: 'POST',
+          });
+          if (resp.ok) {
+            window.location.href = '/connaissances';
+          }
+        });
+      }
+    });
+  }
+
+  function updateStagedFilesUI(files) {
+    stagedFiles = files;
+    const indicator = document.getElementById('stagedFilesIndicator');
+    const labelEl = document.getElementById('stagedFilesLabel');
+    if (indicator) indicator.style.display = files.length ? 'block' : 'none';
+    if (labelEl) {
+      const plural = files.length > 1 ? 's' : '';
+      labelEl.textContent = `${files.length} fichier${plural} modifié${plural}`;
+    }
+    if (popover) {
+      popover.setContent({ '.popover-body': buildPopoverContent() });
+    }
+  }
+
   // Initialize knowledge chat
   const currentFile = '{{ current_file }}';
   let currentConversationId = {% if current_conv %}'{{ current_conv.id }}'{% else %}null{% endif %};
   const chatInput = document.getElementById('chatInput');
   const chatSendBtn = document.getElementById('chatSendBtn');
   const chatCancelBtn = document.getElementById('chatCancelBtn');
-  const chatOutput = document.getElementById('chatOutput');
+  // chatOutput already declared above for view mode toggle
 
   // Auto-resize textarea
   if (chatInput) {
@@ -240,7 +358,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     chatInput.style.height = 'auto';
 
     // Add user message to display
-    appendMessage('user', message);
+    appendEvent('user', { content: message });
 
     // Send to API
     await fetch(`/api/conversations/${currentConversationId}/messages`, {
@@ -252,48 +370,51 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Stream response
     chatSendBtn.style.display = 'none';
     chatCancelBtn.style.display = 'block';
+    isProcessing = true;
 
     const eventSource = new EventSource(`/api/conversations/${currentConversationId}/stream`);
     let assistantDiv = null;
 
+    // Use appendEvent from chat.js for consistent styling
     eventSource.addEventListener('assistant', (e) => {
       const data = JSON.parse(e.data);
-      if (!assistantDiv) {
-        assistantDiv = appendMessage('assistant', '');
-      }
-      assistantDiv.querySelector('.message-content').innerHTML += data.content;
+      appendEvent('assistant', data);
     });
 
     eventSource.addEventListener('tool_use', (e) => {
       const data = JSON.parse(e.data);
-      appendMessage('tool', `Using ${data.content.tool}...`);
+      appendEvent('tool_use', data);
+    });
+
+    eventSource.addEventListener('tool_result', (e) => {
+      const data = JSON.parse(e.data);
+      appendEvent('tool_result', data);
     });
 
     eventSource.addEventListener('done', () => {
       eventSource.close();
       chatSendBtn.style.display = 'block';
       chatCancelBtn.style.display = 'none';
+      isProcessing = false;
 
-      // Refresh staged files
+      // Refresh staged files in header popover
       refreshStagedFiles();
     });
 
     eventSource.addEventListener('error', (e) => {
       eventSource.close();
       chatSendBtn.style.display = 'block';
+      isProcessing = false;
       chatCancelBtn.style.display = 'none';
     });
   }
 
   function appendMessage(type, content) {
+    // Legacy function - use appendEvent for new code
     if (!chatOutput) return null;
-
     const div = document.createElement('div');
-    div.className = `chat-message chat-message-${type}`;
-    div.innerHTML = `
-      <div class="message-header">${type === 'user' ? 'Vous' : type === 'assistant' ? 'Claude' : 'Outil'}</div>
-      <div class="message-content">${content}</div>
-    `;
+    div.className = `event-block event-${type}`;
+    div.innerHTML = content;
     chatOutput.appendChild(div);
     chatOutput.scrollTop = chatOutput.scrollHeight;
     return div;
@@ -305,45 +426,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const resp = await fetch(`/api/knowledge/conversations/${currentConversationId}/files`);
     const data = await resp.json();
 
-    // Reload page to show updated panel
-    if (data.files && data.files.length > 0) {
-      window.location.reload();
+    // Update staged files UI in header
+    if (data.files) {
+      updateStagedFilesUI(data.files);
     }
-  }
-
-  // Commit/Abandon buttons
-  const commitBtn = document.getElementById('commitBtn');
-  const abandonBtn = document.getElementById('abandonBtn');
-
-  if (commitBtn && currentConversationId) {
-    commitBtn.addEventListener('click', async () => {
-      const summary = prompt('Résumé des modifications (optionnel):') || 'Mise à jour';
-      const resp = await fetch(`/api/knowledge/conversations/${currentConversationId}/commit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ summary }),
-      });
-      if (resp.ok) {
-        alert('Modifications validées !');
-        window.location.href = '/connaissances';
-      } else {
-        const err = await resp.json();
-        alert('Erreur: ' + err.error);
-      }
-    });
-  }
-
-  if (abandonBtn && currentConversationId) {
-    abandonBtn.addEventListener('click', async () => {
-      if (!confirm('Abandonner les modifications ?')) return;
-
-      const resp = await fetch(`/api/knowledge/conversations/${currentConversationId}/abandon`, {
-        method: 'POST',
-      });
-      if (resp.ok) {
-        window.location.href = '/connaissances';
-      }
-    });
   }
 
   {% if current_conv %}
@@ -354,17 +440,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     const conv = await resp.json();
 
     if (chatOutput && loadingIndicator) {
-      loadingIndicator.style.display = 'none';
+      loadingIndicator.remove();
     }
 
-    // Display existing messages
+    // Display existing messages using appendEvent for consistent styling
     if (conv.messages) {
       for (const msg of conv.messages) {
-        if (msg.type === 'user' || msg.type === 'assistant') {
-          appendMessage(msg.type, msg.content);
+        if (msg.type === 'user') {
+          appendEvent('user', { content: msg.content });
+        } else if (msg.type === 'assistant') {
+          appendEvent('assistant', { content: msg.content });
+        } else if (msg.type === 'tool_use') {
+          try {
+            appendEvent('tool_use', { content: JSON.parse(msg.content) });
+          } catch { appendEvent('tool_use', { content: { tool: 'unknown', input: msg.content } }); }
+        } else if (msg.type === 'tool_result') {
+          try {
+            appendEvent('tool_result', { content: JSON.parse(msg.content) });
+          } catch { appendEvent('tool_result', { content: { output: msg.content } }); }
         }
       }
     }
+
+    // Staged files indicator is already shown from template if files exist
   } catch (err) {
     console.error('Failed to load conversation:', err);
     if (loadingIndicator) {

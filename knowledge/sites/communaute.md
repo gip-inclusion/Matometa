@@ -1,59 +1,59 @@
-# Communaute
+# Communauté
 
-- URL: https://communaute.inclusion.gouv.fr
-- Matomo site ID: 206
-- GitHub: https://github.com/gip-inclusion/la-communaute
+- URL : https://communaute.inclusion.gouv.fr
+- Matomo site ID : 206
+- GitHub : https://github.com/gip-inclusion/la-communaute
 
-## Traffic Baselines (2025)
+## Références de trafic (2025)
 
-Data retrieved 2026-01-06 via Matomo API.
+Données récupérées le 06/01/2026 via l'API Matomo.
 
-### Monthly Visitor Stats
+### Statistiques mensuelles des visiteurs
 
-| Month   | Unique Visitors | Visits    | Daily Avg Visitors | Daily Avg Visits |
-|---------|-----------------|-----------|--------------------|-----------------:|
-| 2025-01 |          30,643 |    41,836 |                988 |            1,350 |
-| 2025-02 |          25,553 |    34,110 |                913 |            1,218 |
-| 2025-03 |          27,469 |    36,687 |                886 |            1,183 |
-| 2025-04 |          27,557 |    36,246 |                919 |            1,208 |
-| 2025-05 |          25,716 |    33,818 |                830 |            1,091 |
-| 2025-06 |          24,370 |    32,152 |                812 |            1,072 |
-| 2025-07 |          22,334 |    28,912 |                720 |              933 |
-| 2025-08 |          17,051 |    21,623 |                550 |              698 |
-| 2025-09 |          27,707 |    34,910 |                924 |            1,164 |
-| 2025-10 |          33,324 |    44,914 |              1,075 |            1,449 |
-| 2025-11 |          25,444 |    32,056 |                848 |            1,069 |
-| 2025-12 |          21,643 |    27,109 |                698 |              874 |
+| Mois    | Visiteurs uniques | Visites | Moyenne quotidienne visiteurs | Moyenne quotidienne visites |
+|---------|-------------------|---------|-------------------------------|-----------------------------|
+| 2025-01 |            30 643 |  41 836 |                           988 |                       1 350 |
+| 2025-02 |            25 553 |  34 110 |                           913 |                       1 218 |
+| 2025-03 |            27 469 |  36 687 |                           886 |                       1 183 |
+| 2025-04 |            27 557 |  36 246 |                           919 |                       1 208 |
+| 2025-05 |            25 716 |  33 818 |                           830 |                       1 091 |
+| 2025-06 |            24 370 |  32 152 |                           812 |                       1 072 |
+| 2025-07 |            22 334 |  28 912 |                           720 |                         933 |
+| 2025-08 |            17 051 |  21 623 |                           550 |                         698 |
+| 2025-09 |            27 707 |  34 910 |                           924 |                       1 164 |
+| 2025-10 |            33 324 |  44 914 |                         1 075 |                       1 449 |
+| 2025-11 |            25 444 |  32 056 |                           848 |                       1 069 |
+| 2025-12 |            21 643 |  27 109 |                           698 |                         874 |
 
-**Typical range:** 550-1,075 unique visitors/day, 698-1,449 visits/day.
+**Fourchette typique :** 550-1 075 visiteurs uniques/jour, 698-1 449 visites/jour.
 
-### Engagement Metrics
+### Indicateurs d'engagement
 
-| Month   | Bounce Rate | Actions/Visit | Avg Time on Site |
-|---------|-------------|---------------|------------------|
-| 2025-01 |         62% |           3.3 |           2m 40s |
-| 2025-02 |         62% |           3.3 |           2m 44s |
-| 2025-03 |         62% |           3.3 |           2m 43s |
-| 2025-04 |         61% |           3.1 |           2m 44s |
-| 2025-05 |         60% |           3.2 |           2m 30s |
-| 2025-06 |         61% |             3 |           2m 28s |
-| 2025-07 |         59% |             3 |           2m 21s |
-| 2025-08 |         62% |           2.9 |           2m 14s |
-| 2025-09 |         64% |           2.7 |           2m 04s |
-| 2025-10 |         67% |           2.6 |           1m 59s |
-| 2025-11 |         67% |           2.4 |           2m 02s |
-| 2025-12 |         67% |           2.5 |           2m 09s |
+| Mois    | Taux de rebond | Actions/Visite | Temps moyen sur le site |
+|---------|----------------|----------------|-------------------------|
+| 2025-01 |            62% |            3,3 |                  2m 40s |
+| 2025-02 |            62% |            3,3 |                  2m 44s |
+| 2025-03 |            62% |            3,3 |                  2m 43s |
+| 2025-04 |            61% |            3,1 |                  2m 44s |
+| 2025-05 |            60% |            3,2 |                  2m 30s |
+| 2025-06 |            61% |              3 |                  2m 28s |
+| 2025-07 |            59% |              3 |                  2m 21s |
+| 2025-08 |            62% |            2,9 |                  2m 14s |
+| 2025-09 |            64% |            2,7 |                  2m 04s |
+| 2025-10 |            67% |            2,6 |                  1m 59s |
+| 2025-11 |            67% |            2,4 |                  2m 02s |
+| 2025-12 |            67% |            2,5 |                  2m 09s |
 
-## Custom Dimensions
+## Dimensions personnalisées
 
-No custom dimensions are configured for this site.
+Aucune dimension personnalisée n'est configurée pour ce site.
 
-## Saved Segments
+## Segments enregistrés
 
-*Retrieved 2026-01-06 via Matomo API.*
+*Récupéré le 06/01/2026 via l'API Matomo.*
 
-| Name | Definition |
-|------|------------|
+| Nom | Définition |
+|-----|------------|
 | ACQUISITION - jour de l'événement | `visitorFirstVisitTime>2024-02-01%252000%253A00%253A01;vis...` |
 | Action - Créer un événement | `pageUrl==https%253A%252F%252Fcommunaute.inclusion.beta.go...` |
 | Création de topic | `pageUrl=@create` |
@@ -68,97 +68,97 @@ No custom dimensions are configured for this site.
 | Visites avec Action | `actions>=1` |
 | visites de la home | `pageTitle=@Accueil` |
 
-## Matomo Events
+## Événements Matomo
 
-Scraped from codebase and Matomo API 2026-01-03. ~60 distinct events tracked.
+Récupérés depuis le code source et l'API Matomo le 03/01/2026. ~60 événements distincts suivis.
 
-### Implementation
+### Implémentation
 
-- **HTML pattern:** Elements with `class="matomo-event"` and `data-matomo-*` attributes
-- **JS handler:** `/lacommunaute/static/javascripts/matomo.js` - captures clicks on `.matomo-event` elements
-- **Consent:** Uses Tarteaucitron for GDPR consent management
-- **Custom URL:** Server-side `matomo_custom_url` variable for page tracking
+- **Pattern HTML :** Éléments avec `class="matomo-event"` et attributs `data-matomo-*`
+- **Gestionnaire JS :** `/lacommunaute/static/javascripts/matomo.js` - capture les clics sur les éléments `.matomo-event`
+- **Consentement :** Utilise Tarteaucitron pour la gestion du consentement RGPD
+- **URL personnalisée :** Variable côté serveur `matomo_custom_url` pour le suivi des pages
 
-### Event Categories
+### Catégories d'événements
 
-All events use the pattern: `category` / `action` / `name` (stored in `data-matomo-option`)
+Tous les événements utilisent le pattern : `category` / `action` / `name` (stocké dans `data-matomo-option`)
 
-#### engagement (main category, ~11k events/month)
+#### engagement (catégorie principale, ~11k événements/mois)
 
-Primary user engagement tracking. Top events by volume (Dec 2025):
+Suivi principal de l'engagement utilisateur. Principaux événements par volume (déc. 2025) :
 
-| Action | Name | Events | Description |
-|--------|------|--------|-------------|
-| view | fiches_techniques | 2,132 | Views documentation sheets |
-| showmore | topic | 1,231 | Expands topic content |
-| showmore | post | 1,276 | Expands post content |
-| view | documentation_header | 682 | Clicks docs in header nav |
-| view | topic | 668 | Views topic detail |
-| search | submit_query_header | 535 | Header search submission |
-| search | submit_query | 693 | Search form submission |
-| view | forum | 447 | Views forum list |
-| view | dsp | 307 | Views DSP diagnostic |
-| view | topics | 320 | Views topic list |
-| filter | forum | 271 | Filters forum |
-| view | events | 240 | Views events list |
-| view | documentation_breadcrumb | 226 | Breadcrumb nav to docs |
-| view | member | 162 | Views member profile |
-| rate | post | 117 | Rates a post |
-| filter | topics | 126 | Filters topics |
-| view | topics_breadcrumb | 81 | Breadcrumb nav to topics |
-| contribute | new_topic | 69 | Creates new topic |
-| loadmore | topic | 64 | Loads more topics |
-| contribute | post | 359 | Creates forum post |
-| view | event | 36 | Views single event |
-| contribute | new_topic_on_docs | 36 | Creates topic from docs page |
-| view | upvotes | 26 | Views upvotes page |
-| view | documentation | 23 | Views documentation section |
-| contribute | new_topic_after_search | 22 | Creates topic after searching |
-| upvote | post | 6 | Upvotes a post |
-| show | fichestechniques | 1,105 | Shows technical sheets list |
-| emplois | search-prescriber | 132 | Links to Emplois prescriber search |
-| emplois | search-company-header | 43 | Links to Emplois company search |
-| emplois | search-company | 21 | Links to Emplois company search |
-| emplois | search-prescriber-header | 13 | Links to Emplois prescriber search |
-| topic-create-check | itou-jobseeker | 12 | Job seeker topic validation |
-| landing | devenircip | 18 | Landing page CIP |
+| Action | Nom | Événements | Description |
+|--------|-----|------------|-------------|
+| view | fiches_techniques | 2 132 | Consultation des fiches techniques |
+| showmore | topic | 1 231 | Expansion du contenu d'un topic |
+| showmore | post | 1 276 | Expansion du contenu d'un post |
+| view | documentation_header | 682 | Clic sur docs dans le menu d'en-tête |
+| view | topic | 668 | Consultation du détail d'un topic |
+| search | submit_query_header | 535 | Soumission de recherche depuis l'en-tête |
+| search | submit_query | 693 | Soumission du formulaire de recherche |
+| view | forum | 447 | Consultation de la liste des forums |
+| view | dsp | 307 | Consultation du diagnostic DSP |
+| view | topics | 320 | Consultation de la liste des topics |
+| filter | forum | 271 | Filtrage du forum |
+| view | events | 240 | Consultation de la liste des événements |
+| view | documentation_breadcrumb | 226 | Navigation par fil d'Ariane vers docs |
+| view | member | 162 | Consultation du profil d'un membre |
+| rate | post | 117 | Évaluation d'un post |
+| filter | topics | 126 | Filtrage des topics |
+| view | topics_breadcrumb | 81 | Navigation par fil d'Ariane vers topics |
+| contribute | new_topic | 69 | Création d'un nouveau topic |
+| loadmore | topic | 64 | Chargement de plus de topics |
+| contribute | post | 359 | Création d'un post de forum |
+| view | event | 36 | Consultation d'un événement unique |
+| contribute | new_topic_on_docs | 36 | Création d'un topic depuis la page docs |
+| view | upvotes | 26 | Consultation de la page des votes positifs |
+| view | documentation | 23 | Consultation de la section documentation |
+| contribute | new_topic_after_search | 22 | Création d'un topic après une recherche |
+| upvote | post | 6 | Vote positif pour un post |
+| show | fichestechniques | 1 105 | Affichage de la liste des fiches techniques |
+| emplois | search-prescriber | 132 | Liens vers recherche prescripteur Emplois |
+| emplois | search-company-header | 43 | Liens vers recherche entreprise Emplois |
+| emplois | search-company | 21 | Liens vers recherche entreprise Emplois |
+| emplois | search-prescriber-header | 13 | Liens vers recherche prescripteur Emplois |
+| topic-create-check | itou-jobseeker | 12 | Validation topic demandeur d'emploi |
+| landing | devenircip | 18 | Page d'atterrissage CIP |
 
-#### support (22 events/month)
+#### support (22 événements/mois)
 
-External resource links.
+Liens vers ressources externes.
 
-| Action | Name | Description |
-|--------|------|-------------|
-| site_emplois | footer | Footer link to Emplois support |
+| Action | Nom | Description |
+|--------|-----|-------------|
+| site_emplois | footer | Lien footer vers support Emplois |
 
-#### promotion-partenaires (14 events/month)
+#### promotion-partenaires (14 événements/mois)
 
-Partner promotion clicks.
+Clics sur promotions partenaires.
 
-| Action | Name | Description |
-|--------|------|-------------|
-| clic | inclusion-demain | Partner link: inclusion-demain.fr |
+| Action | Nom | Description |
+|--------|-----|-------------|
+| clic | inclusion-demain | Lien partenaire : inclusion-demain.fr |
 
-#### landing (26 events/month)
+#### landing (26 événements/mois)
 
-Landing page navigation.
+Navigation sur pages d'atterrissage.
 
-| Action | Name | Description |
-|--------|------|-------------|
-| glossaire | footer | Footer link to glossary |
-| devenircip | (from engagement) | CIP landing page |
+| Action | Nom | Description |
+|--------|-----|-------------|
+| glossaire | footer | Lien footer vers glossaire |
+| devenircip | (depuis engagement) | Page d'atterrissage CIP |
 
-### DSP Diagnostic Events
+### Événements du diagnostic DSP
 
-The DSP (Diagnostic Socio-Professionnel) feature generates dynamic events based on diagnostic results.
+La fonctionnalité DSP (Diagnostic Socio-Professionnel) génère des événements dynamiques basés sur les résultats du diagnostic.
 
-| Action | Name Pattern | Description |
-|--------|--------------|-------------|
-| dsp | submit-dsp | Submits diagnostic (341 events) |
-| dsp | submit-an-other-dsp | Submits another diagnostic (15 events) |
-| dsp | visit-{theme}--{subtheme} | Clicks to view resources for specific needs |
+| Action | Pattern de nom | Description |
+|--------|----------------|-------------|
+| dsp | submit-dsp | Soumission du diagnostic (341 événements) |
+| dsp | submit-an-other-dsp | Soumission d'un autre diagnostic (15 événements) |
+| dsp | visit-{theme}--{subtheme} | Clics pour consulter les ressources pour des besoins spécifiques |
 
-**DSP visit themes observed (Dec 2025):**
+**Thèmes DSP observés (déc. 2025) :**
 - `visit-trouver-un-emploi` (18)
 - `visit-apprendre-francais--accompagnement-insertion-pro` (15)
 - `visit-apprendre-francais--communiquer-vie-tous-les-jours` (8)
@@ -166,57 +166,59 @@ The DSP (Diagnostic Socio-Professionnel) feature generates dynamic events based 
 - `visit-logement-hebergement` (7)
 - `visit-acces-aux-droits-et-citoyennete--connaitre-ses-droits` (6)
 - `visit-mobilite` (6)
-- Plus 10+ additional theme/subtheme combinations
+- Plus de 10 combinaisons thème/sous-thème additionnelles
 
-### Top Events Summary (Dec 2025)
+### Résumé des principaux événements (déc. 2025)
 
-| Rank | Category | Action | Name | Events |
-|------|----------|--------|------|--------|
-| 1 | engagement | view | fiches_techniques | 2,132 |
-| 2 | engagement | showmore | post | 1,276 |
-| 3 | engagement | showmore | topic | 1,231 |
-| 4 | engagement | show | fichestechniques | 1,105 |
+| Rang | Catégorie | Action | Nom | Événements |
+|------|-----------|--------|-----|------------|
+| 1 | engagement | view | fiches_techniques | 2 132 |
+| 2 | engagement | showmore | post | 1 276 |
+| 3 | engagement | showmore | topic | 1 231 |
+| 4 | engagement | show | fichestechniques | 1 105 |
 | 5 | engagement | search | submit_query | 693 |
 | 6 | engagement | view | documentation_header | 682 |
 | 7 | engagement | view | topic | 668 |
 | 8 | engagement | search | submit_query_header | 535 |
 
-### Implementation Notes
+### Notes d'implémentation
 
-**Codebase locations with tracking:**
-- `lacommunaute/templates/layouts/base.html` - Matomo initialization
-- `lacommunaute/templates/pages/home.html` - Home page engagement
-- `lacommunaute/templates/forum/index.html` - Forum navigation
-- `lacommunaute/templates/forum/forum_detail.html` - Forum detail views
-- `lacommunaute/templates/forum_conversation/topic_list.html` - Topic list interactions
-- `lacommunaute/templates/forum/partials/rating.html` - Post rating
-- `lacommunaute/templates/surveys/dsp_form.html` - DSP submission
-- `lacommunaute/templates/surveys/dsp_detail.html` - DSP result actions
-- `lacommunaute/templates/partials/header.html` - Header navigation
-- `lacommunaute/templates/partials/footer.html` - Footer links
-- `lacommunaute/templates/partials/upvotes.html` - Upvote tracking
-- `lacommunaute/templates/search/search_form.html` - Search tracking
-- `lacommunaute/templates/forum_conversation/partials/topic_filter.html` - Filter tracking
+**Emplacements dans le code source avec suivi :**
+- `lacommunaute/templates/layouts/base.html` - Initialisation Matomo
+- `lacommunaute/templates/pages/home.html` - Engagement page d'accueil
+- `lacommunaute/templates/forum/index.html` - Navigation forum
+- `lacommunaute/templates/forum/forum_detail.html` - Vues détail forum
+- `lacommunaute/templates/forum_conversation/topic_list.html` - Interactions liste topics
+- `lacommunaute/templates/forum/partials/rating.html` - Évaluation de post
+- `lacommunaute/templates/surveys/dsp_form.html` - Soumission DSP
+- `lacommunaute/templates/surveys/dsp_detail.html` - Actions résultat DSP
+- `lacommunaute/templates/partials/header.html` - Navigation en-tête
+- `lacommunaute/templates/partials/footer.html` - Liens footer
+- `lacommunaute/templates/partials/upvotes.html` - Suivi votes positifs
+- `lacommunaute/templates/search/search_form.html` - Suivi recherche
+- `lacommunaute/templates/forum_conversation/partials/topic_filter.html` - Suivi filtres
 
-**Data collection scripts:**
-- `lacommunaute/utils/matomo.py` - Matomo API utilities
-- `lacommunaute/stats/management/commands/collect_matomo_stats.py` - Visit stats collection
-- `lacommunaute/stats/management/commands/collect_matomo_forum_stats.py` - Forum stats collection
+**Scripts de collecte de données :**
+- `lacommunaute/utils/matomo.py` - Utilitaires API Matomo
+- `lacommunaute/stats/management/commands/collect_matomo_stats.py` - Collecte stats visites
+- `lacommunaute/stats/management/commands/collect_matomo_forum_stats.py` - Collecte stats forum
 
-## Site Context
+## Contexte du site
 
-La Communaute is a Django-based community forum for professionals in the French social inclusion sector.
+La Communauté est un forum communautaire basé sur Django pour les professionnels du secteur de l'inclusion sociale en France.
 
-**Key features:**
-- Forum discussions (topics, posts)
-- Documentation/technical sheets (fiches techniques)
-- DSP diagnostic tool (Diagnostic Socio-Professionnel)
-- Events calendar
-- User profiles with upvotes
-- Integration links to Emplois platform
+**Fonctionnalités principales :**
+- Discussions de forum (topics, posts)
+- Documentation/fiches techniques
+- Outil de diagnostic DSP (Diagnostic Socio-Professionnel)
+- Calendrier d'événements
+- Profils utilisateurs avec votes positifs
+- Liens d'intégration vers la plateforme Emplois
 
-**Technology stack:**
+**Stack technologique :**
 - Django (Python)
-- machina (Django forum library)
-- Tarteaucitron (GDPR consent)
-- HTMX (dynamic interactions)
+- machina (bibliothèque forum Django)
+- Tarteaucitron (consentement RGPD)
+- HTMX (interactions dynamiques)
+
+---
