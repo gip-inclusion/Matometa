@@ -51,7 +51,7 @@
           </div>
           <div class="markdown-body" id="markdownContent"></div>
         </div>
-        <script id="knowledgeRawContent" type="text/plain">{{ file_content }}</script>
+        <script id="knowledgeRawContent" type="text/plain">{{ file_content|safe }}</script>
 
         <!-- Chat output for conversation -->
         {% if current_conv %}
