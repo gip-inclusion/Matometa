@@ -10,6 +10,6 @@ __pycache__
 data/
 
 reports/
-scripts/
+/scripts/
 knowledge-drafts/
 claude-credentials/
