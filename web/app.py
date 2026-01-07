@@ -96,11 +96,16 @@ def get_sidebar_data():
     """Get data for sidebar (conversations only, reports are now in DB)."""
     # Recent conversations with report info
     conversations = store.list_conversations(limit=10)
-    # Humanize titles
+    agent = get_agent_instance()
+    running_ids = set(agent._running) if hasattr(agent, '_running') else set()
+
+    # Humanize titles and add running status
     for conv in conversations:
         if conv.title:
             conv.title = humanize_title(conv.title)
-    return {"conversations": conversations}
+        conv.is_running = conv.id in running_ids
+
+    return {"conversations": conversations, "running_ids": list(running_ids)}
 
 
 @app.route("/")
@@ -158,9 +163,11 @@ def get_conversation(conv_id: str):
     if not conv:
         return jsonify({"error": "Conversation not found"}), 404
 
+    agent = get_agent_instance()
     return jsonify(
         {
             **conv.to_dict(),
+            "is_running": agent.is_running(conv_id),
             "links": {
                 "self": f"/api/conversations/{conv_id}",
                 "messages": f"/api/conversations/{conv_id}/messages",
@@ -175,6 +182,7 @@ def list_conversations_api():
     """List recent conversations."""
     limit = request.args.get("limit", 20, type=int)
     convs = store.list_conversations(limit=limit)
+    agent = get_agent_instance()
     return jsonify(
         {
             "conversations": [
@@ -182,6 +190,7 @@ def list_conversations_api():
                     "id": c.id,
                     "title": c.title,
                     "has_report": c.has_report,
+                    "is_running": agent.is_running(c.id),
                     "updated_at": c.updated_at.isoformat(),
                     "links": {"self": f"/api/conversations/{c.id}"},
                 }
@@ -189,6 +198,14 @@ def list_conversations_api():
             ]
         }
     )
+
+
+@app.route("/api/running", methods=["GET"])
+def get_running_conversations():
+    """Get list of currently running conversation IDs."""
+    agent = get_agent_instance()
+    running_ids = list(agent._running) if hasattr(agent, '_running') else []
+    return jsonify({"running": running_ids})
 
 
 @app.route("/api/conversations/<conv_id>", methods=["DELETE"])
@@ -319,6 +336,32 @@ def stream_conversation(conv_id: str):
 
     if not conv.messages:
         return jsonify({"error": "No messages in conversation"}), 400
+
+    # CRITICAL: Don't start a new agent run if one is already running
+    agent = get_agent_instance()
+    if agent.is_running(conv_id):
+        # Return a "waiting" stream that just sends keepalives
+        # The client should eventually get the real response when ready
+        def wait_stream():
+            yield f"event: system\n"
+            yield f"data: {json.dumps({'content': 'Agent already running, please wait...'})}\n\n"
+            # Keep connection alive but don't start new agent
+            import time
+            for _ in range(60):  # Wait up to 60 seconds
+                time.sleep(1)
+                if not agent.is_running(conv_id):
+                    yield f"event: done\n"
+                    yield f"data: {json.dumps({'conversation_id': conv_id})}\n\n"
+                    return
+                yield ": keepalive\n\n"
+            yield f"event: error\n"
+            yield f"data: {json.dumps({'error': 'Timeout waiting for agent'})}\n\n"
+
+        return Response(
+            wait_stream(),
+            mimetype="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     # Get the last user message
     last_message = None

@@ -40,10 +40,11 @@ function initChat() {
 
   if (!input || !sendBtn) return;
 
-  // Check for conversation ID in URL
+  // Check for conversation ID in URL (skip if already loaded by inline script)
   const urlParams = new URLSearchParams(window.location.search);
   const convId = urlParams.get('conv');
-  if (convId) {
+  if (convId && !currentConversationId) {
+    currentConversationId = convId;
     loadConversation(convId);
   }
 
@@ -740,7 +741,7 @@ async function renderMermaid(element) {
 }
 
 /**
- * Format tool use event
+ * Format tool use event - collapsible with tool name on first line
  */
 function formatToolUse(content) {
   if (!content) return '';
@@ -748,20 +749,30 @@ function formatToolUse(content) {
   const tool = content.tool || 'Unknown';
   const input = content.input || {};
 
-  let html = `<div class="tool-name">${escapeHtml(tool)}</div>`;
+  let inputStr = typeof input === 'object' ? JSON.stringify(input, null, 2) : String(input);
+  const lines = inputStr.split('\n');
+  const isLong = lines.length > 2;
 
-  if (typeof input === 'object') {
-    const inputStr = JSON.stringify(input, null, 2);
-    html += `<div class="tool-content">${escapeHtml(inputStr)}</div>`;
-  } else {
-    html += `<div class="tool-content">${escapeHtml(String(input))}</div>`;
+  // Preview: first 2 lines
+  const preview = lines.slice(0, 2).join('\n') + (isLong ? '\n…' : '');
+
+  let html = `<div class="tool-header" onclick="toggleToolContent(this)">`;
+  html += `<span class="tool-name">${escapeHtml(tool)}</span>`;
+  if (isLong) {
+    html += `<span class="tool-toggle"><i class="ri-arrow-down-s-line"></i></span>`;
+  }
+  html += `</div>`;
+
+  html += `<div class="tool-content tool-preview">${escapeHtml(preview)}</div>`;
+  if (isLong) {
+    html += `<div class="tool-content tool-full">${escapeHtml(inputStr)}</div>`;
   }
 
   return html;
 }
 
 /**
- * Format tool result event - no truncation
+ * Format tool result event - collapsible with tool name on first line
  */
 function formatToolResult(content) {
   if (!content) return '';
@@ -769,17 +780,48 @@ function formatToolResult(content) {
   const tool = content.tool || '';
   const output = content.output || '';
 
-  let html = '';
+  let outputStr = typeof output === 'object' ? JSON.stringify(output, null, 2) : String(output);
+  const lines = outputStr.split('\n');
+  const isLong = lines.length > 2;
+
+  // Preview: first 2 lines
+  const preview = lines.slice(0, 2).join('\n') + (isLong ? '\n…' : '');
+
+  let html = `<div class="tool-header" onclick="toggleToolContent(this)">`;
   if (tool) {
-    html += `<div class="tool-name">${escapeHtml(tool)}</div>`;
+    html += `<span class="tool-name">${escapeHtml(tool)}</span>`;
+  }
+  if (isLong) {
+    html += `<span class="tool-toggle"><i class="ri-arrow-down-s-line"></i></span>`;
+  }
+  html += `</div>`;
+
+  html += `<div class="tool-content tool-preview">${escapeHtml(preview)}</div>`;
+  if (isLong) {
+    html += `<div class="tool-content tool-full">${escapeHtml(outputStr)}</div>`;
   }
 
-  // Full output, no truncation
-  let outputStr = typeof output === 'object' ? JSON.stringify(output, null, 2) : String(output);
-
-  html += `<div class="tool-content">${escapeHtml(outputStr)}</div>`;
-
   return html;
+}
+
+/**
+ * Toggle tool content visibility
+ */
+function toggleToolContent(header) {
+  const block = header.closest('.event-block');
+  if (!block) return;
+
+  block.classList.toggle('tool-expanded');
+
+  // Update icon
+  const icon = header.querySelector('.tool-toggle i');
+  if (icon) {
+    if (block.classList.contains('tool-expanded')) {
+      icon.className = 'ri-arrow-up-s-line';
+    } else {
+      icon.className = 'ri-arrow-down-s-line';
+    }
+  }
 }
 
 /**
@@ -912,6 +954,12 @@ async function loadConversation(convId) {
 
     // Update URL without reload
     window.history.replaceState({}, '', `/explorations?conv=${convId}`);
+
+    // If conversation is running, resume the stream
+    if (conv.is_running) {
+      console.log('Conversation is running, resuming stream...');
+      startStream();
+    }
 
   } catch (error) {
     console.error('Failed to load conversation:', error);

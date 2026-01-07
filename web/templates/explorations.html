@@ -61,6 +61,20 @@
     </div>
   </div>
 
+  <!-- Warning banner for background running conversations -->
+  {% if running_ids %}
+  {% set background_running = running_ids | reject('equalto', current_conv.id if current_conv else '') | list %}
+  {% if background_running %}
+  <div class="container mt-3">
+    <div class="alert alert-warning d-flex align-items-center gap-2 mb-0" role="alert">
+      <i class="ri-loader-4-line ri-spin"></i>
+      <span>Un agent est en cours d'exécution en arrière-plan.</span>
+      <a href="/explorations?conv={{ background_running[0] }}" class="alert-link ms-auto">Voir</a>
+    </div>
+  </div>
+  {% endif %}
+  {% endif %}
+
   <!-- Main content area -->
   <div class="container section-body">
     {% if current_conv %}
@@ -86,11 +100,14 @@
               </p>
             </a>
             <div class="card-footer-row">
-              {% if conv.has_report %}
-              <span class="badge bg-primary">Rapport</span>
-              {% else %}
-              <span></span>
-              {% endif %}
+              <div class="d-flex align-items-center gap-2">
+                {% if conv.is_running %}
+                <span class="badge bg-success"><i class="ri-loader-4-line ri-spin"></i> En cours</span>
+                {% endif %}
+                {% if conv.has_report %}
+                <span class="badge bg-primary">Rapport</span>
+                {% endif %}
+              </div>
               <button class="btn btn-link btn-sm text-muted card-delete-btn" title="Supprimer"
                       hx-delete="/api/conversations/{{ conv.id }}"
                       hx-target="#conv-{{ conv.id }}"
@@ -144,26 +161,30 @@
 <script>
   mermaid.initialize({ startOnLoad: false, theme: 'default' });
 
-  document.addEventListener('DOMContentLoaded', () => {
-    {% if current_conv %}
-    // Load existing conversation on initial page load
-    currentConversationId = '{{ current_conv.id }}';
-    loadConversation('{{ current_conv.id }}').then(() => {
-      // Check if there's a pending message to send
-      const urlParams = new URLSearchParams(window.location.search);
-      const pendingMessage = urlParams.get('message');
-      if (pendingMessage) {
-        // Remove message param from URL
-        urlParams.delete('message');
-        const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
-        window.history.replaceState({}, '', newUrl);
-        // Send the message
-        document.getElementById('chatInput').value = pendingMessage;
-        sendMessage();
-      }
-    });
-    {% endif %}
+  document.addEventListener('DOMContentLoaded', async () => {
+    // Initialize chat UI first
     initChat();
+
+    {% if current_conv %}
+    // Load existing conversation
+    currentConversationId = '{{ current_conv.id }}';
+    await loadConversation('{{ current_conv.id }}');
+
+    // Check if there's a pending message to send
+    const urlParams = new URLSearchParams(window.location.search);
+    const pendingMessage = urlParams.get('message');
+    if (pendingMessage) {
+      // Remove message param from URL
+      urlParams.delete('message');
+      const newUrl = window.location.pathname + '?' + urlParams.toString();
+      window.history.replaceState({}, '', newUrl);
+
+      // Send the pending message directly (don't go through input)
+      appendEvent('user', { content: pendingMessage });
+      lastUserMessage = pendingMessage;
+      await sendToAgent(pendingMessage);
+    }
+    {% endif %}
   });
   // htmx:afterSwap listener is in chat.js (added once, not on each swap)
 </script>

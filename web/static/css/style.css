@@ -432,24 +432,21 @@ body.has-sidebar {
   border-radius: 0.375rem;
 }
 
-.event-tool_use::before {
-  content: "Outil";
-  display: block;
-  font-size: 0.7rem;
+/* Tool labels via ::before on the header */
+.event-tool_use .tool-header::before {
+  content: "OUTIL";
+  font-size: 0.65rem;
   font-weight: 600;
   color: var(--bs-secondary);
-  margin-bottom: 0.5rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
-.event-tool_result::before {
-  content: "Résultat";
-  display: block;
-  font-size: 0.7rem;
+.event-tool_result .tool-header::before {
+  content: "RÉSULTAT";
+  font-size: 0.65rem;
   font-weight: 600;
   color: var(--bs-secondary);
-  margin-bottom: 0.5rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -465,15 +462,70 @@ body.has-sidebar {
   color: var(--bs-danger-text-emphasis);
 }
 
-/* Tool content */
-.tool-name {
-  font-weight: 600;
+/* Tool header - label and name on same line */
+.tool-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
 }
 
+.tool-header:hover {
+  opacity: 0.8;
+}
+
+.tool-name {
+  font-weight: 600;
+  color: var(--bs-gray-700);
+}
+
+.tool-toggle {
+  margin-left: auto;
+  color: var(--bs-secondary);
+  font-size: 1.125rem;
+  line-height: 1;
+}
+
+.tool-toggle i {
+  transition: transform 0.2s;
+}
+
+/* Tool content - collapsed by default */
 .tool-content {
   margin-top: 0.5rem;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.tool-preview {
+  display: block;
+}
+
+.tool-full {
+  display: none;
+}
+
+/* Expanded state */
+.event-block.tool-expanded .tool-preview {
+  display: none;
+}
+
+.event-block.tool-expanded .tool-full {
+  display: block;
+}
+
+/* Linked tool_use + tool_result blocks */
+.event-tool_use + .event-tool_result {
+  margin-top: -1px;
+  border-top: 1px dashed var(--bs-border-color);
+  border-radius: 0 0 0.375rem 0.375rem;
+}
+
+.event-tool_use:has(+ .event-tool_result) {
+  border-radius: 0.375rem 0.375rem 0 0;
+  border-bottom: none;
+  margin-bottom: 0;
 }
 
 /* ==========================================================================
