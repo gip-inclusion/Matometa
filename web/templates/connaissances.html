@@ -208,6 +208,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let stagedFiles = stagedFilesDataEl ? JSON.parse(stagedFilesDataEl.textContent) : [];
   let popover = null;
   let isProcessing = false;  // Track if agent is currently processing
+  let firstUserMessage = null;  // For default commit summary
 
   function buildPopoverContent() {
     if (!stagedFiles.length) return '<p class="text-muted mb-0">Aucun fichier modifié</p>';
@@ -261,7 +262,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       const commitBtn = popoverEl.querySelector('#popoverCommitBtn');
       if (commitBtn) {
         commitBtn.addEventListener('click', async () => {
-          const summary = prompt('Résumé des modifications (optionnel):') || 'Mise à jour';
+          const defaultSummary = firstUserMessage || 'Mise à jour';
+          const summary = prompt('Résumé des modifications:', defaultSummary) || defaultSummary;
           const resp = await fetch(`/api/knowledge/conversations/${currentConversationId}/commit`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -430,6 +432,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (data.files) {
       updateStagedFilesUI(data.files);
     }
+    // Capture first user message for default commit summary
+    if (data.first_user_message) {
+      firstUserMessage = data.first_user_message;
+    }
   }
 
   {% if current_conv %}
@@ -447,6 +453,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (conv.messages) {
       for (const msg of conv.messages) {
         if (msg.type === 'user') {
+          // Capture first user message for commit summary default
+          if (!firstUserMessage) {
+            firstUserMessage = msg.content.substring(0, 200);
+          }
           appendEvent('user', { content: msg.content });
         } else if (msg.type === 'assistant') {
           appendEvent('assistant', { content: msg.content });

@@ -862,13 +862,21 @@ def start_knowledge_conversation(file_path: str):
 @app.route("/api/knowledge/conversations/<conv_id>/files", methods=["GET"])
 def get_staged_files(conv_id: str):
     """Get list of staged files for a knowledge conversation."""
-    conv = store.get_conversation(conv_id, include_messages=False)
+    conv = store.get_conversation(conv_id, include_messages=True)
     if not conv or conv.conv_type != "knowledge":
         return jsonify({"error": "Knowledge conversation not found"}), 404
+
+    # Get first user message for default summary
+    first_user_message = None
+    for msg in conv.messages:
+        if msg.type == "user":
+            first_user_message = msg.content[:200]  # Truncate for prompt
+            break
 
     return jsonify({
         "files": list_staged_files(conv_id),
         "conversation_id": conv_id,
+        "first_user_message": first_user_message,
     })
 
 
