@@ -37,6 +37,18 @@
     <div class="row">
       <div class="col-12 {% if staged_files %}col-lg-8{% endif %}">
         <div class="knowledge-content" id="knowledgeContent">
+          <div class="knowledge-header">
+            <div class="knowledge-title">
+              <i class="ri-file-text-line"></i>
+              {{ current_file.split('/')[-1].replace('.md', '').replace('-', ' ').replace('_', ' ').title() }}
+            </div>
+            <div class="knowledge-meta">
+              <i class="ri-folder-line"></i> {{ current_file.split('/')[0] }}
+            </div>
+            <div class="knowledge-meta">
+              <i class="ri-file-line"></i> {{ current_file }}
+            </div>
+          </div>
           <div class="markdown-body" id="markdownContent"></div>
         </div>
         <script id="knowledgeRawContent" type="text/plain">{{ file_content }}</script>
