@@ -519,16 +519,20 @@ body.has-sidebar {
   display: block;
 }
 
-/* Linked tool_use + tool_result blocks */
-.event-tool_use + .event-tool_result {
+/* Linked tool blocks - no gap between consecutive tool events */
+/* Any tool block preceded by another: flatten top */
+[class^="event-tool_"] + [class^="event-tool_"] {
   margin-top: 0;
   border-top: 1px solid var(--bs-border-color-translucent);
-  border-radius: 0 0 0.375rem 0.375rem;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
-.event-tool_use:has(+ .event-tool_result) {
-  border-radius: 0.375rem 0.375rem 0 0;
+/* Any tool block followed by another: flatten bottom */
+[class^="event-tool_"]:has(+ [class^="event-tool_"]) {
   border-bottom: none;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 /* ==========================================================================

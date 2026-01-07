@@ -252,6 +252,15 @@ class CLIBackend(AgentBackend):
         self._processes.pop(conversation_id, None)
         return True
 
+    @property
+    def _running(self) -> set[str]:
+        """Get set of currently running conversation IDs."""
+        return {
+            conv_id
+            for conv_id, process in self._processes.items()
+            if process.returncode is None
+        }
+
     def is_running(self, conversation_id: str) -> bool:
         """Check if a conversation is currently running."""
         process = self._processes.get(conversation_id)

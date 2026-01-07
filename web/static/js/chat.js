@@ -559,6 +559,36 @@ async function cancelStream() {
 }
 
 /**
+ * Kill an agent from list/notification views
+ * @param {string} convId - Conversation ID to kill
+ * @param {HTMLElement|null} alertElement - Alert container to remove (for background notification)
+ * @param {HTMLElement|null} cardElement - Card element to update (for conversation card)
+ */
+async function killAgent(convId, alertElement, cardElement) {
+  try {
+    const response = await fetch(`/api/conversations/${convId}/cancel`, { method: 'POST' });
+    const data = await response.json();
+
+    if (response.ok) {
+      // Remove the background alert if provided
+      if (alertElement) {
+        alertElement.remove();
+      }
+
+      // Update the card if provided - remove running badge and kill button
+      if (cardElement) {
+        const runningBadge = cardElement.querySelector('.running-badge');
+        const killBtn = cardElement.querySelector('.kill-agent-btn');
+        if (runningBadge) runningBadge.remove();
+        if (killBtn) killBtn.remove();
+      }
+    }
+  } catch (error) {
+    console.error('Failed to kill agent:', error);
+  }
+}
+
+/**
  * Append an event to the chat output
  */
 function appendEvent(type, data) {

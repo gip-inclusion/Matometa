@@ -120,7 +120,7 @@ def generate_conversation_title(user_message: str, conv_id: str) -> None:
                 max_tokens=50,
                 messages=[{
                     "role": "user",
-                    "content": f"Write a concise summary (max 6 words, no quotes) of this user request:\n\n{user_message[:500]}"
+                    "content": f"Écris un résumé concis EN FRANÇAIS (max 6 mots, sans guillemets) de cette demande:\n\n{user_message[:500]}"
                 }]
             )
             title = response.content[0].text.strip()[:60]
@@ -171,15 +171,17 @@ def get_sidebar_data():
     # Recent conversations with report info
     conversations = store.list_conversations(limit=10)
     agent = get_agent_instance()
-    running_ids = set(agent._running) if hasattr(agent, '_running') else set()
 
-    # Humanize titles and add running status
+    # Check running status for each conversation using the proper interface
+    running_ids = []
     for conv in conversations:
         if conv.title:
             conv.title = humanize_title(conv.title)
-        conv.is_running = conv.id in running_ids
+        conv.is_running = agent.is_running(conv.id)
+        if conv.is_running:
+            running_ids.append(conv.id)
 
-    return {"conversations": conversations, "running_ids": list(running_ids)}
+    return {"conversations": conversations, "running_ids": running_ids}
 
 
 @app.route("/")
@@ -653,7 +655,7 @@ def _maybe_create_report(conv_id: str, message_id: int, content: str, original_q
     store.create_report(
         conv_id=conv_id,
         message_id=message_id,
-        title=metadata.get("query category", "Untitled Report"),
+        title=metadata.get("query category", "Rapport sans titre"),
         website=metadata.get("website"),
         category=metadata.get("query category"),
         original_query=original_query,
