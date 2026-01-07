@@ -139,11 +139,20 @@ knowledge/
 **Load only what's relevant.** For site queries: `knowledge/sites/{site}.md`.
 For API reference: `knowledge/matomo/README.md`.
 
+### Available Skills
+
+Use the `Skill` tool to invoke these skills before querying:
+- `matomo_query` — Matomo API patterns, timeout handling, Python client usage
+- `metabase_query` — Metabase API patterns
+- `save_report` — Save reports to database
+
+**Always invoke `matomo_query` skill before writing Matomo queries.**
+
 ### Available Commands
 
 | Command | Purpose |
 |---------|---------|
-| `.venv/bin/python <script>` | Run Python with project dependencies |
+| `python <script>` | Run Python scripts (in container: `/app`) |
 | `curl` | API calls (but prefer Python clients) |
 | `jq` | Parse JSON |
 | `sqlite3` | Database queries |
@@ -330,3 +339,19 @@ When documenting a new site (or updating an existing one):
 **For bulk updates**, run sites in parallel using sub-agents.
 
 Scripts go in `./scripts/` (one-off) or `./skills/` (reusable).
+
+## Container Environment (Web Deployment)
+
+When running in Docker (web UI mode):
+- **Working directory:** `/app`
+- **Python:** `python` (no venv needed, deps pre-installed)
+- **Credentials:** `/app/.env` (auto-loaded by Python clients)
+- **Skills:** `/app/skills/<name>/skill.md`
+- **Temp files:** Write to `/tmp/` for scratch work
+
+Import paths:
+```python
+import sys
+sys.path.insert(0, '/app')
+from skills.matomo_query.scripts.matomo import MatomoAPI
+```

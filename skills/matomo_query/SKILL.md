@@ -24,6 +24,18 @@ Before querying, you MUST:
 2. Load credentials from `.env` (MATOMO_URL, MATOMO_API_KEY)
 3. Know the site ID (found in knowledge files or via `SitesManager.getSitesWithAtLeastViewAccess`)
 
+## CRITICAL: Timeout Prevention
+
+**Matomo has a 30-second query limit. Segmented queries on large date ranges WILL timeout.**
+
+Before running multiple queries:
+1. **TEST expensive queries first** — Run ONE query with your segment before looping
+2. **Use `period=week` or `period=day`** — Never use month ranges with custom segments
+3. **Use saved segments** — Check the site's knowledge file for pre-archived segments (instant)
+4. **Combined segments are expensive** — `pageUrl=@X;pageUrl=@Y` queries often timeout
+
+If a query times out, immediately switch to smaller date ranges (day-by-day if needed).
+
 ## Quick start with Python
 
 Use the helper library in `skills/matomo_query/scripts/matomo.py`:
