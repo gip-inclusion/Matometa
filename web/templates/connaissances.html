@@ -37,10 +37,9 @@
     <div class="row">
       <div class="col-12 {% if staged_files %}col-lg-8{% endif %}">
         <div class="knowledge-content" id="knowledgeContent">
-          <div class="markdown-body" id="markdownContent">
-            {{ file_content }}
-          </div>
+          <div class="markdown-body" id="markdownContent"></div>
         </div>
+        <script id="knowledgeRawContent" type="text/plain">{{ file_content }}</script>
 
         <!-- Chat output for conversation -->
         {% if current_conv %}
@@ -151,14 +150,38 @@
 {% block scripts %}
 <!-- Markdown rendering -->
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<!-- Mermaid diagrams -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({ startOnLoad: false, theme: 'default' });
+</script>
 <script>
 document.addEventListener('DOMContentLoaded', async () => {
   {% if current_file %}
   // Render markdown content
   const markdownContent = document.getElementById('markdownContent');
-  if (markdownContent && typeof marked !== 'undefined') {
-    const rawContent = markdownContent.textContent;
+  const rawContentScript = document.getElementById('knowledgeRawContent');
+  if (markdownContent && rawContentScript && typeof marked !== 'undefined') {
+    // Configure marked for proper rendering
+    marked.setOptions({
+      breaks: true,
+      gfm: true,
+    });
+
+    const rawContent = rawContentScript.textContent;
     markdownContent.innerHTML = marked.parse(rawContent);
+
+    // Render mermaid diagrams if present
+    if (typeof mermaid !== 'undefined') {
+      const mermaidBlocks = markdownContent.querySelectorAll('pre code.language-mermaid');
+      for (const block of mermaidBlocks) {
+        const container = document.createElement('div');
+        container.className = 'mermaid';
+        container.textContent = block.textContent;
+        block.parentElement.replaceWith(container);
+      }
+      await mermaid.run();
+    }
   }
 
   // Initialize knowledge chat
