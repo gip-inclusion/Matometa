@@ -351,6 +351,7 @@ gitgraph
 - No accents (use `e` not `é`) – this is ONLY FOR MERMAID, otherwise USE ACCENTS.
 - No `<br/>` tags or slashes
 - No ASCII art or inline HTML
+- Use DSFR colors: `#006ADC` (blue), `#000638` (navy), `#ADB6FF` (periwinkle), `#E57200` (orange), `#FFA347` (light orange)
 
 ### JOURNAL.md
 
