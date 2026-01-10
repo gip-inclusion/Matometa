@@ -1153,6 +1153,7 @@ body.has-sidebar {
   font-size: 0.7rem;
   font-weight: 500;
   padding: 0.2em 0.5em;
+  margin: 0;
 }
 
 .report-card .card-footer {
