@@ -41,7 +41,7 @@
         {% endif %}
         <i class="ri-time-line"></i> Mis a jour le {{ current_report.updated_at.strftime('%d/%m/%Y %H:%M') }}
       </div>
-      <script type="text/plain" id="reportRawContent">{{ current_report.content }}</script>
+      <script type="text/plain" id="reportRawContent">{{ current_report.content|replace('</script>', '<\\/script>')|safe }}</script>
     </div>
     {% else %}
     <!-- Reports list view -->
