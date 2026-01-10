@@ -14,7 +14,7 @@ from . import config
 DB_PATH = config.BASE_DIR / "data" / "matometa.db"
 
 # Schema version for migrations
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 def get_connection() -> sqlite3.Connection:
@@ -59,6 +59,9 @@ def init_db():
 
         if current_version < 3:
             _migrate_to_v3(conn)
+
+        if current_version < 4:
+            _migrate_to_v4(conn)
 
 
 def _create_schema_v1(conn: sqlite3.Connection):
@@ -157,6 +160,23 @@ def _migrate_to_v3(conn: sqlite3.Connection):
     """)
 
     conn.execute("UPDATE schema_version SET version = 3")
+
+
+def _migrate_to_v4(conn: sqlite3.Connection):
+    """Migrate to v4: add content to reports, source_conversation_id."""
+    cursor = conn.execute("PRAGMA table_info(reports)")
+    columns = {row["name"] for row in cursor.fetchall()}
+
+    if "content" not in columns:
+        conn.execute("ALTER TABLE reports ADD COLUMN content TEXT")
+
+    if "source_conversation_id" not in columns:
+        conn.execute("ALTER TABLE reports ADD COLUMN source_conversation_id TEXT")
+
+    if "user_id" not in columns:
+        conn.execute("ALTER TABLE reports ADD COLUMN user_id TEXT")
+
+    conn.execute("UPDATE schema_version SET version = 4")
 
 
 # =============================================================================
