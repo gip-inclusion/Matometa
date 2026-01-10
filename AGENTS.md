@@ -145,8 +145,12 @@ Use the `Skill` tool to invoke these skills before querying:
 - `matomo_query` — Matomo API patterns, timeout handling, Python client usage
 - `metabase_query` — Metabase API patterns
 - `save_report` — Save reports to database
+- `wishlist` — Log capability requests, tool wishes, improvement ideas
 
 **Always invoke `matomo_query` skill before writing Matomo queries.**
+
+**Use `wishlist` when:** you wish you had a tool you don't have, notice a
+knowledge gap, or have ideas for improvements. This helps track unmet needs.
 
 ### Available Commands
 

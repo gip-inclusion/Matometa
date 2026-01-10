@@ -6,6 +6,7 @@
     "./skills/debug_matomo_ui/SKILL.md",
     "./skills/sync_sites/SKILL.md",
     "./skills/sync_metabase/SKILL.md",
-    "./skills/sync_events/SKILL.md"
+    "./skills/sync_events/SKILL.md",
+    "./skills/wishlist/SKILL.md"
   ]
 }
