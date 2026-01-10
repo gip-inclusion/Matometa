@@ -208,7 +208,9 @@ def _migrate_to_v5(conn: sqlite3.Connection):
     """Migrate to v5: recreate reports table with nullable conversation_id."""
     # Recreate table with new schema (conversation_id nullable)
     conn.executescript("""
-        CREATE TABLE IF NOT EXISTS reports_new (
+        DROP TABLE IF EXISTS reports_new;
+
+        CREATE TABLE reports_new (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
             content TEXT,
