@@ -366,16 +366,20 @@ class ConversationStore:
             if report_row:
                 report = Report(
                     id=report_row["id"],
-                    conversation_id=report_row["conversation_id"],
-                    message_id=report_row["message_id"],
                     title=report_row["title"],
+                    # Don't load content when loading via conversation
                     website=report_row["website"],
                     category=report_row["category"],
                     tags=json.loads(report_row["tags"]) if report_row["tags"] else [],
                     original_query=report_row["original_query"],
+                    source_conversation_id=report_row["source_conversation_id"] if "source_conversation_id" in report_row.keys() else None,
+                    user_id=report_row["user_id"] if "user_id" in report_row.keys() else None,
                     version=report_row["version"],
                     created_at=datetime.fromisoformat(report_row["created_at"]),
                     updated_at=datetime.fromisoformat(report_row["updated_at"]),
+                    # Legacy fields
+                    conversation_id=report_row["conversation_id"],
+                    message_id=report_row["message_id"],
                 )
 
             return Conversation(
