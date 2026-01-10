@@ -51,20 +51,17 @@
         {% for report in reports %}
         <div class="col-12 col-md-6 col-lg-4" id="report-{{ report.id }}">
           <div class="card report-card h-100">
-            <a href="/rapports?id={{ report.id }}" class="card-body text-decoration-none"
+            <a href="/rapports?id={{ report.id }}" class="card-body text-decoration-none d-flex flex-column"
                hx-get="/rapports?id={{ report.id }}" hx-target="#main" hx-select="#main > *" hx-push-url="true">
-              <h5 class="card-title mb-2">{{ report.title }}</h5>
-              <div class="d-flex flex-wrap gap-1 mb-2">
-                {% if report.website %}<span class="badge bg-secondary">{{ report.website }}</span>{% endif %}
-                {% if report.category %}<span class="badge bg-light text-dark">{{ report.category }}</span>{% endif %}
+              <h6 class="card-title mb-2">{{ report.title }}</h6>
+              <div class="report-badges">
+                {% if report.website %}<span class="badge text-bg-secondary">{{ report.website }}</span>{% endif %}
+                {% if report.category %}<span class="badge text-bg-info">{{ report.category }}</span>{% endif %}
               </div>
-              <p class="card-text text-muted small mb-0 mt-2">
-                {{ report.updated_at.strftime('%d/%m/%Y %H:%M') }}
-              </p>
             </a>
-            <div class="card-footer-row">
-              <div></div>
-              <button class="btn btn-link btn-sm text-muted card-archive-btn" title="Archiver"
+            <div class="card-footer d-flex align-items-center justify-content-between py-2 px-3">
+              <small class="text-muted">{{ report.updated_at.strftime('%d/%m/%Y') }}</small>
+              <button class="btn btn-link btn-sm text-muted p-0" title="Archiver"
                       hx-post="/api/reports/{{ report.id }}/archive"
                       hx-target="#report-{{ report.id }}"
                       hx-swap="outerHTML"
