@@ -108,63 +108,78 @@
 
 {% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-  // Render report content like in chat.js
+function renderReportContent() {
   const rawContent = document.getElementById('reportRawContent');
   const reportHeader = document.getElementById('reportHeader');
   const reportBody = document.getElementById('reportBody');
 
-  if (rawContent && reportHeader && reportBody && typeof marked !== 'undefined') {
-    let content = rawContent.textContent;
+  if (!rawContent || !reportHeader || !reportBody || typeof marked === 'undefined') return;
+  if (reportBody.dataset.rendered) return; // Already rendered
 
-    // Parse YAML front-matter
-    const frontMatter = {};
-    const fmMatch = content.match(/^---\n([\s\S]*?)\n---\n/);
-    if (fmMatch) {
-      const fmText = fmMatch[1];
-      for (const line of fmText.split('\n')) {
-        const colonIdx = line.indexOf(':');
-        if (colonIdx > 0) {
-          const key = line.slice(0, colonIdx).trim().toLowerCase();
-          const value = line.slice(colonIdx + 1).trim();
-          frontMatter[key] = value;
-        }
+  let content = rawContent.textContent;
+
+  // Parse YAML front-matter
+  const frontMatter = {};
+  const fmMatch = content.match(/^---\n([\s\S]*?)\n---\n/);
+  if (fmMatch) {
+    const fmText = fmMatch[1];
+    for (const line of fmText.split('\n')) {
+      const colonIdx = line.indexOf(':');
+      if (colonIdx > 0) {
+        const key = line.slice(0, colonIdx).trim().toLowerCase();
+        const value = line.slice(colonIdx + 1).trim();
+        frontMatter[key] = value;
       }
-      // Remove front-matter from content
-      content = content.replace(/^---\n[\s\S]*?\n---\n/, '');
     }
-
-    // Build report header (like formatReport in chat.js)
-    let header = '<div class="report-title">';
-    header += '<i class="ri-file-text-line"></i> ';
-    header += frontMatter['query category'] || 'Rapport';
-    header += '</div>';
-
-    if (frontMatter.date) {
-      header += `<div class="report-meta"><i class="ri-calendar-line"></i> ${frontMatter.date}</div>`;
-    }
-    if (frontMatter.website) {
-      header += `<div class="report-meta"><i class="ri-global-line"></i> ${frontMatter.website}</div>`;
-    }
-
-    reportHeader.innerHTML = header;
-
-    // Configure marked for tables and GFM
-    marked.setOptions({ breaks: true, gfm: true });
-    reportBody.innerHTML = marked.parse(content);
-
-    // Render mermaid diagrams
-    if (typeof mermaid !== 'undefined') {
-      const mermaidBlocks = reportBody.querySelectorAll('pre code.language-mermaid');
-      for (const block of mermaidBlocks) {
-        const container = document.createElement('div');
-        container.className = 'mermaid';
-        container.textContent = block.textContent;
-        block.parentElement.replaceWith(container);
-      }
-      mermaid.run();
-    }
+    content = content.replace(/^---\n[\s\S]*?\n---\n/, '');
   }
+
+  // Build report header
+  let header = '<div class="report-title">';
+  header += '<i class="ri-file-text-line"></i> ';
+  header += frontMatter['query category'] || 'Rapport';
+  header += '</div>';
+
+  if (frontMatter.date) {
+    header += `<div class="report-meta"><i class="ri-calendar-line"></i> ${frontMatter.date}</div>`;
+  }
+  if (frontMatter.website) {
+    header += `<div class="report-meta"><i class="ri-global-line"></i> ${frontMatter.website}</div>`;
+  }
+
+  reportHeader.innerHTML = header;
+
+  // Configure marked for tables and GFM
+  marked.setOptions({ breaks: true, gfm: true });
+  reportBody.innerHTML = marked.parse(content);
+
+  // Add Bootstrap table classes
+  reportBody.querySelectorAll('table').forEach(table => {
+    table.classList.add('table', 'table-sm', 'table-striped');
+  });
+
+  // Render mermaid diagrams
+  if (typeof mermaid !== 'undefined') {
+    const mermaidBlocks = reportBody.querySelectorAll('pre code.language-mermaid');
+    for (const block of mermaidBlocks) {
+      const container = document.createElement('div');
+      container.className = 'mermaid';
+      container.textContent = block.textContent;
+      block.parentElement.replaceWith(container);
+    }
+    mermaid.run();
+  }
+
+  reportBody.dataset.rendered = 'true';
+}
+
+// Run on initial load and HTMX swaps
+document.addEventListener('DOMContentLoaded', renderReportContent);
+document.body.addEventListener('htmx:afterSwap', renderReportContent);
+
+(function() {
+  // Also run immediately in case DOM is already ready
+  renderReportContent();
 
   // Chat bar creates new exploration
   const chatInput = document.getElementById('chatInput');
@@ -188,6 +203,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
-});
+})();
 </script>
 {% endblock %}
