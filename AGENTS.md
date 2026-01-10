@@ -334,6 +334,8 @@ When documenting a new site (or updating an existing one):
    - **Code-based** (Emplois, Communauté): Template tags, data attributes
    - **Tag Manager** (others): Events in MTM container, minimal code tracking
 
+   See "Querying GitHub Repositories" below for how to fetch and search code.
+
 5. **Goals** — Query `Goals.getGoals` for conversion tracking.
 
 **For bulk updates**, run sites in parallel using sub-agents.
@@ -354,4 +356,94 @@ Import paths:
 import sys
 sys.path.insert(0, '/app')
 from skills.matomo_query.scripts.matomo import MatomoAPI
+```
+
+## Querying GitHub Repositories
+
+To explore source code structure, use curl to fetch from GitHub directly.
+Do NOT use WebFetch or WebSearch — they are disabled for security.
+
+### Our Repositories
+
+| Site | Repository |
+|------|------------|
+| Emplois | `gip-inclusion/les-emplois` |
+| Marché | `gip-inclusion/le-marche` |
+| Communauté | `gip-inclusion/la-communaute` |
+| Pilotage | `gip-inclusion/pilotage` |
+| Dora | `gip-inclusion/dora` |
+| RDV-Insertion | `betagouv/rdv-insertion` |
+
+### Fetch Raw File Content
+
+Use `raw.githubusercontent.com` for direct file access:
+
+```bash
+# Fetch a specific file (main branch)
+curl -s "https://raw.githubusercontent.com/gip-inclusion/les-emplois/main/README.md"
+
+# Fetch from a specific path
+curl -s "https://raw.githubusercontent.com/gip-inclusion/les-emplois/main/itou/templates/layout/base.html"
+
+# Fetch and search for patterns
+curl -s "https://raw.githubusercontent.com/gip-inclusion/les-emplois/main/itou/www/stats/views.py" | grep -n "matomo"
+```
+
+### Search Code via GitHub API
+
+Use the GitHub Search API (no auth needed for public repos, but rate-limited):
+
+```bash
+# Search for code pattern in a repo
+curl -s "https://api.github.com/search/code?q=matomo_event+repo:gip-inclusion/les-emplois" | jq '.items[] | {path: .path, url: .html_url}'
+
+# Search for filenames
+curl -s "https://api.github.com/search/code?q=filename:tracking+repo:gip-inclusion/les-emplois" | jq '.items[].path'
+
+# Search across organization
+curl -s "https://api.github.com/search/code?q=CCAS+org:gip-inclusion" | jq '.items[] | {repo: .repository.name, path: .path}'
+```
+
+**Rate limits:** 10 requests/minute unauthenticated. Space out searches.
+
+### List Repository Contents
+
+```bash
+# List root directory
+curl -s "https://api.github.com/repos/gip-inclusion/les-emplois/contents/" | jq '.[].name'
+
+# List specific directory
+curl -s "https://api.github.com/repos/gip-inclusion/les-emplois/contents/itou/templates" | jq '.[].name'
+
+# Get file metadata (includes download_url for raw content)
+curl -s "https://api.github.com/repos/gip-inclusion/les-emplois/contents/itou/utils/constants.py" | jq '{name, size, download_url}'
+```
+
+### Common Patterns for Code Exploration
+
+**Find tracking implementation:**
+```bash
+# Django projects - look for template tags and data attributes
+curl -s "https://api.github.com/search/code?q=data-matomo+repo:gip-inclusion/les-emplois" | jq '.items[].path'
+
+# Find JavaScript tracking
+curl -s "https://api.github.com/search/code?q=_paq.push+repo:gip-inclusion/les-emplois" | jq '.items[].path'
+```
+
+**Find models and schema:**
+```bash
+# Django models
+curl -s "https://api.github.com/search/code?q=class+models.Model+repo:gip-inclusion/les-emplois+path:models" | jq '.items[].path'
+
+# Database migrations (schema changes)
+curl -s "https://api.github.com/repos/gip-inclusion/les-emplois/contents/itou/users/migrations" | jq '.[].name' | tail -5
+```
+
+**Find constants and enums:**
+```bash
+# TextChoices enums (Django)
+curl -s "https://api.github.com/search/code?q=TextChoices+repo:gip-inclusion/les-emplois" | jq '.items[].path'
+
+# Then fetch the file directly
+curl -s "https://raw.githubusercontent.com/gip-inclusion/les-emplois/main/itou/users/enums.py"
 ```

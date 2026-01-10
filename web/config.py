@@ -12,13 +12,17 @@ AGENT_BACKEND = os.getenv("AGENT_BACKEND", "cli")
 # Claude CLI path (uses system default if not set)
 CLAUDE_CLI = os.getenv("CLAUDE_CLI", "claude")
 
-# Allowed tools for the agent
-# Bash patterns must match the START of the command
+# Allowed tools for the agent (CLI backend only - SDK ignores this)
+# Bash patterns use glob wildcards (* matches anything)
+# NOTE: Real security boundary is the container, not LLM tool restrictions
 ALLOWED_TOOLS = os.getenv("ALLOWED_TOOLS",
     "Read,Write,Edit,Glob,Grep,"
-    "Bash(curl:*),Bash(jq:*),Bash(sqlite3:*),"
-    "Bash(.venv/bin/python:*),"  # Run scripts with venv
-    "Bash(PYTHONPATH=.:*)"  # Run scripts with PYTHONPATH set
+    "Bash(curl:*inclusion.gouv.fr*),Bash(curl:*inclusion.beta.gouv.fr*),"
+    "Bash(curl:*github.com/gip-inclusion*),Bash(curl:*github.com/betagouv*),"
+    "Bash(curl:*raw.githubusercontent.com/gip-inclusion*),Bash(curl:*raw.githubusercontent.com/betagouv*),"
+    "Bash(curl:*api.github.com*),"
+    "Bash(jq:*),Bash(sqlite3:*),"
+    "Bash(python:*)"
 )
 
 # Web server settings

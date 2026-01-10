@@ -3,6 +3,13 @@ services:
     build: .
     restart: always
     hostname: matometa
+    # Container hardening
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 2g
+    pids_limit: 200
     environment:
       - AGENT_BACKEND=sdk
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
