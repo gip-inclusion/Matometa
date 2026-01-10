@@ -14,7 +14,7 @@ from . import config
 DB_PATH = config.BASE_DIR / "data" / "matometa.db"
 
 # Schema version for migrations
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # Valid column names for dynamic updates (security: prevents SQL injection)
 VALID_CONVERSATION_COLUMNS = frozenset({"title", "session_id", "user_id", "status", "updated_at"})
@@ -84,6 +84,9 @@ def init_db():
 
         if current_version < 4:
             _migrate_to_v4(conn)
+
+        if current_version < 5:
+            _migrate_to_v5(conn)
 
 
 def _create_schema_v1(conn: sqlite3.Connection):
@@ -185,7 +188,7 @@ def _migrate_to_v3(conn: sqlite3.Connection):
 
 
 def _migrate_to_v4(conn: sqlite3.Connection):
-    """Migrate to v4: add content to reports, source_conversation_id."""
+    """Migrate to v4: add columns to reports (partial migration, see v5)."""
     cursor = conn.execute("PRAGMA table_info(reports)")
     columns = {row["name"] for row in cursor.fetchall()}
 
@@ -199,6 +202,47 @@ def _migrate_to_v4(conn: sqlite3.Connection):
         conn.execute("ALTER TABLE reports ADD COLUMN user_id TEXT")
 
     conn.execute("UPDATE schema_version SET version = 4")
+
+
+def _migrate_to_v5(conn: sqlite3.Connection):
+    """Migrate to v5: recreate reports table with nullable conversation_id."""
+    # Recreate table with new schema (conversation_id nullable)
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS reports_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            content TEXT,
+            website TEXT,
+            category TEXT,
+            tags TEXT,
+            original_query TEXT,
+            source_conversation_id TEXT,
+            user_id TEXT,
+            version INTEGER DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            -- Legacy columns (nullable for backwards compat)
+            conversation_id TEXT,
+            message_id INTEGER
+        );
+
+        INSERT INTO reports_new (id, title, content, website, category, tags, original_query,
+                                 source_conversation_id, user_id, version, created_at, updated_at,
+                                 conversation_id, message_id)
+        SELECT id, title, content, website, category, tags, original_query,
+               source_conversation_id, user_id, version, created_at, updated_at,
+               conversation_id, message_id
+        FROM reports;
+
+        DROP TABLE reports;
+
+        ALTER TABLE reports_new RENAME TO reports;
+
+        CREATE INDEX IF NOT EXISTS idx_reports_updated
+            ON reports(updated_at DESC);
+
+        UPDATE schema_version SET version = 5;
+    """)
 
 
 # =============================================================================
