@@ -158,16 +158,28 @@ function renderReportContent() {
     table.classList.add('table', 'table-sm', 'table-striped');
   });
 
-  // Render mermaid diagrams
+  // Render mermaid diagrams (same approach as chat.js renderMermaid)
   if (typeof mermaid !== 'undefined') {
     const mermaidBlocks = reportBody.querySelectorAll('pre code.language-mermaid');
     for (const block of mermaidBlocks) {
+      const code = block.textContent;
       const container = document.createElement('div');
       container.className = 'mermaid';
-      container.textContent = block.textContent;
-      block.parentElement.replaceWith(container);
+      const preElement = block.parentElement;
+      try {
+        mermaid.render('mermaid-' + Date.now() + '-' + Math.random().toString(36).slice(2), code)
+          .then(({ svg }) => {
+            container.innerHTML = svg;
+            preElement.replaceWith(container);
+          })
+          .catch(err => {
+            console.error('Mermaid render failed:', err);
+            // Keep original code block on error
+          });
+      } catch (err) {
+        console.error('Mermaid rendering failed:', err);
+      }
     }
-    mermaid.run();
   }
 
   reportBody.dataset.rendered = 'true';
