@@ -1163,3 +1163,27 @@ body.has-sidebar {
   background: transparent;
   border-top: 1px solid var(--bs-border-color-translucent);
 }
+
+/* ==========================================================================
+   Report Toggle Button
+   ========================================================================== */
+.report-toggle {
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.report-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.report-toggle-btn.active {
+  background-color: var(--bs-primary);
+  color: white;
+}
+
+.report-toggle-btn .form-check-input {
+  margin: 0;
+  cursor: pointer;
+}

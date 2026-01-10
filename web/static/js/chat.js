@@ -383,14 +383,20 @@ function startStream() {
     });
   });
 
+  // Show report toggle when streaming starts
+  showReportToggle(true);
+
   // Handle completion
-  eventSource.addEventListener('done', () => {
+  eventSource.addEventListener('done', async () => {
     eventSource.close();
     eventSource = null;
     setStreamingState(false);
     hideLoading();
     removeProgressIndicator();
     markFinalAnswer();
+
+    // Check if report generation was requested
+    await maybeGenerateReport();
   });
 
   // Handle errors
@@ -1098,4 +1104,109 @@ function startFreshConversation() {
   if (input) {
     input.focus();
   }
+
+  // Hide report toggle when starting fresh
+  hideReportToggle();
+}
+
+/**
+ * Show the report toggle button
+ * @param {boolean} showCheckbox - Whether to show checkbox (during streaming)
+ */
+function showReportToggle(showCheckbox = false) {
+  const toggle = document.getElementById('reportToggle');
+  const checkbox = document.getElementById('reportCheckbox');
+  const btn = document.getElementById('reportToggleBtn');
+
+  if (!toggle) return;
+
+  toggle.style.display = 'block';
+
+  if (showCheckbox && checkbox) {
+    checkbox.style.display = 'inline-block';
+    // During streaming, clicking button toggles checkbox
+    btn.onclick = () => {
+      checkbox.checked = !checkbox.checked;
+      btn.classList.toggle('active', checkbox.checked);
+    };
+  } else if (checkbox) {
+    // When idle, clicking button enables report mode
+    checkbox.style.display = 'none';
+    btn.onclick = () => {
+      checkbox.checked = true;
+      btn.classList.add('active');
+      checkbox.style.display = 'inline-block';
+    };
+  }
+}
+
+/**
+ * Hide the report toggle button
+ */
+function hideReportToggle() {
+  const toggle = document.getElementById('reportToggle');
+  const checkbox = document.getElementById('reportCheckbox');
+  const btn = document.getElementById('reportToggleBtn');
+
+  if (toggle) {
+    toggle.style.display = 'none';
+  }
+  if (checkbox) {
+    checkbox.checked = false;
+    checkbox.style.display = 'none';
+  }
+  if (btn) {
+    btn.classList.remove('active');
+  }
+}
+
+/**
+ * Check if report generation was requested and create report
+ */
+async function maybeGenerateReport() {
+  const checkbox = document.getElementById('reportCheckbox');
+  if (!checkbox || !checkbox.checked || !currentConversationId) {
+    hideReportToggle();
+    return;
+  }
+
+  try {
+    // Get the last assistant message content
+    const chatOutput = document.getElementById('chatOutput');
+    const assistantBlocks = chatOutput.querySelectorAll('.event-assistant');
+    const lastAssistant = assistantBlocks[assistantBlocks.length - 1];
+
+    if (!lastAssistant) {
+      console.warn('No assistant message found for report');
+      hideReportToggle();
+      return;
+    }
+
+    // Get raw text content (strip HTML)
+    const content = lastAssistant.innerText || lastAssistant.textContent;
+
+    // Create report via API
+    const response = await fetch('/api/reports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Rapport - ' + new Date().toLocaleDateString('fr-FR'),
+        content: content,
+        source_conversation_id: currentConversationId,
+        original_query: lastUserMessage
+      })
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      // Show success message
+      appendEvent('system', { content: `Rapport sauvegarde : <a href="${data.links.view}">${data.title}</a>` });
+    } else {
+      console.error('Failed to create report:', await response.text());
+    }
+  } catch (err) {
+    console.error('Error creating report:', err);
+  }
+
+  hideReportToggle();
 }

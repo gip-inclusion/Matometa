@@ -143,6 +143,14 @@
   <!-- Fixed chat bar at bottom -->
   <div class="chat-bar-container">
     <div class="container">
+      <!-- Report toggle - shown when agent detects report-worthy question -->
+      <div class="report-toggle" id="reportToggle" style="display: none;">
+        <button type="button" class="btn btn-outline-primary btn-sm report-toggle-btn" id="reportToggleBtn">
+          <i class="ri-file-text-line"></i>
+          <span class="toggle-label">Produire un rapport detaille</span>
+          <input type="checkbox" class="form-check-input ms-2" id="reportCheckbox" style="display: none;">
+        </button>
+      </div>
       <div class="chat-bar">
         <textarea
           class="chat-input"
