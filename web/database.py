@@ -774,6 +774,12 @@ class ConversationStore:
             )
             return cursor.rowcount > 0
 
+    def delete_report(self, report_id: int) -> bool:
+        """Delete a report."""
+        with get_db() as conn:
+            cursor = conn.execute("DELETE FROM reports WHERE id = ?", (report_id,))
+            return cursor.rowcount > 0
+
 
 # =============================================================================
 # Backwards compatibility

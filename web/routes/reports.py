@@ -42,13 +42,6 @@ def get_report(report_id: int):
     if not report:
         return jsonify({"error": "Report not found"}), 404
 
-    messages = store.get_messages(report.conversation_id)
-    report_content = None
-    for msg in messages:
-        if msg.id == report.message_id:
-            report_content = msg.content
-            break
-
     return jsonify({
         "id": report.id,
         "title": report.title,
@@ -57,11 +50,20 @@ def get_report(report_id: int):
         "tags": report.tags,
         "original_query": report.original_query,
         "version": report.version,
-        "content": report_content,
-        "conversation_id": report.conversation_id,
+        "content": report.content,
+        "source_conversation_id": report.source_conversation_id,
         "created_at": report.created_at.isoformat(),
         "updated_at": report.updated_at.isoformat(),
         "links": {
-            "conversation": f"/api/conversations/{report.conversation_id}",
+            "self": f"/api/reports/{report.id}",
+            "view": f"/rapports?id={report.id}",
         },
     })
+
+
+@bp.route("/<int:report_id>", methods=["DELETE"])
+def delete_report(report_id: int):
+    """Delete a report."""
+    if store.delete_report(report_id):
+        return "", 200
+    return jsonify({"error": "Report not found"}), 404
