@@ -641,6 +641,13 @@ function appendEvent(type, data) {
     block.innerHTML = formatToolResult(data.content);
   } else if (type === 'error') {
     block.innerHTML = escapeHtml(data.content || '');
+  } else if (type === 'report') {
+    // Report card - parse JSON content
+    let reportData = data.content;
+    if (typeof reportData === 'string') {
+      try { reportData = JSON.parse(reportData); } catch { }
+    }
+    block.innerHTML = formatReportCard(reportData);
   }
 
   chatOutput.appendChild(block);
@@ -1053,6 +1060,8 @@ async function loadConversation(convId) {
           } catch {
             appendEvent('tool_result', { content: { output: msg.content } });
           }
+        } else if (msg.type === 'report') {
+          appendEvent('report', { content: msg.content });
         }
       }
       // Mark final answers for minimal view mode
@@ -1107,6 +1116,25 @@ function startFreshConversation() {
 
   // Hide report toggle when starting fresh
   hideReportToggle();
+}
+
+/**
+ * Format a report card for display in conversation
+ */
+function formatReportCard(data) {
+  const reportId = data.report_id || data.id;
+  const title = data.title || 'Rapport';
+  const viewUrl = `/rapports?id=${reportId}`;
+
+  return `
+    <div class="report-card-inline">
+      <a href="${viewUrl}" class="report-card-link">
+        <i class="ri-file-text-line"></i>
+        <span class="report-card-title">${escapeHtml(title)}</span>
+        <i class="ri-arrow-right-s-line"></i>
+      </a>
+    </div>
+  `;
 }
 
 /**
@@ -1199,8 +1227,8 @@ async function maybeGenerateReport() {
 
     if (response.ok) {
       const data = await response.json();
-      // Show success message
-      appendEvent('system', { content: `Rapport sauvegarde : <a href="${data.links.view}">${data.title}</a>` });
+      // Show report card
+      appendEvent('report', { content: { report_id: data.id, title: data.title } });
     } else {
       console.error('Failed to create report:', await response.text());
     }

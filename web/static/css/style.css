@@ -1156,7 +1156,7 @@ body.has-sidebar {
 }
 
 .report-badges .badge + .badge {
-  margin-left: 0;
+  margin-left: 0 !important;
 }
 
 .report-card .card-footer {
@@ -1186,4 +1186,43 @@ body.has-sidebar {
 .report-toggle-btn .form-check-input {
   margin: 0;
   cursor: pointer;
+}
+
+/* ==========================================================================
+   Report Card Inline (in conversation)
+   ========================================================================== */
+.event-report {
+  background: transparent;
+  padding: 0;
+}
+
+.report-card-inline {
+  display: inline-block;
+}
+
+.report-card-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--bs-light);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.5rem;
+  text-decoration: none;
+  color: var(--bs-body-color);
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.report-card-link:hover {
+  background: var(--bs-primary-bg-subtle);
+  border-color: var(--bs-primary);
+  color: var(--bs-primary);
+}
+
+.report-card-link i:first-child {
+  color: var(--bs-primary);
+}
+
+.report-card-title {
+  font-weight: 500;
 }
