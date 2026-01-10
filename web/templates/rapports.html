@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title_suffix %} - Rapports{% endblock %}
+
+{% block content %}
+<section class="section-content" id="section-rapports">
+  <!-- Sticky section header -->
+  <div class="section-header">
+    <div class="container">
+      <div class="d-flex align-items-center justify-content-between gap-3">
+        <div class="d-flex align-items-center gap-3">
+          {% if current_report %}
+          <a href="/rapports" class="btn btn-link p-0 me-2" hx-get="/rapports" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+            <i class="ri-arrow-left-line ri-xl"></i>
+          </a>
+          {% endif %}
+          <i class="ri-file-text-line ri-2x text-primary"></i>
+          <div>
+            <h1 class="mb-0">{% if current_report %}{{ current_report.title }}{% else %}Rapports{% endif %}</h1>
+            <p class="text-muted mb-0">{% if current_report %}{{ current_report.website or '' }}{% if current_report.website and current_report.category %} - {% endif %}{{ current_report.category or '' }}{% else %}Analyses et rapports sauvegardes{% endif %}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main content area -->
+  <div class="container section-body">
+    {% if current_report %}
+    <!-- Report detail view -->
+    <div class="report-content" id="reportContent">
+      <div class="card">
+        <div class="card-body">
+          <div class="report-markdown" id="reportMarkdown">{{ current_report.content }}</div>
+        </div>
+        <div class="card-footer text-muted small">
+          {% if current_report.source_conversation_id %}
+          <a href="/explorations?conv={{ current_report.source_conversation_id }}">Voir la conversation d'origine</a> |
+          {% endif %}
+          Mis a jour le {{ current_report.updated_at.strftime('%d/%m/%Y %H:%M') }}
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <!-- Reports list view -->
+    <div class="reports-list" id="reportsList">
+      {% if reports %}
+      <div class="row g-3">
+        {% for report in reports %}
+        <div class="col-12 col-md-6 col-lg-4" id="report-{{ report.id }}">
+          <div class="card report-card h-100">
+            <a href="/rapports?id={{ report.id }}" class="card-body text-decoration-none"
+               hx-get="/rapports?id={{ report.id }}" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+              <h5 class="card-title mb-2">{{ report.title }}</h5>
+              <p class="card-text text-muted small mb-0">
+                {% if report.website %}<span class="badge bg-secondary">{{ report.website }}</span>{% endif %}
+                {% if report.category %}<span class="badge bg-light text-dark">{{ report.category }}</span>{% endif %}
+              </p>
+              <p class="card-text text-muted small mb-0 mt-2">
+                {{ report.updated_at.strftime('%d/%m/%Y %H:%M') }}
+              </p>
+            </a>
+            <div class="card-footer-row">
+              <div></div>
+              <button class="btn btn-link btn-sm text-muted card-delete-btn" title="Supprimer"
+                      hx-delete="/api/reports/{{ report.id }}"
+                      hx-target="#report-{{ report.id }}"
+                      hx-swap="outerHTML"
+                      hx-confirm="Supprimer ce rapport ?">
+                <i class="ri-delete-bin-line"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <i class="ri-file-text-line ri-4x text-disabled mb-3"></i>
+        <p class="mb-0 text-muted">Aucun rapport</p>
+        <p class="small text-muted">Demandez a l'agent de sauvegarder un rapport</p>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Fixed chat bar at bottom -->
+  <div class="chat-bar-container">
+    <div class="container">
+      <div class="chat-bar">
+        <textarea
+          class="chat-input"
+          id="chatInput"
+          placeholder="Posez une question pour creer une nouvelle exploration..."
+          rows="1"
+        ></textarea>
+        <button type="button" class="chat-send-btn" id="chatSendBtn" title="Envoyer">
+          <i class="ri-send-plane-fill"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  // Render markdown in report content
+  const reportMarkdown = document.getElementById('reportMarkdown');
+  if (reportMarkdown && typeof marked !== 'undefined') {
+    reportMarkdown.innerHTML = marked.parse(reportMarkdown.textContent);
+    // Render mermaid diagrams
+    if (typeof mermaid !== 'undefined') {
+      mermaid.run({ nodes: reportMarkdown.querySelectorAll('.language-mermaid') });
+    }
+  }
+
+  // Chat bar creates new exploration
+  const chatInput = document.getElementById('chatInput');
+  const chatSendBtn = document.getElementById('chatSendBtn');
+
+  if (chatInput && chatSendBtn) {
+    chatSendBtn.addEventListener('click', async () => {
+      const message = chatInput.value.trim();
+      if (!message) return;
+
+      // Create new conversation and redirect to explorations with message
+      const resp = await fetch('/api/conversations', { method: 'POST' });
+      const data = await resp.json();
+      window.location.href = `/explorations?conv=${data.id}&message=${encodeURIComponent(message)}`;
+    });
+
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        chatSendBtn.click();
+      }
+    });
+  }
+});
+</script>
+{% endblock %}
