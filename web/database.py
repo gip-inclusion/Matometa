@@ -207,7 +207,10 @@ def _migrate_to_v4(conn: sqlite3.Connection):
 def _migrate_to_v5(conn: sqlite3.Connection):
     """Migrate to v5: recreate reports table with nullable conversation_id."""
     # Recreate table with new schema (conversation_id nullable)
+    # Disable FK checks temporarily for table recreation
     conn.executescript("""
+        PRAGMA foreign_keys = OFF;
+
         DROP TABLE IF EXISTS reports_new;
 
         CREATE TABLE reports_new (
@@ -244,6 +247,8 @@ def _migrate_to_v5(conn: sqlite3.Connection):
             ON reports(updated_at DESC);
 
         UPDATE schema_version SET version = 5;
+
+        PRAGMA foreign_keys = ON;
     """)
 
 
