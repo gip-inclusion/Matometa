@@ -379,32 +379,41 @@ Do NOT use WebFetch or WebSearch — they are disabled for security.
 Use `raw.githubusercontent.com` for direct file access:
 
 ```bash
-# Fetch a specific file (main branch)
-curl -s "https://raw.githubusercontent.com/gip-inclusion/les-emplois/main/README.md"
+# Fetch a specific file (check default branch - usually master)
+curl -s "https://raw.githubusercontent.com/gip-inclusion/les-emplois/master/README.md"
 
 # Fetch from a specific path
-curl -s "https://raw.githubusercontent.com/gip-inclusion/les-emplois/main/itou/templates/layout/base.html"
+curl -s "https://raw.githubusercontent.com/gip-inclusion/les-emplois/master/itou/templates/layout/base.html"
 
 # Fetch and search for patterns
-curl -s "https://raw.githubusercontent.com/gip-inclusion/les-emplois/main/itou/www/stats/views.py" | grep -n "matomo"
+curl -s "https://raw.githubusercontent.com/gip-inclusion/les-emplois/master/itou/www/stats/views.py" | grep -n "matomo"
 ```
 
-### Search Code via GitHub API
+### Search Code in Repositories
 
-Use the GitHub Search API (no auth needed for public repos, but rate-limited):
+GitHub's code search API requires authentication. Instead, use these approaches:
 
+**Option 1: List directory + fetch files**
 ```bash
-# Search for code pattern in a repo
-curl -s "https://api.github.com/search/code?q=matomo_event+repo:gip-inclusion/les-emplois" | jq '.items[] | {path: .path, url: .html_url}'
+# List files in a directory
+curl -s "https://api.github.com/repos/gip-inclusion/les-emplois/contents/itou/utils" | jq '.[].name'
 
-# Search for filenames
-curl -s "https://api.github.com/search/code?q=filename:tracking+repo:gip-inclusion/les-emplois" | jq '.items[].path'
-
-# Search across organization
-curl -s "https://api.github.com/search/code?q=CCAS+org:gip-inclusion" | jq '.items[] | {repo: .repository.name, path: .path}'
+# Fetch and grep locally
+curl -s "https://raw.githubusercontent.com/gip-inclusion/les-emplois/master/itou/utils/constants.py" | grep -n "matomo"
 ```
 
-**Rate limits:** 10 requests/minute unauthenticated. Space out searches.
+**Option 2: Clone and search (for extensive searches)**
+```bash
+# Shallow clone to /tmp
+git clone --depth 1 https://github.com/gip-inclusion/les-emplois.git /tmp/les-emplois
+grep -r "matomo_event" /tmp/les-emplois --include="*.py" --include="*.html"
+```
+
+**Option 3: Use the contents API to explore**
+```bash
+# Get file tree recursively (may be truncated for large repos)
+curl -s "https://api.github.com/repos/gip-inclusion/les-emplois/git/trees/master?recursive=1" | jq '.tree[] | select(.path | contains("matomo")) | .path'
+```
 
 ### List Repository Contents
 
@@ -423,17 +432,19 @@ curl -s "https://api.github.com/repos/gip-inclusion/les-emplois/contents/itou/ut
 
 **Find tracking implementation:**
 ```bash
-# Django projects - look for template tags and data attributes
-curl -s "https://api.github.com/search/code?q=data-matomo+repo:gip-inclusion/les-emplois" | jq '.items[].path'
+# Get file tree and filter for tracking-related files
+curl -s "https://api.github.com/repos/gip-inclusion/les-emplois/git/trees/master?recursive=1" | \
+  jq '.tree[] | select(.path | test("matomo|tracking|analytics")) | .path'
 
-# Find JavaScript tracking
-curl -s "https://api.github.com/search/code?q=_paq.push+repo:gip-inclusion/les-emplois" | jq '.items[].path'
+# Or clone and grep (more thorough)
+git clone --depth 1 https://github.com/gip-inclusion/les-emplois.git /tmp/les-emplois
+grep -r "data-matomo\|_paq.push" /tmp/les-emplois --include="*.html" --include="*.js" -l
 ```
 
 **Find models and schema:**
 ```bash
-# Django models
-curl -s "https://api.github.com/search/code?q=class+models.Model+repo:gip-inclusion/les-emplois+path:models" | jq '.items[].path'
+# List models directory
+curl -s "https://api.github.com/repos/gip-inclusion/les-emplois/contents/itou/users" | jq '.[] | select(.name | endswith(".py")) | .name'
 
 # Database migrations (schema changes)
 curl -s "https://api.github.com/repos/gip-inclusion/les-emplois/contents/itou/users/migrations" | jq '.[].name' | tail -5
@@ -441,9 +452,15 @@ curl -s "https://api.github.com/repos/gip-inclusion/les-emplois/contents/itou/us
 
 **Find constants and enums:**
 ```bash
-# TextChoices enums (Django)
-curl -s "https://api.github.com/search/code?q=TextChoices+repo:gip-inclusion/les-emplois" | jq '.items[].path'
+# Fetch enums file directly
+curl -s "https://raw.githubusercontent.com/gip-inclusion/les-emplois/master/itou/users/enums.py" | head -50
 
-# Then fetch the file directly
-curl -s "https://raw.githubusercontent.com/gip-inclusion/les-emplois/main/itou/users/enums.py"
+# Or use tree API to find enum files
+curl -s "https://api.github.com/repos/gip-inclusion/les-emplois/git/trees/master?recursive=1" | \
+  jq '.tree[] | select(.path | test("enum|constant|choice")) | .path'
+```
+
+**Note:** Most repos use `master` branch, not `main`. Check with:
+```bash
+curl -s "https://api.github.com/repos/gip-inclusion/les-emplois" | jq '.default_branch'
 ```
