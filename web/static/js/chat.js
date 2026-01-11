@@ -296,16 +296,9 @@ async function sendMessage() {
       const data = await response.json();
       currentConversationId = data.id;
 
-      // Redirect to conversation view if we're on the list view
-      const chatOutput = document.getElementById('chatOutput');
-      if (!chatOutput) {
-        // We're on list view, redirect to conversation with pending message
-        window.location.href = `/explorations/${currentConversationId}?message=${encodeURIComponent(message)}`;
-        return;
-      }
-
-      // Update URL to new conversation (we're in the chat view)
-      history.replaceState({}, '', `/explorations/${currentConversationId}`);
+      // Redirect to conversation page (refreshes sidebar with new conversation)
+      window.location.href = `/explorations/${currentConversationId}?message=${encodeURIComponent(message)}`;
+      return;
     } catch (error) {
       console.error('Failed to create conversation:', error);
       showError('Impossible de créer la conversation');
