@@ -7,7 +7,7 @@ from . import config
 
 # Knowledge path constants
 KNOWLEDGE_ROOT = (config.BASE_DIR / "knowledge").resolve()
-KNOWLEDGE_DRAFTS_ROOT = config.BASE_DIR / "knowledge-drafts"
+KNOWLEDGE_DRAFTS_ROOT = config.BASE_DIR / "data" / "knowledge-drafts"
 ALLOWED_EXTENSIONS = {".md"}
 
 
