@@ -244,6 +244,27 @@ def stream_conversation(conv_id: str):
     agent = get_agent_instance()
     user_email = getattr(g, "user_email", None)
 
+    # Check if last user message was already responded to
+    last_user_msg = None
+    has_response = False
+    for msg in conv.messages:
+        if msg.type == "user":
+            last_user_msg = msg.content
+            has_response = False
+        elif msg.type == "assistant" and last_user_msg is not None:
+            has_response = True
+
+    # If already responded and agent not running, nothing to stream
+    if has_response and not agent.is_running(conv_id):
+        def done_stream():
+            yield f"event: done\n"
+            yield f"data: {json.dumps({'conversation_id': conv_id})}\n\n"
+        return Response(
+            done_stream(),
+            mimetype="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
     if agent.is_running(conv_id):
         def wait_stream():
             yield f"event: system\n"
@@ -265,14 +286,10 @@ def stream_conversation(conv_id: str):
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
-    last_message = None
-    for msg in reversed(conv.messages):
-        if msg.type == "user":
-            last_message = msg.content
-            break
-
-    if not last_message:
+    if not last_user_msg:
         return jsonify({"error": "No user message to respond to"}), 400
+
+    last_message = last_user_msg
 
     # Inject knowledge editing context for knowledge conversations
     if conv.conv_type == "knowledge" and conv.file_path:
