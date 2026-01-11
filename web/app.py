@@ -37,13 +37,12 @@ app = Flask(__name__)
 def extract_user_email():
     """
     Extract authenticated user email from oauth2-proxy headers.
-
-    oauth2-proxy passes these headers to upstream:
-    - X-Forwarded-Email: user's email
-    - X-Forwarded-User: username
-    - X-Forwarded-Preferred-Username: preferred username
+    Falls back to DEFAULT_USER for local development.
     """
-    g.user_email = request.headers.get("X-Forwarded-Email")
+    g.user_email = (
+        request.headers.get("X-Forwarded-Email")
+        or config.DEFAULT_USER
+    )
     g.user_name = request.headers.get("X-Forwarded-User")
 
 
