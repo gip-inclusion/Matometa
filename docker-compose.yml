@@ -13,6 +13,8 @@ services:
     environment:
       - AGENT_BACKEND=cli
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GITHUB_PR_TOKEN=${GITHUB_PR_TOKEN}
+      - GITHUB_REPO=${GITHUB_REPO}
       - WEB_HOST=0.0.0.0
       - WEB_PORT=5000
       - WEB_DEBUG=false
