@@ -334,14 +334,17 @@ User request: """
             if msg.type in ("user", "assistant"):
                 history.append({"role": msg.type, "content": msg.content})
 
-        assistant_text_parts = []
-        assistant_msg_id = None
-
         event_queue = queue.Queue()
         error_holder = [None]
 
         def run_async():
+            # Storage state - lives in the async thread, independent of SSE
+            assistant_text_parts = []
+            assistant_msg_id = None
+
             async def collect_events():
+                nonlocal assistant_text_parts, assistant_msg_id
+
                 try:
                     async for event in agent.send_message(
                         conversation_id=conv_id,
@@ -349,12 +352,32 @@ User request: """
                         history=history,
                         session_id=conv.session_id,
                     ):
-                        event_queue.put(("event", event))
+                        # Store to database FIRST (survives client disconnect)
+                        if event.type == "assistant":
+                            assistant_text_parts.append(str(event.content))
+                            full_text = "\n".join(assistant_text_parts)
+                            if assistant_msg_id is None:
+                                msg = store.add_message(conv_id, "assistant", full_text)
+                                assistant_msg_id = msg.id if msg else None
+                            else:
+                                store.update_message(assistant_msg_id, full_text)
+
+                        if event.type in ("tool_use", "tool_result"):
+                            # Finalize current assistant message so next text creates a new one
+                            if event.type == "tool_use":
+                                assistant_msg_id = None
+                                assistant_text_parts = []
+
+                            content = json.dumps(event.content) if isinstance(event.content, dict) else str(event.content)
+                            store.add_message(conv_id, event.type, content)
 
                         if event.type == "system" and event.raw.get("subtype") == "init":
                             new_session_id = event.raw.get("session_id")
                             if new_session_id:
                                 store.update_conversation(conv_id, session_id=new_session_id)
+
+                        # Then queue for SSE (may fail if client disconnected - that's OK)
+                        event_queue.put(("event", event))
 
                 except Exception as e:
                     error_holder[0] = e
@@ -374,7 +397,7 @@ User request: """
                     break
 
                 if event:
-                    # Audit log tool usage
+                    # Audit log tool usage (still in generator for now)
                     if event.type == "tool_use":
                         tool_data = event.content if isinstance(event.content, dict) else {}
                         audit_log(
@@ -383,24 +406,6 @@ User request: """
                             tool_name=tool_data.get("tool", "unknown"),
                             tool_input=tool_data.get("input", {}),
                         )
-
-                    if event.type == "assistant":
-                        assistant_text_parts.append(str(event.content))
-                        full_text = "\n".join(assistant_text_parts)
-                        if assistant_msg_id is None:
-                            msg = store.add_message(conv_id, "assistant", full_text)
-                            assistant_msg_id = msg.id if msg else None
-                        else:
-                            store.update_message(assistant_msg_id, full_text)
-
-                    if event.type in ("tool_use", "tool_result"):
-                        # Finalize current assistant message so next text creates a new one
-                        if event.type == "tool_use":
-                            assistant_msg_id = None
-                            assistant_text_parts = []
-
-                        content = json.dumps(event.content) if isinstance(event.content, dict) else str(event.content)
-                        store.add_message(conv_id, event.type, content)
 
                     yield f"event: {event.type}\n"
                     yield f"data: {json.dumps(event.to_dict())}\n\n"
