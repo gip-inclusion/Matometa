@@ -30,6 +30,9 @@ HOST = os.getenv("WEB_HOST", "127.0.0.1")
 PORT = int(os.getenv("WEB_PORT", "5000"))
 DEBUG = os.getenv("WEB_DEBUG", "true").lower() == "true"
 
+# Default user for local development (when oauth-proxy not present)
+DEFAULT_USER = os.getenv("DEFAULT_USER", "admin@localhost")
+
 # Logging
 LOG_FILE = BASE_DIR / "data" / "agent.log"
 LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
