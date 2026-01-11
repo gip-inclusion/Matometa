@@ -635,8 +635,11 @@ function appendEvent(type, data) {
     } else {
       block.innerHTML = formatAssistantContent(data.content);
     }
-    // Render mermaid diagrams after adding to DOM
-    setTimeout(() => renderMermaid(block), 0);
+    // Render mermaid diagrams and options after adding to DOM
+    setTimeout(() => {
+      renderMermaid(block);
+      renderOptions(block);
+    }, 0);
   } else if (type === 'tool_use') {
     block.innerHTML = formatToolUse(data.content);
   } else if (type === 'tool_result') {
@@ -853,6 +856,50 @@ async function renderMermaid(element) {
       console.error('Mermaid rendering failed:', err);
       // Keep original code block if rendering fails
     }
+  }
+}
+
+/**
+ * Render options blocks as clickable buttons
+ * Format: ```options\nLabel | hidden context\nLabel 2\n```
+ */
+function renderOptions(element) {
+  const codeBlocks = element.querySelectorAll('pre code.language-options');
+
+  for (const block of codeBlocks) {
+    const code = block.textContent.trim();
+    const lines = code.split('\n').filter(line => line.trim());
+
+    const container = document.createElement('div');
+    container.className = 'options-buttons';
+
+    for (const line of lines) {
+      const parts = line.split('|').map(p => p.trim());
+      const label = parts[0];
+      const hiddenContext = parts[1] || '';
+
+      const button = document.createElement('button');
+      button.className = 'option-button';
+      button.textContent = label;
+      button.dataset.prompt = hiddenContext ? `${label} ${hiddenContext}` : label;
+
+      button.addEventListener('click', () => {
+        const chatInput = document.getElementById('chatInput');
+        if (chatInput) {
+          chatInput.value = button.dataset.prompt;
+          chatInput.focus();
+          // Optionally auto-send
+          const sendBtn = document.getElementById('chatSendBtn');
+          if (sendBtn) sendBtn.click();
+        }
+      });
+
+      container.appendChild(button);
+    }
+
+    // Replace the code block with buttons
+    const preElement = block.parentElement;
+    preElement.replaceWith(container);
   }
 }
 

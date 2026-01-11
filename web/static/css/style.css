@@ -646,6 +646,30 @@ body.has-sidebar {
   overflow-x: auto;
 }
 
+/* Options buttons */
+.options-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.option-button {
+  background: white;
+  border: 1px solid var(--bs-primary);
+  color: var(--bs-primary);
+  padding: 0.5rem 1rem;
+  border-radius: 2rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.15s ease;
+}
+
+.option-button:hover {
+  background: var(--bs-primary);
+  color: white;
+}
+
 /* ==========================================================================
    Report styling - visually distinct from regular chat
    ========================================================================== */
