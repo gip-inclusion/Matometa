@@ -11,7 +11,7 @@ services:
     mem_limit: 2g
     pids_limit: 200
     environment:
-      - AGENT_BACKEND=sdk
+      - AGENT_BACKEND=cli
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - WEB_HOST=0.0.0.0
       - WEB_PORT=5000
