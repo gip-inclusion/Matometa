@@ -14,10 +14,10 @@ from . import config
 DB_PATH = config.BASE_DIR / "data" / "matometa.db"
 
 # Schema version for migrations
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 # Valid column names for dynamic updates (security: prevents SQL injection)
-VALID_CONVERSATION_COLUMNS = frozenset({"title", "session_id", "user_id", "status", "updated_at"})
+VALID_CONVERSATION_COLUMNS = frozenset({"title", "session_id", "user_id", "status", "pr_url", "updated_at"})
 VALID_REPORT_COLUMNS = frozenset({"title", "website", "category", "tags", "original_query", "content", "updated_at"})
 
 
@@ -90,6 +90,9 @@ def init_db():
 
         if current_version < 6:
             _migrate_to_v6(conn)
+
+        if current_version < 7:
+            _migrate_to_v7(conn)
 
 
 def _create_schema_v1(conn: sqlite3.Connection):
@@ -266,6 +269,17 @@ def _migrate_to_v6(conn: sqlite3.Connection):
     conn.execute("UPDATE schema_version SET version = 6")
 
 
+def _migrate_to_v7(conn: sqlite3.Connection):
+    """Migrate to v7: add pr_url column to conversations for GitHub PR tracking."""
+    cursor = conn.execute("PRAGMA table_info(conversations)")
+    columns = {row["name"] for row in cursor.fetchall()}
+
+    if "pr_url" not in columns:
+        conn.execute("ALTER TABLE conversations ADD COLUMN pr_url TEXT")
+
+    conn.execute("UPDATE schema_version SET version = 7")
+
+
 # =============================================================================
 # Data Classes
 # =============================================================================
@@ -314,6 +328,7 @@ class Conversation:
     conv_type: str = "exploration"  # 'exploration' or 'knowledge'
     file_path: Optional[str] = None  # for knowledge conversations
     status: str = "active"  # 'active', 'committed', 'abandoned'
+    pr_url: Optional[str] = None  # GitHub PR URL for knowledge conversations
     messages: list[Message] = field(default_factory=list)
     report: Optional[Report] = None
     created_at: datetime = field(default_factory=datetime.now)
@@ -333,6 +348,7 @@ class Conversation:
             "conv_type": self.conv_type,
             "file_path": self.file_path,
             "status": self.status,
+            "pr_url": self.pr_url,
             "has_report": self.has_report,
             "messages": [
                 {
@@ -461,6 +477,7 @@ class ConversationStore:
                 conv_type=row["conv_type"] or "exploration",
                 file_path=row["file_path"],
                 status=row["status"] or "active",
+                pr_url=row["pr_url"] if "pr_url" in row.keys() else None,
                 messages=messages,
                 report=report,
                 created_at=datetime.fromisoformat(row["created_at"]),
@@ -579,7 +596,7 @@ class ConversationStore:
 
     def update_conversation(self, conv_id: str, **kwargs) -> bool:
         """Update conversation fields."""
-        allowed = {"title", "session_id", "user_id", "status"}
+        allowed = {"title", "session_id", "user_id", "status", "pr_url"}
         updates = {k: v for k, v in kwargs.items() if k in allowed}
         if not updates:
             return False

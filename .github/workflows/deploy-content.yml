@@ -1,0 +1,23 @@
+name: Deploy Content Changes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'knowledge/**'
+      - 'skills/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull changes on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ljt.cc
+          username: matometa
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /srv/matometa
+            git fetch origin main
+            git checkout origin/main -- knowledge/ skills/

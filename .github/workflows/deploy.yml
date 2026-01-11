@@ -1,0 +1,34 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'knowledge/**'
+      - 'skills/**'
+      - 'docs/**'
+      - '*.md'
+      - '.gitignore'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ljt.cc
+          username: matometa
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /srv/matometa
+
+            # Pull latest from git (includes knowledge/skills)
+            git fetch origin main
+            git reset --hard origin/main
+
+            # Rebuild and restart container
+            docker compose up -d --build

@@ -1,7 +1,6 @@
 """Knowledge API routes."""
 
 import shutil
-from datetime import datetime
 
 import markdown
 from flask import Blueprint, jsonify, request
@@ -12,9 +11,8 @@ from ..helpers import (
     list_knowledge_files,
     get_staging_dir,
     list_staged_files,
-    KNOWLEDGE_ROOT,
 )
-from .. import config
+from ..github import GitHubClient, GitHubError
 
 bp = Blueprint("knowledge", __name__, url_prefix="/api/knowledge")
 
@@ -105,7 +103,7 @@ def get_staged_files(conv_id: str):
 
 @bp.route("/conversations/<conv_id>/commit", methods=["POST"])
 def commit_knowledge_changes(conv_id: str):
-    """Commit staged changes to knowledge directory."""
+    """Create GitHub PR with staged changes."""
     conv = store.get_conversation(conv_id, include_messages=False)
     if not conv or conv.conv_type != "knowledge":
         return jsonify({"error": "Knowledge conversation not found"}), 404
@@ -124,38 +122,42 @@ def commit_knowledge_changes(conv_id: str):
     data = request.get_json() or {}
     summary = data.get("summary", "Knowledge update")
 
-    committed_files = []
+    # Collect file contents
+    files = {}
     for rel_path in staged_files:
         src = staging_dir / rel_path
-        dst = KNOWLEDGE_ROOT / rel_path
         if src.exists():
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
-            committed_files.append(rel_path)
+            # Path in repo includes knowledge/ prefix
+            repo_path = f"knowledge/{rel_path}"
+            files[repo_path] = src.read_text()
 
-    # Prepend to JOURNAL.md
-    journal_path = config.BASE_DIR / "JOURNAL.md"
-    files_list = ", ".join(committed_files)
-    date_str = datetime.now().strftime("%Y-%m-%d")
-    journal_entry = f"- {date_str}. {summary} ({files_list})\n"
+    # Create GitHub PR
+    try:
+        github = GitHubClient()
+        pr_url = github.create_knowledge_pr(
+            files=files,
+            summary=summary,
+            conversation_id=conv_id,
+        )
+    except GitHubError as e:
+        return jsonify({"error": f"GitHub PR creation failed: {e}"}), 500
 
-    existing = journal_path.read_text() if journal_path.exists() else ""
-    header_end = existing.find("\n\n- ")
-    if header_end == -1:
-        header_end = existing.find("\n\n", existing.find(">"))
-        if header_end == -1:
-            header_end = len(existing)
-
-    new_content = existing[:header_end] + "\n\n" + journal_entry + existing[header_end + 2:]
-    journal_path.write_text(new_content)
-
+    # Clean up staging
     shutil.rmtree(staging_dir, ignore_errors=True)
-    store.update_conversation(conv_id, status="committed")
+    store.update_conversation(conv_id, status="committed", pr_url=pr_url)
+
+    # Add system message to conversation with PR link
+    store.add_message(
+        conv_id,
+        type="system",
+        content=f"Changes submitted as pull request: {pr_url}",
+    )
 
     return jsonify({
         "status": "committed",
-        "files": committed_files,
+        "files": list(files.keys()),
         "conversation_id": conv_id,
+        "pr_url": pr_url,
     })
 
 
