@@ -394,12 +394,17 @@ class ConversationStore:
 
         return conv
 
-    def get_conversation(self, conv_id: str, include_messages: bool = True) -> Optional[Conversation]:
-        """Get a conversation by ID."""
+    def get_conversation(self, conv_id: str, include_messages: bool = True, user_id: Optional[str] = None) -> Optional[Conversation]:
+        """Get a conversation by ID. Optionally filter by user_id for access control."""
         with get_db() as conn:
-            row = conn.execute(
-                "SELECT * FROM conversations WHERE id = ?", (conv_id,)
-            ).fetchone()
+            if user_id:
+                row = conn.execute(
+                    "SELECT * FROM conversations WHERE id = ? AND user_id = ?", (conv_id, user_id)
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT * FROM conversations WHERE id = ?", (conv_id,)
+                ).fetchone()
 
             if not row:
                 return None
