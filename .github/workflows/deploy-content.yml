@@ -12,12 +12,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Pull changes on server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ljt.cc
-          username: matometa
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
-            cd /srv/matometa
-            git fetch origin main
-            git checkout origin/main -- knowledge/ skills/
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ljt.cc >> ~/.ssh/known_hosts
+
+          ssh matometa@ljt.cc 'cd /srv/matometa && git fetch origin main && git checkout origin/main -- knowledge/ skills/'
