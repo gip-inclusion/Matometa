@@ -875,8 +875,9 @@ function renderOptions(element) {
       const fullPrompt = parts[1] || label;
 
       const button = document.createElement('button');
-      // First button is primary, rest are outline
-      button.className = index === 0 ? 'btn btn-primary btn-sm' : 'btn btn-outline-primary btn-sm';
+      // Last button is primary (recommended action), rest are outline
+      const isLast = index === lines.length - 1;
+      button.className = isLast ? 'btn btn-primary btn-sm' : 'btn btn-outline-primary btn-sm';
       button.textContent = label;
       button.dataset.prompt = fullPrompt;
 

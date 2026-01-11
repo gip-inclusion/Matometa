@@ -294,7 +294,7 @@ Comparer deux mois | Comparer le trafic de décembre 2025 avec novembre 2025
 - Text before `|` = short button label
 - Text after `|` = full request (pre-filled in input, user can edit)
 - If no `|`, the label is used as-is
-- First option is the primary/recommended action
+- Last option is the primary/recommended action
 
 Clicking populates the message bar without sending, so the user can edit.
 Write options in French (use accents!). Use this for:
