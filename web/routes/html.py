@@ -2,7 +2,7 @@
 
 import re
 
-from flask import Blueprint, render_template, request
+from flask import Blueprint, render_template, request, g, redirect
 
 from ..storage import store
 from ..helpers import validate_knowledge_path, list_knowledge_files, list_staged_files
@@ -24,8 +24,9 @@ def humanize_title(title: str) -> str:
 
 
 def get_sidebar_data():
-    """Get data for sidebar (conversations only, reports are now in DB)."""
-    conversations = store.list_conversations(limit=10)
+    """Get data for sidebar (recent conversations for current user)."""
+    user_email = getattr(g, "user_email", None)
+    conversations = store.list_conversations(limit=15, user_id=user_email)
     agent = get_agent_instance()
 
     running_ids = []
@@ -48,14 +49,36 @@ def index():
 
 @bp.route("/explorations")
 def explorations():
-    """Explorations section - chat interface."""
+    """Explorations section - conversation list or redirect from old URL."""
+    # Redirect old query param format to new path format
+    if conv_id := request.args.get("conv"):
+        return redirect(f"/explorations/{conv_id}", code=301)
+
     data = get_sidebar_data()
-    current_conv_id = request.args.get("conv")
-    current_conv = None
-    if current_conv_id:
-        current_conv = store.get_conversation(current_conv_id, include_messages=False)
-        if current_conv and current_conv.title:
-            current_conv.title = humanize_title(current_conv.title)
+    return render_template("explorations.html", section="explorations", current_conv=None, **data)
+
+
+@bp.route("/explorations/new")
+def explorations_new():
+    """Start a new conversation - empty chat UI."""
+    data = get_sidebar_data()
+    return render_template("explorations.html", section="explorations", current_conv=None, is_new=True, **data)
+
+
+@bp.route("/explorations/<conv_id>")
+def explorations_conversation(conv_id: str):
+    """View a specific conversation."""
+    user_email = getattr(g, "user_email", None)
+    current_conv = store.get_conversation(conv_id, include_messages=False, user_id=user_email)
+
+    if not current_conv:
+        # Conversation not found or not owned by user
+        return redirect("/explorations")
+
+    if current_conv.title:
+        current_conv.title = humanize_title(current_conv.title)
+
+    data = get_sidebar_data()
     return render_template("explorations.html", section="explorations", current_conv=current_conv, **data)
 
 
