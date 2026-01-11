@@ -11,7 +11,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Pull changes on server
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
         env:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
@@ -20,4 +23,16 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H ljt.cc >> ~/.ssh/known_hosts
 
-          ssh matometa@ljt.cc 'cd /srv/matometa && git fetch origin main && git checkout origin/main -- knowledge/ skills/'
+      - name: Sync content
+        run: |
+          rsync -avz --delete \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.DS_Store' \
+            knowledge/ matometa@ljt.cc:/srv/matometa/knowledge/
+
+          rsync -avz --delete \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.DS_Store' \
+            skills/ matometa@ljt.cc:/srv/matometa/skills/
