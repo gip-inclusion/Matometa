@@ -4,6 +4,12 @@
 > Do NOT append to this file simply to say a report was created.
 > New entries are added to the top of the list.
 
+- 2026-01-11. Query workflow: added "Clarify intent" step requiring options block at conversation start (quick data / short analysis / full report). Added report workflow in Presenting Options: suggest sections in longhand for full reports, offer to save after substantial answers.
+- 2026-01-11. Options code block: implemented `\`\`\`options` for clickable action buttons in web UI. Format: `Label | Full request in French`. First button primary, rest outline. Populates message bar without auto-sending.
+- 2026-01-11. Removed "Produire un rapport détaillé" checkbox feature from web UI. Reports now saved via save_report skill when user confirms.
+- 2026-01-11. Mermaid: added Sankey, Treemap, Quadrant, Gitgraph examples with analytics-relevant use cases. Added DSFR color palette (#006ADC, #000638, #ADB6FF, #E57200, #FFA347).
+- 2026-01-11. Created `skills/wishlist` for logging capability requests, blocked operations, and improvement ideas. Categories: permission, tool, knowledge, skill, workflow, other. Agent should use when tools require approval or are blocked.
+- 2026-01-11. Security hardening: container (cap_drop ALL, no-new-privileges, mem/pid limits), removed WebFetch/WebSearch from SDK (bypass container network), restricted curl to inclusion.gouv.fr and github.com/gip-inclusion. Added "Querying GitHub Repositories" section to AGENTS.md with curl-based alternatives.
 - 2026-01-07. Traduction française de plateforme.md (sites/plateforme.md)
 - 2026-01-07. Traduction française de pilotage.md (sites/pilotage.md)
 - 2026-01-07. Traduction française de communaute.md (sites/communaute.md)
