@@ -75,12 +75,17 @@ class CLIBackend(AgentBackend):
 
         logger.info(f"Starting claude CLI: {' '.join(cmd[:4])}... (prompt length: {len(prompt)})")
 
+        # Build environment: inherit from parent but remove ANTHROPIC_API_KEY
+        # so CLI uses OAuth credentials instead
+        env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+
         # Spawn process
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(config.BASE_DIR),
+            env=env,
         )
 
         logger.info(f"Process started with PID: {process.pid}")
