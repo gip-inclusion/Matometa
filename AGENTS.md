@@ -81,13 +81,14 @@ Site-specific:
 
 For every query, follow this process:
 
-1. **Clarify intent** — Before diving in, ask the user what they need using an
-   options block (see "Presenting Options"). Typical choices:
+1. **Clarify intent** — ALWAYS ask the user what they need after your FIRST answer,
+   using an options block (see "Presenting Options"). Typical choices:
    - Quick data point (un chiffre rapide)
    - Short analysis (quelques paragraphes)
    - Full report (rapport complet avec sections, graphiques, recommandations)
 
-   If the user chooses a report, remember this for the entire conversation.
+   This is MANDATORY for every new conversation. If the user chooses a report,
+   remember this for the entire conversation.
 
 2. **Desk research** — Read relevant knowledge files. Check previous reports on
    similar topics. DO NOT query without reading domain knowledge first.
@@ -313,13 +314,21 @@ Rapport complet | Générer un rapport complet avec : 1) Contexte et volume glob
 ```
 ~~~
 
-After a substantial answer (data tables, analysis, insights), offer to save it:
+**PROACTIVELY offer to save reports.** After ANY of these, propose saving:
+- Data tables with multiple rows
+- Analysis spanning multiple paragraphs
+- Answers with charts or visualizations
+- Comparative analyses
+
+Use this format after substantial answers:
 ~~~markdown
 ```options
 Sauvegarder ce rapport | Sauvegarder cette analyse comme rapport
 Approfondir | Approfondir cette analyse avec des données supplémentaires
 ```
 ~~~
+
+Do NOT wait for the user to ask. If you produced something worth keeping, offer to save it.
 
 When the user confirms they want a report saved, use the `save_report` skill.
 
