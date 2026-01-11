@@ -3,7 +3,7 @@
 import shutil
 
 import markdown
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from ..storage import store
 from ..helpers import (
@@ -45,7 +45,7 @@ def start_knowledge_conversation(file_path: str):
     if not validated_path:
         return jsonify({"error": "Invalid or non-existent file path"}), 404
 
-    existing = store.get_active_knowledge_conversation(file_path)
+    existing = store.get_active_knowledge_conversation(file_path, user_id=g.user_email)
     if existing:
         return jsonify({
             "id": existing.id,
@@ -59,7 +59,7 @@ def start_knowledge_conversation(file_path: str):
             },
         })
 
-    conv = store.create_conversation(conv_type="knowledge", file_path=file_path)
+    conv = store.create_conversation(conv_type="knowledge", file_path=file_path, user_id=g.user_email)
 
     staging_dir = get_staging_dir(conv.id)
     staging_dir.mkdir(parents=True, exist_ok=True)

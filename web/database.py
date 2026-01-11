@@ -543,15 +543,23 @@ class ConversationStore:
                 for row in rows
             ]
 
-    def get_active_knowledge_conversation(self, file_path: str) -> Optional[Conversation]:
-        """Get active knowledge conversation for a file."""
+    def get_active_knowledge_conversation(self, file_path: str, user_id: Optional[str] = None) -> Optional[Conversation]:
+        """Get active knowledge conversation for a file, optionally filtered by user."""
         with get_db() as conn:
-            row = conn.execute(
-                """SELECT * FROM conversations
-                   WHERE conv_type = 'knowledge' AND file_path = ? AND status = 'active'
-                   ORDER BY updated_at DESC LIMIT 1""",
-                (file_path,)
-            ).fetchone()
+            if user_id:
+                row = conn.execute(
+                    """SELECT * FROM conversations
+                       WHERE conv_type = 'knowledge' AND file_path = ? AND status = 'active' AND user_id = ?
+                       ORDER BY updated_at DESC LIMIT 1""",
+                    (file_path, user_id)
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    """SELECT * FROM conversations
+                       WHERE conv_type = 'knowledge' AND file_path = ? AND status = 'active'
+                       ORDER BY updated_at DESC LIMIT 1""",
+                    (file_path,)
+                ).fetchone()
 
             if not row:
                 return None
