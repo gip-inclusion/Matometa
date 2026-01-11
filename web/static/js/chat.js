@@ -44,6 +44,11 @@ document.body.addEventListener('htmx:afterSwap', (e) => {
       loadConversation(convMatch[1]);
     } else if (path === '/explorations' || path === '/explorations/new') {
       currentConversationId = null;
+      // Focus input on new conversation page
+      if (path === '/explorations/new') {
+        const input = document.getElementById('chatInput');
+        if (input) input.focus();
+      }
     }
   }
 });
