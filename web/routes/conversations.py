@@ -80,7 +80,7 @@ def create_conversation():
 def list_conversations():
     """List recent conversations."""
     limit = request.args.get("limit", 20, type=int)
-    convs = store.list_conversations(limit=limit)
+    convs = store.list_conversations(limit=limit, user_id=g.user_email)
     agent = get_agent_instance()
     return jsonify({
         "conversations": [
@@ -100,7 +100,7 @@ def list_conversations():
 @bp.route("/<conv_id>", methods=["GET"])
 def get_conversation(conv_id: str):
     """Get a conversation with all messages."""
-    conv = store.get_conversation(conv_id)
+    conv = store.get_conversation(conv_id, user_id=g.user_email)
     if not conv:
         return jsonify({"error": "Conversation not found"}), 404
 
@@ -234,7 +234,7 @@ def stream_conversation(conv_id: str):
     from ..helpers import get_staging_dir, KNOWLEDGE_ROOT
     from ..audit import audit_log
 
-    conv = store.get_conversation(conv_id)
+    conv = store.get_conversation(conv_id, user_id=g.user_email)
     if not conv:
         return jsonify({"error": "Conversation not found"}), 404
 
