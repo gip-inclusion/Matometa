@@ -3,12 +3,23 @@
 
 import argparse
 import json
+import os
 import sqlite3
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
+
 # Database path
 DB_PATH = Path(__file__).parent.parent.parent.parent / "data" / "matometa.db"
+
+# Notion config
+NOTION_TOKEN = os.getenv("NOTION_TOKEN")
+NOTION_WISHLIST_DB = os.getenv("NOTION_WISHLIST_DB")
 
 CATEGORIES = ["permission", "tool", "knowledge", "skill", "workflow", "other"]
 
@@ -24,7 +35,8 @@ def init_db():
             title TEXT NOT NULL,
             description TEXT,
             conversation_id TEXT,
-            status TEXT DEFAULT 'open'
+            status TEXT DEFAULT 'open',
+            notion_page_id TEXT
         )
     """)
     conn.execute("""
@@ -35,8 +47,66 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_wishlist_status
         ON wishlist(status)
     """)
+    # Add notion_page_id column if missing (migration)
+    try:
+        conn.execute("ALTER TABLE wishlist ADD COLUMN notion_page_id TEXT")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     conn.commit()
     conn.close()
+
+
+def push_to_notion(title: str, category: str, description: str = None) -> str | None:
+    """Create a page in Notion wishlist database. Returns page ID or None."""
+    if not NOTION_TOKEN or not NOTION_WISHLIST_DB:
+        return None
+
+    headers = {
+        "Authorization": f"Bearer {NOTION_TOKEN}",
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+    }
+
+    # Build page properties (must match Notion database schema)
+    properties = {
+        "Fonction": {"title": [{"text": {"content": title}}]},
+        "Catégorie": {"select": {"name": category}},
+        "Statut": {"status": {"name": "En attente"}},
+        "Source": {"rich_text": [{"text": {"content": "Matometa"}}]},
+    }
+    if description:
+        properties["Description"] = {"rich_text": [{"text": {"content": description}}]}
+
+    # No children blocks needed - description goes in property
+    children = []
+
+    payload = {
+        "parent": {"database_id": NOTION_WISHLIST_DB},
+        "properties": properties,
+    }
+    if children:
+        payload["children"] = children
+
+    try:
+        req = urllib.request.Request(
+            "https://api.notion.com/v1/pages",
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode("utf-8"))
+                page_id = data.get("id")
+                print(f"  → Synced to Notion")
+                return page_id
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8")[:100]
+        print(f"  → Notion sync failed: {e.code} {body}")
+        return None
+    except Exception as e:
+        print(f"  → Notion sync error: {e}")
+        return None
 
 
 def add_wish(category: str, title: str, description: str = None, conversation_id: str = None):
@@ -45,11 +115,14 @@ def add_wish(category: str, title: str, description: str = None, conversation_id
         print(f"Error: category must be one of {CATEGORIES}")
         return False
 
+    # Push to Notion first
+    notion_page_id = push_to_notion(title, category, description)
+
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
-        """INSERT INTO wishlist (timestamp, category, title, description, conversation_id)
-           VALUES (?, ?, ?, ?, ?)""",
-        (datetime.now().isoformat(), category, title, description, conversation_id)
+        """INSERT INTO wishlist (timestamp, category, title, description, conversation_id, notion_page_id)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (datetime.now().isoformat(), category, title, description, conversation_id, notion_page_id)
     )
     conn.commit()
 
@@ -111,6 +184,39 @@ def update_status(wish_id: int, status: str):
     print(f"Updated wish #{wish_id} to status: {status}")
 
 
+def sync_to_notion():
+    """Sync all wishes without a notion_page_id to Notion."""
+    if not NOTION_TOKEN or not NOTION_WISHLIST_DB:
+        print("Error: NOTION_TOKEN and NOTION_WISHLIST_DB must be set")
+        return
+
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT * FROM wishlist WHERE notion_page_id IS NULL ORDER BY timestamp"
+    ).fetchall()
+
+    if not rows:
+        print("All wishes already synced to Notion.")
+        return
+
+    print(f"Syncing {len(rows)} wishes to Notion...")
+    synced = 0
+    for row in rows:
+        page_id = push_to_notion(row["title"], row["category"], row["description"])
+        if page_id:
+            conn.execute(
+                "UPDATE wishlist SET notion_page_id = ? WHERE id = ?",
+                (page_id, row["id"])
+            )
+            conn.commit()
+            synced += 1
+            print(f"  #{row['id']}: {row['title']}")
+
+    conn.close()
+    print(f"Synced {synced}/{len(rows)} wishes.")
+
+
 def stats():
     """Show wishlist statistics."""
     conn = sqlite3.connect(DB_PATH)
@@ -167,6 +273,9 @@ def main():
     # Stats command
     subparsers.add_parser("stats", help="Show statistics")
 
+    # Sync command
+    subparsers.add_parser("sync", help="Sync unsynced wishes to Notion")
+
     args = parser.parse_args()
 
     # Initialize DB
@@ -181,6 +290,8 @@ def main():
         update_status(args.id, args.status)
     elif args.command == "stats":
         stats()
+    elif args.command == "sync":
+        sync_to_notion()
 
 
 if __name__ == "__main__":
