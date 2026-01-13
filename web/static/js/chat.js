@@ -196,6 +196,8 @@ function initTitleEditing() {
   editBtn.addEventListener('click', () => {
     titleDisplay.classList.add('d-none');
     titleEdit.classList.remove('d-none');
+    editBtn.classList.add('d-none');
+    if (autoBtn) autoBtn.classList.remove('d-none');
     titleInput.focus();
     titleInput.select();
   });
@@ -204,6 +206,8 @@ function initTitleEditing() {
   cancelBtn.addEventListener('click', () => {
     titleEdit.classList.add('d-none');
     titleDisplay.classList.remove('d-none');
+    editBtn.classList.remove('d-none');
+    if (autoBtn) autoBtn.classList.add('d-none');
   });
 
   // Save title
@@ -234,6 +238,8 @@ function initTitleEditing() {
         if (h1) h1.textContent = newTitle;
         titleEdit.classList.add('d-none');
         titleDisplay.classList.remove('d-none');
+        editBtn.classList.remove('d-none');
+        if (autoBtn) autoBtn.classList.add('d-none');
       }
     } catch (error) {
       console.error('Failed to save title:', error);

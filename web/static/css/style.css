@@ -995,13 +995,31 @@ body.has-sidebar {
   white-space: nowrap;
 }
 
-.conv-title-display .btn-link {
-  opacity: 0;
-  transition: opacity 0.2s;
+.conv-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
 }
 
-.conv-title-wrapper:hover .conv-title-display .btn-link {
-  opacity: 1;
+.conv-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0;
+  height: 2rem;
+  border: none;
+  background: transparent;
+  color: #6c757d;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.conv-action-btn:hover {
+  color: #212529;
+}
+
+.conv-action-btn i {
+  font-size: 1rem;
 }
 
 .conv-title-edit {

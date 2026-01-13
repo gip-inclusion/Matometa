@@ -14,7 +14,7 @@ from . import config
 DB_PATH = config.BASE_DIR / "data" / "matometa.db"
 
 # Schema version for migrations
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 # Valid column names for dynamic updates (security: prevents SQL injection)
 VALID_CONVERSATION_COLUMNS = frozenset({"title", "session_id", "user_id", "status", "pr_url", "updated_at"})
@@ -93,6 +93,9 @@ def init_db():
 
         if current_version < 7:
             _migrate_to_v7(conn)
+
+        if current_version < 8:
+            _migrate_to_v8(conn)
 
 
 def _create_schema_v1(conn: sqlite3.Connection):
@@ -280,6 +283,17 @@ def _migrate_to_v7(conn: sqlite3.Connection):
     conn.execute("UPDATE schema_version SET version = 7")
 
 
+def _migrate_to_v8(conn: sqlite3.Connection):
+    """Migrate to v8: add forked_from column to conversations for fork tracking."""
+    cursor = conn.execute("PRAGMA table_info(conversations)")
+    columns = {row["name"] for row in cursor.fetchall()}
+
+    if "forked_from" not in columns:
+        conn.execute("ALTER TABLE conversations ADD COLUMN forked_from TEXT")
+
+    conn.execute("UPDATE schema_version SET version = 8")
+
+
 # =============================================================================
 # Data Classes
 # =============================================================================
@@ -329,6 +343,7 @@ class Conversation:
     file_path: Optional[str] = None  # for knowledge conversations
     status: str = "active"  # 'active', 'committed', 'abandoned'
     pr_url: Optional[str] = None  # GitHub PR URL for knowledge conversations
+    forked_from: Optional[str] = None  # ID of source conversation if forked
     messages: list[Message] = field(default_factory=list)
     report: Optional[Report] = None
     created_at: datetime = field(default_factory=datetime.now)
@@ -478,11 +493,59 @@ class ConversationStore:
                 file_path=row["file_path"],
                 status=row["status"] or "active",
                 pr_url=row["pr_url"] if "pr_url" in row.keys() else None,
+                forked_from=row["forked_from"] if "forked_from" in row.keys() else None,
                 messages=messages,
                 report=report,
                 created_at=datetime.fromisoformat(row["created_at"]),
                 updated_at=datetime.fromisoformat(row["updated_at"]),
             )
+
+    def fork_conversation(self, source_conv_id: str, new_user_id: str) -> Optional[Conversation]:
+        """
+        Deep copy a conversation for a new user.
+
+        Creates a new conversation with all messages copied. The new conversation
+        has a new ID, belongs to new_user_id, and tracks its origin via forked_from.
+        Reports are NOT copied (they belong to the original conversation).
+        """
+        # Get source conversation with all messages
+        source = self.get_conversation(source_conv_id, include_messages=True)
+        if not source:
+            return None
+
+        now = datetime.now()
+        new_id = str(uuid.uuid4())
+
+        with get_db() as conn:
+            # Create the new conversation
+            conn.execute(
+                """INSERT INTO conversations
+                   (id, user_id, title, session_id, conv_type, file_path, status, forked_from, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    new_id,
+                    new_user_id,
+                    source.title,
+                    None,  # New session_id (will be set when agent runs)
+                    source.conv_type,
+                    source.file_path,
+                    "active",  # Reset status
+                    source_conv_id,  # Track fork origin
+                    now.isoformat(),
+                    now.isoformat(),
+                )
+            )
+
+            # Deep copy all messages
+            for msg in source.messages:
+                conn.execute(
+                    """INSERT INTO messages (conversation_id, type, role, content, timestamp)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (new_id, msg.type, msg.type, msg.content, msg.created_at.isoformat())
+                )
+
+        # Return the new conversation
+        return self.get_conversation(new_id, include_messages=True)
 
     def list_conversations(
         self, user_id: Optional[str] = None, limit: int = 50, conv_type: Optional[str] = None,

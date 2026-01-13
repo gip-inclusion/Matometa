@@ -205,6 +205,37 @@ def generate_title(conv_id: str):
         return jsonify({"error": str(e)}), 500
 
 
+@bp.route("/<conv_id>/fork", methods=["POST"])
+def fork_conversation(conv_id: str):
+    """Fork (deep copy) a conversation.
+
+    Creates a new conversation owned by the current user with all messages copied.
+    The original conversation is unchanged.
+    """
+    user_email = getattr(g, "user_email", None)
+    if not user_email:
+        return jsonify({"error": "Authentication required"}), 401
+
+    # Check source conversation exists
+    source = store.get_conversation(conv_id, include_messages=False)
+    if not source:
+        return jsonify({"error": "Conversation not found"}), 404
+
+    # Fork the conversation
+    new_conv = store.fork_conversation(conv_id, user_email)
+    if not new_conv:
+        return jsonify({"error": "Failed to fork conversation"}), 500
+
+    return jsonify({
+        "id": new_conv.id,
+        "forked_from": conv_id,
+        "links": {
+            "self": f"/api/conversations/{new_conv.id}",
+            "view": f"/explorations/{new_conv.id}",
+        },
+    })
+
+
 @bp.route("/<conv_id>/messages", methods=["POST"])
 def send_message(conv_id: str):
     """Send a message to start agent processing.

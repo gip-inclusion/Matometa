@@ -16,16 +16,26 @@
           {% endif %}
           <i class="ri-compass-discover-line ri-2x text-primary"></i>
           <div class="conv-title-wrapper">
-            <div class="conv-title-display" id="convTitleDisplay">
-              <h1 class="mb-0">{% if current_conv %}{{ current_conv.title or 'Nouvelle conversation' }}{% elif is_new %}Nouvelle conversation{% else %}Explorations{% endif %}</h1>
-              {% if current_conv and not is_shared %}
-              <button type="button" class="btn btn-link btn-sm text-muted p-0 ms-2" id="editTitleBtn" title="Renommer">
-                <i class="ri-pencil-line"></i>
-              </button>
-              <button type="button" class="btn btn-link btn-sm text-muted p-0 ms-1" id="autoTitleBtn" title="Générer un titre">
-                <i class="ri-magic-line"></i>
-              </button>
+            <p class="text-muted mb-1 small">
+              {% if current_conv %}
+                {% if is_shared %}
+                  <i class="ri-user-shared-line"></i> Conversation de {{ owner_email }}
+                {% elif current_conv.has_report %}
+                  <i class="ri-file-text-line"></i> Rapport
+                {% else %}
+                  Conversation
+                {% endif %}
+                {% if current_conv.forked_from %}
+                  · <a href="/explorations/{{ current_conv.forked_from }}" class="text-muted"><i class="ri-git-branch-line"></i> fork</a>
+                {% endif %}
+              {% elif is_new %}
+                Nouvelle conversation
+              {% else %}
+                Toutes les conversations
               {% endif %}
+            </p>
+            <div class="conv-title-display" id="convTitleDisplay">
+              <h1 class="mb-0">{% if current_conv %}{{ current_conv.title or 'Sans titre' }}{% elif is_new %}Posez vos questions sur les données{% else %}Explorations{% endif %}</h1>
             </div>
             {% if current_conv and not is_shared %}
             <div class="conv-title-edit d-none" id="convTitleEdit">
@@ -38,21 +48,21 @@
               </button>
             </div>
             {% endif %}
-            <p class="text-muted mb-0">
-              {% if current_conv %}
-                {% if is_shared %}
-                  <i class="ri-user-shared-line"></i> Conversation de {{ owner_email }}
-                {% elif current_conv.has_report %}
-                  <i class="ri-file-text-line"></i> Rapport
-                {% else %}
-                  Conversation
-                {% endif %}
-              {% elif is_new %}
-                Posez vos questions sur les données
-              {% else %}
-                Toutes les conversations
+            {% if current_conv %}
+            <div class="conv-actions" id="convActions">
+              {% if not is_shared %}
+              <button type="button" class="conv-action-btn" id="editTitleBtn">
+                <i class="ri-pencil-line"></i> <span>Renommer</span>
+              </button>
+              <button type="button" class="conv-action-btn d-none" id="autoTitleBtn">
+                <i class="ri-magic-line"></i> <span>Générer titre</span>
+              </button>
               {% endif %}
-            </p>
+              <button type="button" class="conv-action-btn" id="forkConvBtn">
+                <i class="ri-git-branch-line"></i> <span>Dupliquer</span>
+              </button>
+            </div>
+            {% endif %}
           </div>
         </div>
         {% if current_conv %}
@@ -221,6 +231,34 @@
     const input = document.getElementById('chatInput');
     if (input) input.focus();
     {% endif %}
+
+    // Fork button handler
+    const forkBtn = document.getElementById('forkConvBtn');
+    if (forkBtn) {
+      forkBtn.addEventListener('click', async () => {
+        {% if current_conv %}
+        const convId = '{{ current_conv.id }}';
+        forkBtn.disabled = true;
+        forkBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
+        try {
+          const resp = await fetch(`/api/conversations/${convId}/fork`, { method: 'POST' });
+          if (resp.ok) {
+            const data = await resp.json();
+            window.location.href = data.links.view;
+          } else {
+            const err = await resp.json();
+            alert('Erreur: ' + (err.error || 'Impossible de dupliquer'));
+            forkBtn.disabled = false;
+            forkBtn.innerHTML = '<i class="ri-git-branch-line"></i>';
+          }
+        } catch (e) {
+          alert('Erreur réseau');
+          forkBtn.disabled = false;
+          forkBtn.innerHTML = '<i class="ri-git-branch-line"></i>';
+        }
+        {% endif %}
+      });
+    }
   });
 </script>
 {% endblock %}

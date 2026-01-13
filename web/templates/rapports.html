@@ -16,8 +16,8 @@
           {% endif %}
           <i class="ri-file-text-line ri-2x text-primary"></i>
           <div>
+            <p class="text-muted mb-1 small">{% if current_report %}Rapport{% if current_report.website %} · {{ current_report.website }}{% endif %}{% if current_report.category %} · {{ current_report.category }}{% endif %}{% else %}Analyses et rapports sauvegardés{% endif %}</p>
             <h1 class="mb-0">{% if current_report %}{{ current_report.title }}{% else %}Rapports{% endif %}</h1>
-            <p class="text-muted mb-0">{% if current_report %}{{ current_report.website or '' }}{% if current_report.website and current_report.category %} - {% endif %}{{ current_report.category or '' }}{% else %}Analyses et rapports sauvegardes{% endif %}</p>
           </div>
         </div>
       </div>
