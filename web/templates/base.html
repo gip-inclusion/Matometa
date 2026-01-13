@@ -63,6 +63,16 @@
             <span>Connaissances</span>
           </a>
         </li>
+
+        {% if is_admin %}
+        <li class="nav-item">
+          <a href="/admin/conversations" class="nav-link {% if section == 'admin' %}active{% endif %}"
+             hx-get="/admin/conversations" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+            <i class="ri-admin-line" aria-hidden="true"></i>
+            <span>Toutes les conversations</span>
+          </a>
+        </li>
+        {% endif %}
       </ul>
 
       <!-- Recent conversations -->
@@ -127,6 +137,13 @@
               <i class="ri-book-open-line me-2"></i>Connaissances
             </a>
           </li>
+          {% if is_admin %}
+          <li class="nav-item">
+            <a href="/admin/conversations" class="nav-link {% if section == 'admin' %}active{% endif %}">
+              <i class="ri-admin-line me-2"></i>Toutes les conversations
+            </a>
+          </li>
+          {% endif %}
         </ul>
         {% if conversations %}
         <hr class="my-2">

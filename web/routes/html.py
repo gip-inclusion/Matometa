@@ -2,9 +2,9 @@
 
 import re
 
-from flask import Blueprint, render_template, request, g, redirect
+from flask import Blueprint, render_template, request, g, redirect, abort
 
-from ..config import FEATURE_KNOWLEDGE_CHAT
+from ..config import FEATURE_KNOWLEDGE_CHAT, ADMIN_USERS
 from ..storage import store
 from ..helpers import validate_knowledge_path, list_knowledge_files, list_staged_files
 from .conversations import get_agent_instance
@@ -38,7 +38,11 @@ def get_sidebar_data():
         if conv.is_running:
             running_ids.append(conv.id)
 
-    return {"conversations": conversations, "running_ids": running_ids}
+    return {
+        "conversations": conversations,
+        "running_ids": running_ids,
+        "is_admin": user_email in ADMIN_USERS,
+    }
 
 
 @bp.route("/")
@@ -151,5 +155,36 @@ def connaissances():
         active_files=active_files,
         active_conversations=active_conversations,
         feature_knowledge_chat=FEATURE_KNOWLEDGE_CHAT,
+        **data
+    )
+
+
+def is_admin() -> bool:
+    """Check if current user is an admin."""
+    user_email = getattr(g, "user_email", None)
+    return user_email in ADMIN_USERS
+
+
+@bp.route("/admin/conversations")
+def admin_conversations():
+    """Admin view: list all conversations from all users."""
+    if not is_admin():
+        abort(403)
+
+    agent = get_agent_instance()
+
+    # Get ALL conversations (no user filter)
+    all_conversations = store.list_conversations(limit=100)
+
+    for conv in all_conversations:
+        if conv.title:
+            conv.title = humanize_title(conv.title)
+        conv.is_running = agent.is_running(conv.id)
+
+    data = get_sidebar_data()
+    return render_template(
+        "admin_conversations.html",
+        section="admin",
+        all_conversations=all_conversations,
         **data
     )

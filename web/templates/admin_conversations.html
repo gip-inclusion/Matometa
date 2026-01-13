@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title_suffix %} – Toutes les conversations{% endblock %}
+
+{% block content %}
+<section class="section-content" id="section-admin">
+  <!-- Sticky section header -->
+  <div class="section-header">
+    <div class="container">
+      <div class="d-flex align-items-center justify-content-between gap-3">
+        <div class="d-flex align-items-center gap-3">
+          <i class="ri-admin-line ri-2x text-primary"></i>
+          <div class="conv-title-wrapper">
+            <h1 class="mb-0">Toutes les conversations</h1>
+            <p class="text-muted mb-0">Vue administrateur</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main content area -->
+  <div class="container section-body">
+    <div class="conversation-list" id="conversationList">
+      {% if all_conversations %}
+      <div class="row g-3">
+        {% for conv in all_conversations %}
+        <div class="col-12 col-md-6 col-lg-4" id="conv-{{ conv.id }}">
+          <div class="card conversation-card h-100">
+            <a href="/explorations/{{ conv.id }}" class="card-body text-decoration-none"
+               hx-get="/explorations/{{ conv.id }}" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+              <h5 class="card-title mb-2">{{ conv.title or 'Sans titre' }}</h5>
+              <p class="card-text text-muted small mb-0">
+                {{ conv.updated_at.strftime('%d/%m/%Y %H:%M') }}
+              </p>
+            </a>
+            <div class="card-footer-row">
+              <div class="d-flex align-items-center gap-2">
+                {% if conv.is_running %}
+                <span class="badge bg-success running-badge"><i class="ri-loader-4-line ri-spin"></i> En cours</span>
+                {% endif %}
+                {% if conv.has_report %}
+                <span class="badge bg-primary">Rapport</span>
+                {% endif %}
+              </div>
+              <span class="text-muted small">{{ conv.user_id or 'Inconnu' }}</span>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-state" id="emptyState">
+        <i class="ri-chat-3-line ri-4x text-disabled mb-3"></i>
+        <p class="mb-0 text-muted">Aucune conversation</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endblock %}

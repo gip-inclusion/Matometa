@@ -34,6 +34,15 @@ DEBUG = os.getenv("WEB_DEBUG", "true").lower() == "true"
 # Default user for local development (when oauth-proxy not present)
 DEFAULT_USER = os.getenv("DEFAULT_USER", "admin@localhost")
 
+# Admin users who can see all conversations (comma-separated emails)
+ADMIN_USERS = [
+    email.strip()
+    for email in os.getenv(
+        "ADMIN_USERS", "louisjean.teitelbaum@inclusion.gouv.fr,admin@localhost"
+    ).split(",")
+    if email.strip()
+]
+
 # Logging
 LOG_FILE = BASE_DIR / "data" / "agent.log"
 LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
