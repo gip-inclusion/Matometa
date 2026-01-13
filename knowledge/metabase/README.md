@@ -27,7 +27,7 @@ Crée `knowledge/metabase/cards.db` avec recherche full-text.
 
 ### data_inclusion.structures_v0
 
-Structures d'insertion (SIAE, etc.) avec coordonnées GPS.
+Structures d'insertion avec coordonnées GPS. Inclut SIAE et autres structures.
 
 | Colonne | Description |
 |---------|-------------|
@@ -36,10 +36,14 @@ Structures d'insertion (SIAE, etc.) avec coordonnées GPS.
 | nom | Nom de la structure |
 | code_insee | Code INSEE de la commune |
 | longitude, latitude | Coordonnées GPS (96.4% de couverture) |
-| typologie | Type de structure |
+| typologie | Type de structure (voir ci-dessous) |
 | source | Source des données |
 
 **Volumétrie:** ~73 000 structures, dont ~71 000 géolocalisées.
+
+**Filtrer les SIAE uniquement :** La table contient toutes les structures (~73k), pas seulement les SIAE (~2 096). Filtrer par `typologie IN ('ACI', 'EI', 'AI', 'ETTI', 'GEIQ', 'EITI')`.
+
+Voir [documentation détaillée des structures](../data/structures.md) pour les typologies et effectifs.
 
 ### public.communes
 
@@ -108,6 +112,49 @@ ORDER BY nb_siae DESC;
 ```
 
 **Note:** Sans filtre par département, la requête timeout. Exécuter par région ou ajouter des index sur `latitude`/`longitude`.
+
+### public.ref_clpe_ft
+
+Table de liaison commune → CLPE (Comité Local Pour l'Emploi). 357 CLPE, ~35 000 liaisons.
+
+Voir [documentation détaillée des CLPE](../data/clpe.md).
+
+### public.offre_demande_clpe
+
+Données offre/demande par CLPE. Voir [documentation CLPE](../data/clpe.md).
+
+## Limites de l'API Metabase
+
+### Limite de 2000 lignes
+
+Par défaut, Metabase limite les résultats à 2000 lignes. Pour récupérer plus de données, paginer avec `LIMIT` et `OFFSET` :
+
+```python
+all_data = []
+offset = 0
+batch_size = 2000
+
+while True:
+    result = api.execute_sql(f'''
+        SELECT * FROM ma_table
+        ORDER BY id
+        LIMIT {batch_size} OFFSET {offset}
+    ''')
+    if not result.rows:
+        break
+    all_data.extend(result.rows)
+    offset += batch_size
+```
+
+### Analyses géospatiales lourdes
+
+Pour les analyses croisant beaucoup de données (ex: 35k communes × 70k structures), les requêtes SQL timeout. **Approche recommandée :**
+
+1. **Télécharger les données** via l'API Metabase (avec pagination)
+2. **Charger en local** (SQLite, pandas, ou en mémoire)
+3. **Calculer en Python** avec formule Haversine + optimisations (grille spatiale, bounding box)
+
+Exemple : voir `scripts/calculate_siae_proximity.py` (calcul en ~6s pour 35k communes × 2k SIAE).
 
 ## Thèmes
 
