@@ -480,23 +480,10 @@ df.to_csv('/app/data/interactive/export.csv', index=False)
 # User can download at: https://matometa.../interactive/export.csv
 ```
 
-### Security Restrictions
+### Using /tmp for Scratch Work
 
-Claude Code sandbox restricts file operations outside `/app/`:
-
-- **Reading `/tmp/`:** `head`, `cat`, `tail` commands are blocked
-- **Copying from `/tmp/`:** `cp /tmp/file /app/` is blocked
-- **Workaround:** Use Python scripts to read from `/tmp/` and output results
-
-```python
-# Instead of: head /tmp/results.csv (blocked)
-# Write a script:
-import pandas as pd
-df = pd.read_csv('/tmp/results.csv')
-print(df.head(50).to_markdown())
-```
-
-For heavy computations, create a SQLite database in `/tmp/` and query it via Python.
+For heavy computations (e.g., geospatial queries on 35k communes × 2k SIAE), download
+data via Metabase API and create a SQLite database in `/tmp/` for fast local queries.
 
 Import paths:
 ```python

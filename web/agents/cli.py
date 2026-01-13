@@ -57,6 +57,10 @@ class CLIBackend(AgentBackend):
             "--setting-sources", "project",  # Only load project skills, not user plugins
         ]
 
+        # Add additional directories the agent can access
+        for d in config.ADDITIONAL_DIRS:
+            cmd.extend(["--add-dir", d])
+
         # Add AGENTS.md as system prompt
         agents_md_path = config.BASE_DIR / "AGENTS.md"
         if agents_md_path.exists():

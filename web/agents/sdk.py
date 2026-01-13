@@ -55,6 +55,7 @@ class SDKBackend(AgentBackend):
                 cwd=str(config.BASE_DIR),
                 permission_mode="acceptEdits",  # Auto-approve for web use
                 setting_sources=["project"],  # Load project skills
+                add_dirs=config.ADDITIONAL_DIRS,
             )
 
             # Add system prompt from AGENTS.md

@@ -47,5 +47,8 @@ ADMIN_USERS = [
 LOG_FILE = BASE_DIR / "data" / "agent.log"
 LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
+# Additional directories the agent can access (beyond working directory)
+ADDITIONAL_DIRS = ["/tmp"]
+
 # Feature flags
 FEATURE_KNOWLEDGE_CHAT = False  # Chat from Connaissance tab disabled (requires GitHub PAT)
