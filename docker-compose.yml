@@ -20,6 +20,8 @@ services:
       - WEB_HOST=0.0.0.0
       - WEB_PORT=5000
       - WEB_DEBUG=false
+      # Admin users who can see all conversations (comma-separated emails)
+      - ADMIN_USERS=${ADMIN_USERS}
     ports:
       - "127.0.0.1:5002:5000"
     volumes:
