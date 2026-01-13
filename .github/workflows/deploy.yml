@@ -41,7 +41,6 @@ jobs:
             --exclude='reports/' \
             --exclude='claude-credentials/' \
             --exclude='.claude/skills' \
-            --exclude='interactive/' \
             ./ matometa@ljt.cc:/srv/matometa/
 
           ssh matometa@ljt.cc 'cd /srv/matometa && docker compose up -d --build'

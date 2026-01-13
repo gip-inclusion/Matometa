@@ -60,17 +60,17 @@ app.register_blueprint(logs_bp)
 
 
 # =============================================================================
-# Static files: /interactive
+# Static files: /interactive (served from data/interactive/)
 # =============================================================================
 
-INTERACTIVE_DIR = config.BASE_DIR / "interactive"
+INTERACTIVE_DIR = config.BASE_DIR / "data" / "interactive"
 
 
 @app.route("/interactive/<path:filename>")
 def serve_interactive(filename):
-    """Serve static files from the interactive directory."""
+    """Serve static files from the data/interactive directory."""
     if not INTERACTIVE_DIR.exists():
-        abort(404)
+        INTERACTIVE_DIR.mkdir(parents=True, exist_ok=True)
     return send_from_directory(INTERACTIVE_DIR, filename)
 
 
