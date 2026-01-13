@@ -85,7 +85,6 @@ body.has-sidebar {
 .sidebar-nav {
   flex: 1;
   padding: 1rem 0;
-  overflow-y: auto;
 }
 
 .sidebar-nav .nav-item {
@@ -1229,8 +1228,6 @@ body.has-sidebar {
   margin-top: 1rem;
   padding-top: 1rem;
   border-top: 1px solid rgba(0, 0, 0, 0.1);
-  max-height: calc(100vh - 300px);
-  overflow-y: auto;
 }
 
 .nav-link-conversation {
