@@ -20,7 +20,7 @@ data = api.get_visits(site_id=117, period="month", date="2025-12-01")
 | `./knowledge/sites/` | Site-specific context — read before querying |
 | `./knowledge/matomo/README.md` | Matomo API reference |
 | `./reports/` | Output reports |
-| `./scripts/` | One-off query scripts (produced by agent) |
+| `./data/scripts/` | One-off query scripts (produced by agent) |
 | `./skills/` | Reusable agent skills |
 
 **Web UI** (for human exploration):
@@ -458,7 +458,7 @@ When documenting a new site (or updating an existing one):
 
 **For bulk updates**, run sites in parallel using sub-agents.
 
-Scripts go in `./scripts/` (one-off) or `./skills/` (reusable).
+Scripts go in `./data/scripts/` (one-off) or `./skills/` (reusable).
 
 ## Container Environment (Web Deployment)
 

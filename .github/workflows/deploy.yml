@@ -37,7 +37,6 @@ jobs:
             --exclude='data/' \
             --exclude='.env' \
             --exclude='.venv' \
-            --exclude='/scripts/' \
             --exclude='reports/' \
             --exclude='claude-credentials/' \
             --exclude='.claude/skills' \
