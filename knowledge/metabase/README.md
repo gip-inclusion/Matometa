@@ -43,7 +43,7 @@ Structures d'insertion avec coordonnées GPS. Inclut SIAE et autres structures.
 
 **Filtrer les SIAE uniquement :** La table contient toutes les structures (~73k), pas seulement les SIAE (~2 096). Filtrer par `typologie IN ('ACI', 'EI', 'AI', 'ETTI', 'GEIQ', 'EITI')`.
 
-Voir [documentation détaillée des structures](../data/structures.md) pour les typologies et effectifs.
+Voir [documentation détaillée des structures](../stats/structures.md) pour les typologies et effectifs.
 
 ### public.communes
 
@@ -183,11 +183,11 @@ Utilisateurs du service Pilotage (tableaux de bord privés).
 
 Table de liaison commune → CLPE (Comité Local Pour l'Emploi). 357 CLPE, ~35 000 liaisons.
 
-Voir [documentation détaillée des CLPE](../data/clpe.md).
+Voir [documentation détaillée des CLPE](../stats/clpe.md).
 
 ### public.offre_demande_clpe
 
-Données offre/demande par CLPE. Voir [documentation CLPE](../data/clpe.md).
+Données offre/demande par CLPE. Voir [documentation CLPE](../stats/clpe.md).
 
 ## Limites de l'API Metabase
 
