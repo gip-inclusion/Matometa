@@ -78,8 +78,8 @@ body.has-sidebar {
   color: var(--bs-primary);
 }
 
-.sidebar-brand i {
-  font-size: 1.5rem;
+.sidebar-brand img {
+  flex-shrink: 0;
 }
 
 .sidebar-nav {
