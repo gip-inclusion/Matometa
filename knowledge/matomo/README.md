@@ -65,8 +65,23 @@ Optional modifiers:
 - `expanded=1` - Include subtables inline
 - `filter_limit=N` - Max rows to return
 
-## Segments
-Matomo primarily creates reports asynchronously (synchronous creation doesn't work well because our database is too large). This means that if you want to create a report on a new variable (for example, users who have viewed the /dashboard/ page on a website), you'll have to wait between 12 and 24 hours for the results to be processed. Note that this doesn't apply to existing filters: you can combine two existing filters, and Matomo should be able to provide the report immediately, without reprocessing the data.
+## Critical Behaviors
+
+### Asynchronous Report Processing
+
+**Matomo generates reports asynchronously.** Synchronous processing doesn't work well
+due to database size.
+
+**What this means:**
+- **New segments/filters** (e.g., users who visited `/dashboard/` for the first time)
+  → Results take **12-24 hours** to become available
+- **Existing segments combined** (e.g., combining two already-processed filters)
+  → Results are **immediate**, no reprocessing needed
+
+**Practical implications:**
+1. If you need data on a new URL pattern or custom segment, plan ahead
+2. Test queries with existing segments first to validate your approach
+3. Don't assume a timeout means the query is wrong — it might just need processing time
 
 
 ## Python Client Quick Reference
