@@ -34,6 +34,7 @@
               </p>
             </a>
             <div class="card-footer-row">
+              <span class="text-muted small">{{ conv.user_id or 'Inconnu' }}</span>
               <div class="d-flex align-items-center gap-2">
                 {% if conv.is_running %}
                 <span class="badge bg-success running-badge"><i class="ri-loader-4-line ri-spin"></i> En cours</span>
@@ -41,10 +42,7 @@
                 {% if conv.has_report %}
                 <span class="badge bg-primary">Rapport</span>
                 {% endif %}
-              </div>
-              <div class="d-flex align-items-center gap-2">
-                <span class="text-muted small">{{ conv.user_id or 'Inconnu' }}</span>
-                <button type="button" class="btn btn-link btn-sm text-danger p-0 delete-conv-btn"
+                <button type="button" class="btn btn-link btn-sm text-muted p-0 delete-conv-btn"
                         data-conv-id="{{ conv.id }}" title="Supprimer">
                   <i class="ri-delete-bin-line"></i>
                 </button>
