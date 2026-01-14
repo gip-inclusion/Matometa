@@ -176,6 +176,45 @@ function initChat() {
 
   // Title editing
   initTitleEditing();
+
+  // Fork button
+  initForkButton();
+}
+
+/**
+ * Initialize fork button functionality
+ */
+function initForkButton() {
+  const forkBtn = document.getElementById('forkConvBtn');
+  if (!forkBtn) return;
+
+  // Remove existing listener to prevent duplicates
+  forkBtn.replaceWith(forkBtn.cloneNode(true));
+  const newForkBtn = document.getElementById('forkConvBtn');
+
+  newForkBtn.addEventListener('click', async () => {
+    if (!currentConversationId) return;
+
+    newForkBtn.disabled = true;
+    newForkBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
+
+    try {
+      const resp = await fetch(`/api/conversations/${currentConversationId}/fork`, { method: 'POST' });
+      if (resp.ok) {
+        const data = await resp.json();
+        window.location.href = data.links.view;
+      } else {
+        const err = await resp.json();
+        alert('Erreur: ' + (err.error || 'Impossible de dupliquer'));
+        newForkBtn.disabled = false;
+        newForkBtn.innerHTML = '<i class="ri-git-branch-line"></i> <span>Dupliquer</span>';
+      }
+    } catch (e) {
+      alert('Erreur réseau');
+      newForkBtn.disabled = false;
+      newForkBtn.innerHTML = '<i class="ri-git-branch-line"></i> <span>Dupliquer</span>';
+    }
+  });
 }
 
 /**
