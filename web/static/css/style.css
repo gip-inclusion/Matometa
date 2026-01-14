@@ -66,7 +66,7 @@ body.has-sidebar {
 
 .sidebar-brand {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 0.5rem;
   color: var(--bs-primary);
   text-decoration: none;
@@ -80,6 +80,9 @@ body.has-sidebar {
 
 .sidebar-brand img {
   flex-shrink: 0;
+  vertical-align: baseline;
+  position: relative;
+  top: 0.15em;
 }
 
 .sidebar-nav {
@@ -155,6 +158,14 @@ body.has-sidebar {
   color: var(--bs-primary);
   text-decoration: none;
   font-weight: 600;
+}
+
+.header-brand img {
+  flex-shrink: 0;
+}
+
+.offcanvas-title img {
+  vertical-align: middle;
 }
 
 /* Hide sidebar on mobile, show mobile header */
