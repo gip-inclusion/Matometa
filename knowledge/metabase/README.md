@@ -179,6 +179,37 @@ Utilisateurs du service Pilotage (tableaux de bord privés).
 
 **Note:** 100% des utilisateurs Pilotage sont aussi utilisateurs Emplois (service complémentaire).
 
+### GPS Logs (Mon Suivi / GPS)
+
+Logs d'activité de l'application GPS (Mon Suivi), importés depuis Datadog.
+
+| Colonne | Description |
+|---------|-------------|
+| Orga | Identifiant de l'organisation ou structure à laquelle appartient l'utilisateur, correspond à l'organisation ID ou structure ID dans les tables "Emploi" (= c2-itou-metabase-db/public/Utilisateurs ou encore c2-itou-metabase-db/public/Organisations et c2-itou-metabase-db/public/Structures |
+| User ID | Identifiant de l'utilisateur, correspond à l'ID dans la table c2-itou-metabase-db/public/Utilisateurs |
+| Path | L'URL où a été enregistré le log - est traduit en action (List, membership...) |
+| Message | Tout le message du log, pourra contenir des infos supplémentaires interessantes en cas d'exploration |
+| Current User Type | desc |
+| Membership | desc |
+| Target Participant | desc |
+| Target Participant Type | desc |
+| Content | desc |
+| Imer Mode | le type de  |
+| Message | desc |
+| Message | desc |
+| Message | desc |
+
+
+**Source des données:**
+- **Origine :** Logs applicatifs Datadog
+- **Import :** Quotidien via n8n vers une table ad hoc Metabase
+- **Actions trackées :**
+  - Vue d'un groupe d'accompagnateurs
+  - Ajout d'un accompagnateur
+  - Ajout d'un bénéficiaire (= création de groupe)
+
+**Note :** Contrairement à Matomo (comportement web), ces logs capturent les actions métier côté serveur.
+
 ### public.ref_clpe_ft
 
 Table de liaison commune → CLPE (Comité Local Pour l'Emploi). 357 CLPE, ~35 000 liaisons.
