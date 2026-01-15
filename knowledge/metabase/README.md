@@ -1,6 +1,8 @@
-# Inventaire Metabase
+# Metabase Cards Inventory
 
-Documentation des cartes et dashboards Metabase pour les données IAE.
+**Database:** `knowledge/metabase/cards.db`
+**Last synced:** 2026-01-14 22:12
+**Total cards:** 359
 
 ## Sources de données
 
@@ -268,7 +270,7 @@ Exemple : voir `scripts/calculate_siae_proximity.py` (calcul en ~6s pour 35k com
 | prolongations | Extensions PASS |
 | etp-effectifs | Métriques effectifs |
 | esat | Données ESAT |
-| generalites-iae | Stats générales IAE |
+| pass-iae | Stats PASS IAE |
 
 ## Synchronisation
 
@@ -291,10 +293,16 @@ CREATE TABLE cards (
     name TEXT NOT NULL,
     description TEXT,
     collection_id INTEGER,
-    dashboard_id INTEGER,
+    dashboard_id INTEGER,  -- Extracted from [XXX] prefix in name
     topic TEXT,
     sql_query TEXT,
-    tables_referenced TEXT  -- JSON array
+    tables_referenced TEXT,  -- JSON array
+    created_at TEXT,
+    updated_at TEXT
+);
+
+CREATE VIRTUAL TABLE cards_fts USING fts5(
+    name, description, sql_query
 );
 
 CREATE TABLE dashboards (
@@ -304,6 +312,13 @@ CREATE TABLE dashboards (
     pilotage_url TEXT,
     collection_id INTEGER
 );
+
+CREATE TABLE dashboard_cards (
+    dashboard_id INTEGER,
+    card_id INTEGER,
+    position INTEGER,
+    tab_name TEXT
+);
 ```
 
 ## Requêtes SQLite
@@ -312,8 +327,9 @@ CREATE TABLE dashboards (
 from skills.metabase_query.scripts.cards_db import load_cards_db
 
 db = load_cards_db()
-cards = db.search("file active")      # Recherche full-text
-cards = db.by_topic("candidatures")   # Par thème
-cards = db.by_dashboard(408)          # Par dashboard
-card = db.get(7004)                   # Par ID
+cards = db.search("file active")  # Full-text search
+cards = db.by_topic("candidatures")  # Filter by topic
+cards = db.by_dashboard(408)  # Cards in a dashboard
+cards = db.by_table("candidats")  # Cards using a table
+card = db.get(7004)  # Get by ID
 ```
