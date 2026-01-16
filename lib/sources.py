@@ -112,12 +112,13 @@ def get_source_config(source_type: str, instance: str | None = None) -> dict:
     return _substitute_env_vars(instance_config, strict=True)
 
 
-def get_metabase(instance: str | None = None):
+def get_metabase(instance: str | None = None, database_id: int | None = None):
     """
     Get a configured MetabaseAPI client.
 
     Args:
         instance: Instance name ("stats", "datalake"), or None for default
+        database_id: Override the default database ID for queries
 
     Returns:
         Configured MetabaseAPI instance
@@ -129,6 +130,7 @@ def get_metabase(instance: str | None = None):
     return MetabaseAPI(
         url=config["url"],
         api_key=config["api_key"],
+        database_id=database_id,
     )
 
 
@@ -146,8 +148,15 @@ def get_matomo(instance: str | None = None):
 
     config = get_source_config("matomo", instance)
 
+    # MatomoAPI expects hostname only (without https://)
+    url = config["url"]
+    if url.startswith("https://"):
+        url = url[8:]
+    elif url.startswith("http://"):
+        url = url[7:]
+
     return MatomoAPI(
-        base_url=config["url"],
+        url=url,
         token=config["token"],
     )
 

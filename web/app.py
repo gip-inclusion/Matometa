@@ -13,6 +13,7 @@ from .routes import (
     logs_bp,
     html_bp,
     rapports_bp,
+    query_bp,
 )
 
 # Configure logging
@@ -57,6 +58,7 @@ app.register_blueprint(conversations_bp)
 app.register_blueprint(reports_bp)
 app.register_blueprint(knowledge_bp)
 app.register_blueprint(logs_bp)
+app.register_blueprint(query_bp)
 
 
 # =============================================================================
