@@ -68,11 +68,18 @@ app.register_blueprint(query_bp)
 INTERACTIVE_DIR = config.BASE_DIR / "data" / "interactive"
 
 
+@app.route("/interactive/")
 @app.route("/interactive/<path:filename>")
-def serve_interactive(filename):
+def serve_interactive(filename=""):
     """Serve static files from the data/interactive directory."""
     if not INTERACTIVE_DIR.exists():
         INTERACTIVE_DIR.mkdir(parents=True, exist_ok=True)
+
+    # If path is a directory, serve index.html
+    full_path = INTERACTIVE_DIR / filename
+    if full_path.is_dir():
+        filename = str((full_path / "index.html").relative_to(INTERACTIVE_DIR))
+
     return send_from_directory(INTERACTIVE_DIR, filename)
 
 

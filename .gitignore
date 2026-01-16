@@ -8,6 +8,7 @@ __pycache__
 .venv
 .pytest_cache
 /data/
+!/data/interactive/
 
 reports/
 knowledge-drafts/
