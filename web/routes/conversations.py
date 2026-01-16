@@ -13,6 +13,7 @@ from flask import Blueprint, Response, jsonify, request, g
 from ..storage import store
 from ..agents import get_agent
 from .. import config
+from ..config import ADMIN_USERS
 
 logger = logging.getLogger(__name__)
 
@@ -127,10 +128,21 @@ def get_conversation(conv_id: str):
 
 @bp.route("/<conv_id>", methods=["DELETE"])
 def delete_conversation(conv_id: str):
-    """Delete a conversation."""
+    """Delete a conversation. User must be owner or admin."""
+    user_email = getattr(g, "user_email", None)
+    conv = store.get_conversation(conv_id)
+    if not conv:
+        return jsonify({"error": "Conversation not found"}), 404
+
+    # Check permission: must be owner or admin
+    is_admin = user_email in ADMIN_USERS
+    is_owner = conv.user_id == user_email
+    if not is_admin and not is_owner:
+        return jsonify({"error": "Permission denied"}), 403
+
     if store.delete_conversation(conv_id):
         return "", 200
-    return jsonify({"error": "Conversation not found"}), 404
+    return jsonify({"error": "Failed to delete"}), 500
 
 
 @bp.route("/<conv_id>", methods=["PATCH"])
@@ -500,3 +512,30 @@ def get_running():
     agent = get_agent_instance()
     running_ids = list(agent._running) if hasattr(agent, '_running') else []
     return jsonify({"running": running_ids})
+
+
+@bp.route("/<conv_id>/tags", methods=["GET"])
+def get_conversation_tags(conv_id: str):
+    """Get tags for a conversation."""
+    tags = store.get_conversation_tags(conv_id)
+    return jsonify({
+        "tags": [{"name": t.name, "type": t.type, "label": t.label} for t in tags]
+    })
+
+
+@bp.route("/<conv_id>/tags", methods=["PUT"])
+def set_conversation_tags(conv_id: str):
+    """Set tags for a conversation (replaces existing)."""
+    data = request.get_json()
+    if not data or "tags" not in data:
+        return jsonify({"error": "Missing 'tags' field"}), 400
+
+    tag_names = data["tags"]
+    if not isinstance(tag_names, list):
+        return jsonify({"error": "'tags' must be a list"}), 400
+
+    store.set_conversation_tags(conv_id, tag_names)
+    tags = store.get_conversation_tags(conv_id)
+    return jsonify({
+        "tags": [{"name": t.name, "type": t.type, "label": t.label} for t in tags]
+    })

@@ -42,6 +42,7 @@ def get_sidebar_data():
         "conversations": conversations,
         "running_ids": running_ids,
         "is_admin": user_email in ADMIN_USERS,
+        "user_email": user_email,
     }
 
 

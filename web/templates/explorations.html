@@ -248,6 +248,7 @@
                 {% endif %}
                 {% if conv.user_id %}<small class="text-muted">{{ conv.user_id.split('@')[0] }}</small>{% endif %}
               </div>
+              {% if is_admin or conv.user_id == user_email %}
               <button class="btn btn-link btn-sm text-muted card-delete-btn" title="Supprimer"
                       hx-delete="/api/conversations/{{ conv.id }}"
                       hx-target="#conv-{{ conv.id }}"
@@ -255,6 +256,7 @@
                       hx-confirm="Supprimer cette conversation ?">
                 <i class="ri-delete-bin-line"></i>
               </button>
+              {% endif %}
             </div>
           </div>
         </div>
