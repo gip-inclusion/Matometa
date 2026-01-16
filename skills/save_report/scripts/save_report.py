@@ -17,6 +17,7 @@ def save_report(
     category: str = None,
     original_query: str = None,
     source_conversation_id: str = None,
+    tags: list[str] = None,
 ) -> dict:
     """
     Create a new report.
@@ -28,6 +29,7 @@ def save_report(
         category: Query category
         original_query: Original user question
         source_conversation_id: Optional ID of conversation that generated this report
+        tags: List of tag names (e.g. ["emplois", "candidats", "analyse"])
 
     Returns:
         {"report_id": int, "source_conversation_id": str or None}
@@ -43,6 +45,10 @@ def save_report(
         original_query=original_query,
         source_conversation_id=source_conversation_id,
     )
+
+    # Set tags if provided
+    if tags:
+        store.set_report_tags(report.id, tags)
 
     # Add link message to source conversation if provided
     if source_conversation_id:
@@ -113,6 +119,7 @@ def append_report(
     website: str = None,
     category: str = None,
     original_query: str = None,
+    tags: list[str] = None,
 ) -> dict:
     """
     Create a new report linked to an existing conversation.
@@ -124,6 +131,7 @@ def append_report(
         website: Website name
         category: Query category
         original_query: Original user question
+        tags: List of tag names
 
     Returns:
         {"report_id": int, "source_conversation_id": str}
@@ -136,6 +144,7 @@ def append_report(
         category=category,
         original_query=original_query,
         source_conversation_id=conversation_id,
+        tags=tags,
     )
 
 
@@ -176,6 +185,7 @@ if __name__ == "__main__":
     parser.add_argument("--website", "-w", help="Website (emplois, dora, etc.)")
     parser.add_argument("--category", "-c", help="Query category")
     parser.add_argument("--query", "-q", help="Original user query")
+    parser.add_argument("--tags", help="Comma-separated tags (e.g. 'emplois,candidats,analyse')")
     parser.add_argument("--report-id", "-r", type=int, help="Report ID to update (for updates)")
     parser.add_argument("--conversation-id", help="Source conversation ID to link report to")
     parser.add_argument("--list", "-l", action="store_true", help="List recent reports")
@@ -199,6 +209,9 @@ if __name__ == "__main__":
         sys.exit(1)
     content = content_path.read_text()
 
+    # Parse tags
+    tags = [t.strip() for t in args.tags.split(",")] if args.tags else None
+
     if args.report_id:
         # Update existing report
         result = update_report(
@@ -221,6 +234,7 @@ if __name__ == "__main__":
             website=args.website,
             category=args.category,
             original_query=args.query,
+            tags=tags,
         )
         print(f"Created report {result['report_id']} linked to conversation {result['source_conversation_id']}")
 
@@ -234,5 +248,6 @@ if __name__ == "__main__":
             website=args.website,
             category=args.category,
             original_query=args.query,
+            tags=tags,
         )
         print(f"Created report {result['report_id']}")

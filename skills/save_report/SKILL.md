@@ -28,23 +28,25 @@ Report content...
 **Step 2:** Run the CLI to save to database:
 
 ```bash
-# Create new report
+# Create new report (ALWAYS include --tags)
 .venv/bin/python skills/save_report/scripts/save_report.py \
     --file /tmp/report.md \
     --title "Monthly traffic analysis" \
     --website emplois \
-    --category "Traffic analysis"
+    --category "Traffic analysis" \
+    --tags "emplois,trafic,analyse"
+
+# Append to conversation (ALWAYS include --tags)
+.venv/bin/python skills/save_report/scripts/save_report.py \
+    --file /tmp/report.md \
+    --conversation-id "uuid-here" \
+    --title "Follow-up analysis" \
+    --tags "emplois,candidats,analyse"
 
 # Update existing report
 .venv/bin/python skills/save_report/scripts/save_report.py \
     --file /tmp/report.md \
     --report-id 42
-
-# Append to conversation
-.venv/bin/python skills/save_report/scripts/save_report.py \
-    --file /tmp/report.md \
-    --conversation-id "uuid-here" \
-    --title "Follow-up analysis"
 
 # List recent reports
 .venv/bin/python skills/save_report/scripts/save_report.py --list
@@ -59,9 +61,32 @@ Report content...
 | `--website` | `-w` | Website: emplois, dora, etc. |
 | `--category` | `-c` | Query category |
 | `--query` | `-q` | Original user query |
+| `--tags` | | **REQUIRED** Comma-separated tags (see Valid Tags below) |
 | `--report-id` | `-r` | Report ID to update |
 | `--conversation-id` | | Conversation ID to append to |
 | `--list` | `-l` | List recent reports |
+
+## Valid Tags (REQUIRED)
+
+**You MUST provide tags when saving reports.** Choose from:
+
+### Products (pick one)
+`emplois`, `dora`, `marche`, `communaute`, `pilotage`, `plateforme`, `rdv-insertion`, `mon-recap`, `multi`
+
+### Themes (pick relevant ones)
+- **Acteurs:** `candidats`, `prescripteurs`, `employeurs`, `structures`, `acheteurs`, `fournisseurs`
+- **Concepts:** `iae`, `orientation`, `depot-de-besoin`, `demande-de-devis`, `commandes`
+- **Metriques:** `trafic`, `conversions`, `retention`, `geographique`
+
+### Type (pick one)
+`extraction`, `analyse`, `appli`, `meta`
+
+### Sources (if relevant)
+`matomo`, `stats`, `datalake`
+
+**Example:** `--tags "emplois,candidats,iae,analyse,stats"`
+
+If a tag you need doesn't exist, use `/wishlist` to request it.
 
 ## Alternative: Python API
 
