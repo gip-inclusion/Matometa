@@ -14,7 +14,7 @@ from . import config
 DB_PATH = config.BASE_DIR / "data" / "matometa.db"
 
 # Schema version for migrations
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 # Valid column names for dynamic updates (security: prevents SQL injection)
 VALID_CONVERSATION_COLUMNS = frozenset({"title", "session_id", "user_id", "status", "pr_url", "updated_at"})
@@ -96,6 +96,9 @@ def init_db():
 
         if current_version < 8:
             _migrate_to_v8(conn)
+
+        if current_version < 9:
+            _migrate_to_v9(conn)
 
 
 def _create_schema_v1(conn: sqlite3.Connection):
@@ -294,11 +297,110 @@ def _migrate_to_v8(conn: sqlite3.Connection):
     conn.execute("UPDATE schema_version SET version = 8")
 
 
+def _migrate_to_v9(conn: sqlite3.Connection):
+    """Migrate to v9: add tags system with normalized tables."""
+    # Create tags table
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS tags (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            type TEXT NOT NULL,
+            label TEXT NOT NULL
+        )
+    """)
+
+    # Create join tables
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS conversation_tags (
+            conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+            tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+            PRIMARY KEY (conversation_id, tag_id)
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS report_tags (
+            report_id INTEGER NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+            tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+            PRIMARY KEY (report_id, tag_id)
+        )
+    """)
+
+    # Create indexes for efficient filtering
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tags_type ON tags(type)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_conversation_tags_conv ON conversation_tags(conversation_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_conversation_tags_tag ON conversation_tags(tag_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_report_tags_report ON report_tags(report_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_report_tags_tag ON report_tags(tag_id)")
+
+    # Pre-populate with our taxonomy
+    _seed_tags(conn)
+
+    conn.execute("UPDATE schema_version SET version = 9")
+
+
+def _seed_tags(conn: sqlite3.Connection):
+    """Seed the tags table with our taxonomy."""
+    tags = [
+        # Produits (9)
+        ("emplois", "product", "Emplois"),
+        ("dora", "product", "Dora"),
+        ("marche", "product", "Marché"),
+        ("communaute", "product", "Communauté"),
+        ("pilotage", "product", "Pilotage"),
+        ("plateforme", "product", "Plateforme"),
+        ("rdv-insertion", "product", "RDV-Insertion"),
+        ("mon-recap", "product", "Mon Récap"),
+        ("multi", "product", "Multi-produits"),
+        # Sources (3)
+        ("matomo", "source", "Matomo"),
+        ("stats", "source", "Metabase stats"),
+        ("datalake", "source", "Metabase datalake"),
+        # Thèmes - Acteurs (6)
+        ("candidats", "theme", "Candidats"),
+        ("prescripteurs", "theme", "Prescripteurs"),
+        ("employeurs", "theme", "Employeurs"),
+        ("structures", "theme", "Structures / SIAE"),
+        ("acheteurs", "theme", "Acheteurs"),
+        ("fournisseurs", "theme", "Fournisseurs"),
+        # Thèmes - Concepts métier (5)
+        ("iae", "theme", "IAE"),
+        ("orientation", "theme", "Orientation"),
+        ("depot-de-besoin", "theme", "Dépôt de besoin"),
+        ("demande-de-devis", "theme", "Demande de devis"),
+        ("commandes", "theme", "Commandes"),
+        # Thèmes - Métriques (4)
+        ("trafic", "theme", "Trafic"),
+        ("conversions", "theme", "Conversions"),
+        ("retention", "theme", "Rétention"),
+        ("geographique", "theme", "Géographique"),
+        # Types de demande (4)
+        ("extraction", "type_demande", "Extraction"),
+        ("analyse", "type_demande", "Analyse"),
+        ("appli", "type_demande", "Appli"),
+        ("meta", "type_demande", "Meta"),
+    ]
+
+    conn.executemany(
+        "INSERT OR IGNORE INTO tags (name, type, label) VALUES (?, ?, ?)",
+        tags
+    )
+
+
 # =============================================================================
 # Data Classes
 # =============================================================================
 
 from dataclasses import dataclass, field
+
+
+@dataclass
+class Tag:
+    """A tag for categorizing conversations and reports."""
+    id: Optional[int] = None
+    name: str = ""
+    type: str = ""  # product | theme | source | type_demande
+    label: str = ""
 
 
 @dataclass
@@ -962,6 +1064,287 @@ class ConversationStore:
         with get_db() as conn:
             cursor = conn.execute("DELETE FROM reports WHERE id = ?", (report_id,))
             return cursor.rowcount > 0
+
+    # -------------------------------------------------------------------------
+    # Tags
+    # -------------------------------------------------------------------------
+
+    def get_all_tags(self, tag_type: Optional[str] = None) -> list[Tag]:
+        """Get all tags, optionally filtered by type."""
+        with get_db() as conn:
+            if tag_type:
+                rows = conn.execute(
+                    "SELECT * FROM tags WHERE type = ? ORDER BY label",
+                    (tag_type,)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM tags ORDER BY type, label"
+                ).fetchall()
+
+            return [
+                Tag(id=row["id"], name=row["name"], type=row["type"], label=row["label"])
+                for row in rows
+            ]
+
+    def get_tags_by_type(self) -> dict[str, list[Tag]]:
+        """Get all tags grouped by type."""
+        tags = self.get_all_tags()
+        result: dict[str, list[Tag]] = {}
+        for tag in tags:
+            if tag.type not in result:
+                result[tag.type] = []
+            result[tag.type].append(tag)
+        return result
+
+    def get_used_conversation_tags_by_type(self) -> dict[str, list[Tag]]:
+        """Get tags that are actually used by conversations, grouped by type."""
+        with get_db() as conn:
+            rows = conn.execute(
+                """SELECT DISTINCT t.* FROM tags t
+                   JOIN conversation_tags ct ON t.id = ct.tag_id
+                   JOIN conversations c ON ct.conversation_id = c.id
+                   WHERE c.conv_type = 'exploration' OR c.conv_type IS NULL
+                   ORDER BY t.type, t.label"""
+            ).fetchall()
+
+            result: dict[str, list[Tag]] = {}
+            for row in rows:
+                tag = Tag(id=row["id"], name=row["name"], type=row["type"], label=row["label"])
+                if tag.type not in result:
+                    result[tag.type] = []
+                result[tag.type].append(tag)
+            return result
+
+    def get_used_report_tags_by_type(self) -> dict[str, list[Tag]]:
+        """Get tags that are actually used by non-archived reports, grouped by type."""
+        with get_db() as conn:
+            rows = conn.execute(
+                """SELECT DISTINCT t.* FROM tags t
+                   JOIN report_tags rt ON t.id = rt.tag_id
+                   JOIN reports r ON rt.report_id = r.id
+                   WHERE r.archived = 0 OR r.archived IS NULL
+                   ORDER BY t.type, t.label"""
+            ).fetchall()
+
+            result: dict[str, list[Tag]] = {}
+            for row in rows:
+                tag = Tag(id=row["id"], name=row["name"], type=row["type"], label=row["label"])
+                if tag.type not in result:
+                    result[tag.type] = []
+                result[tag.type].append(tag)
+            return result
+
+    def get_tag_by_name(self, name: str) -> Optional[Tag]:
+        """Get a tag by its name."""
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT * FROM tags WHERE name = ?", (name,)
+            ).fetchone()
+            if row:
+                return Tag(id=row["id"], name=row["name"], type=row["type"], label=row["label"])
+            return None
+
+    def set_conversation_tags(self, conv_id: str, tag_names: list[str]) -> bool:
+        """Set tags for a conversation (replaces existing tags)."""
+        with get_db() as conn:
+            # Clear existing tags
+            conn.execute("DELETE FROM conversation_tags WHERE conversation_id = ?", (conv_id,))
+
+            # Add new tags
+            for tag_name in tag_names:
+                tag_row = conn.execute(
+                    "SELECT id FROM tags WHERE name = ?", (tag_name,)
+                ).fetchone()
+                if tag_row:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO conversation_tags (conversation_id, tag_id) VALUES (?, ?)",
+                        (conv_id, tag_row["id"])
+                    )
+
+            # Update conversation timestamp
+            conn.execute(
+                "UPDATE conversations SET updated_at = ? WHERE id = ?",
+                (datetime.now().isoformat(), conv_id)
+            )
+            return True
+
+    def get_conversation_tags(self, conv_id: str) -> list[Tag]:
+        """Get tags for a conversation."""
+        with get_db() as conn:
+            rows = conn.execute(
+                """SELECT t.* FROM tags t
+                   JOIN conversation_tags ct ON t.id = ct.tag_id
+                   WHERE ct.conversation_id = ?
+                   ORDER BY t.type, t.label""",
+                (conv_id,)
+            ).fetchall()
+            return [
+                Tag(id=row["id"], name=row["name"], type=row["type"], label=row["label"])
+                for row in rows
+            ]
+
+    def set_report_tags(self, report_id: int, tag_names: list[str]) -> bool:
+        """Set tags for a report (replaces existing tags)."""
+        with get_db() as conn:
+            # Clear existing tags
+            conn.execute("DELETE FROM report_tags WHERE report_id = ?", (report_id,))
+
+            # Add new tags
+            for tag_name in tag_names:
+                tag_row = conn.execute(
+                    "SELECT id FROM tags WHERE name = ?", (tag_name,)
+                ).fetchone()
+                if tag_row:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO report_tags (report_id, tag_id) VALUES (?, ?)",
+                        (report_id, tag_row["id"])
+                    )
+
+            # Update report timestamp
+            conn.execute(
+                "UPDATE reports SET updated_at = ? WHERE id = ?",
+                (datetime.now().isoformat(), report_id)
+            )
+            return True
+
+    def get_report_tags(self, report_id: int) -> list[Tag]:
+        """Get tags for a report."""
+        with get_db() as conn:
+            rows = conn.execute(
+                """SELECT t.* FROM tags t
+                   JOIN report_tags rt ON t.id = rt.tag_id
+                   WHERE rt.report_id = ?
+                   ORDER BY t.type, t.label""",
+                (report_id,)
+            ).fetchall()
+            return [
+                Tag(id=row["id"], name=row["name"], type=row["type"], label=row["label"])
+                for row in rows
+            ]
+
+    def list_conversations_with_tags(
+        self,
+        user_id: Optional[str] = None,
+        tag_names: Optional[list[str]] = None,
+        limit: int = 100,
+    ) -> list[tuple[Conversation, list[Tag]]]:
+        """List conversations with their tags, optionally filtered."""
+        with get_db() as conn:
+            conditions = ["(c.conv_type = 'exploration' OR c.conv_type IS NULL)"]
+            params: list = []
+
+            if user_id:
+                conditions.append("c.user_id = ?")
+                params.append(user_id)
+
+            # Filter by tags (AND logic - must have all specified tags)
+            if tag_names:
+                for tag_name in tag_names:
+                    conditions.append("""
+                        EXISTS (
+                            SELECT 1 FROM conversation_tags ct
+                            JOIN tags t ON ct.tag_id = t.id
+                            WHERE ct.conversation_id = c.id AND t.name = ?
+                        )
+                    """)
+                    params.append(tag_name)
+
+            where = "WHERE " + " AND ".join(conditions) if conditions else ""
+            params.append(limit)
+
+            query = f"""
+                SELECT c.*, r.id as report_id, r.title as report_title
+                FROM conversations c
+                LEFT JOIN reports r ON r.conversation_id = c.id AND r.id IS NULL
+                {where}
+                ORDER BY c.updated_at DESC
+                LIMIT ?
+            """
+
+            rows = conn.execute(query, params).fetchall()
+
+            results = []
+            for row in rows:
+                conv = Conversation(
+                    id=row["id"],
+                    user_id=row["user_id"],
+                    title=row["title"],
+                    session_id=row["session_id"],
+                    conv_type=row["conv_type"] or "exploration",
+                    file_path=row["file_path"],
+                    status=row["status"] or "active",
+                    messages=[],
+                    report=Report(id=row["report_id"], title=row["report_title"] or "") if row["report_id"] else None,
+                    created_at=datetime.fromisoformat(row["created_at"]),
+                    updated_at=datetime.fromisoformat(row["updated_at"]),
+                )
+                tags = self.get_conversation_tags(row["id"])
+                results.append((conv, tags))
+
+            return results
+
+    def list_reports_with_tags(
+        self,
+        tag_names: Optional[list[str]] = None,
+        include_archived: bool = False,
+        limit: int = 100,
+    ) -> list[tuple[Report, list[Tag]]]:
+        """List reports with their tags, optionally filtered."""
+        with get_db() as conn:
+            conditions: list[str] = []
+            params: list = []
+
+            if not include_archived:
+                conditions.append("(r.archived = 0 OR r.archived IS NULL)")
+
+            # Filter by tags (AND logic - must have all specified tags)
+            if tag_names:
+                for tag_name in tag_names:
+                    conditions.append("""
+                        EXISTS (
+                            SELECT 1 FROM report_tags rt
+                            JOIN tags t ON rt.tag_id = t.id
+                            WHERE rt.report_id = r.id AND t.name = ?
+                        )
+                    """)
+                    params.append(tag_name)
+
+            where = "WHERE " + " AND ".join(conditions) if conditions else ""
+            params.append(limit)
+
+            query = f"""
+                SELECT r.*
+                FROM reports r
+                {where}
+                ORDER BY r.updated_at DESC
+                LIMIT ?
+            """
+
+            rows = conn.execute(query, params).fetchall()
+
+            results = []
+            for row in rows:
+                report = Report(
+                    id=row["id"],
+                    title=row["title"],
+                    website=row["website"],
+                    category=row["category"],
+                    tags=json.loads(row["tags"]) if row["tags"] else [],
+                    original_query=row["original_query"],
+                    source_conversation_id=row["source_conversation_id"] if "source_conversation_id" in row.keys() else None,
+                    user_id=row["user_id"] if "user_id" in row.keys() else None,
+                    archived=bool(row["archived"]) if "archived" in row.keys() else False,
+                    version=row["version"],
+                    created_at=datetime.fromisoformat(row["created_at"]),
+                    updated_at=datetime.fromisoformat(row["updated_at"]),
+                    conversation_id=row["conversation_id"],
+                    message_id=row["message_id"],
+                )
+                tags = self.get_report_tags(row["id"])
+                results.append((report, tags))
+
+            return results
 
 
 # =============================================================================

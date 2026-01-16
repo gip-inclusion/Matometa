@@ -123,24 +123,123 @@
     </div>
     {% else %}
     <!-- Conversation list view -->
+    <div id="filterContent">
+    <!-- Filter bar -->
+    {% if all_tags %}
+    <div class="filter-bar mb-4" id="filterBar">
+      <button class="filter-toggle {% if mine_only %}active{% endif %}"
+              onclick="toggleMineOnly(this)"
+              data-active="{{ 'true' if mine_only else 'false' }}">
+        <i class="ri-user-line"></i> Mes conversations
+      </button>
+
+      {% if all_tags.get('product') %}
+      {% set product_count = active_tags|select('in', all_tags.get('product', [])|map(attribute='name')|list)|list|length %}
+      <div class="filter-dropdown">
+        <button class="filter-dropdown-btn {% if product_count %}active{% endif %}" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+          Produit{% if product_count %} <span class="filter-count">{{ product_count }}</span>{% endif %} <i class="ri-arrow-down-s-line"></i>
+        </button>
+        <div class="dropdown-menu filter-dropdown-menu">
+          {% for tag in all_tags.get('product', []) %}
+          <label class="filter-checkbox-item" data-tag="{{ tag.name }}">
+            <input type="checkbox" {% if tag.name in active_tags %}checked{% endif %}
+                   onchange="toggleFilter('{{ tag.name }}')">
+            {{ tag.label }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if all_tags.get('theme') %}
+      {% set theme_count = active_tags|select('in', all_tags.get('theme', [])|map(attribute='name')|list)|list|length %}
+      <div class="filter-dropdown">
+        <button class="filter-dropdown-btn {% if theme_count %}active{% endif %}" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+          Thème{% if theme_count %} <span class="filter-count">{{ theme_count }}</span>{% endif %} <i class="ri-arrow-down-s-line"></i>
+        </button>
+        <div class="dropdown-menu filter-dropdown-menu">
+          {% for tag in all_tags.get('theme', []) %}
+          <label class="filter-checkbox-item" data-tag="{{ tag.name }}">
+            <input type="checkbox" {% if tag.name in active_tags %}checked{% endif %}
+                   onchange="toggleFilter('{{ tag.name }}')">
+            {{ tag.label }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if all_tags.get('type_demande') %}
+      {% set type_count = active_tags|select('in', all_tags.get('type_demande', [])|map(attribute='name')|list)|list|length %}
+      <div class="filter-dropdown">
+        <button class="filter-dropdown-btn {% if type_count %}active{% endif %}" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+          Type{% if type_count %} <span class="filter-count">{{ type_count }}</span>{% endif %} <i class="ri-arrow-down-s-line"></i>
+        </button>
+        <div class="dropdown-menu filter-dropdown-menu">
+          {% for tag in all_tags.get('type_demande', []) %}
+          <label class="filter-checkbox-item" data-tag="{{ tag.name }}">
+            <input type="checkbox" {% if tag.name in active_tags %}checked{% endif %}
+                   onchange="toggleFilter('{{ tag.name }}')">
+            {{ tag.label }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if active_tags or mine_only %}
+      <button class="filter-reset" onclick="resetFilters()">
+        <i class="ri-close-line"></i> Effacer
+      </button>
+      {% endif %}
+
+      <div class="filter-search">
+        <i class="ri-search-line"></i>
+        <input type="text" id="filterSearchInput" placeholder="Rechercher..." oninput="filterByText(this.value)">
+      </div>
+    </div>
+    {% if active_tags %}
+    <div class="active-filters mt-2">
+      {% for tag_type, tags in all_tags.items() %}
+        {% for tag in tags %}
+          {% if tag.name in active_tags %}
+          <span class="badge badge-tag badge-{{ tag_type }} active-filter-pill" onclick="removeFilter('{{ tag.name }}')">
+            {{ tag.label }} <i class="ri-close-line"></i>
+          </span>
+          {% endif %}
+        {% endfor %}
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endif %}
+
     <div class="conversation-list" id="conversationList">
-      {% if conversations %}
+      {% if all_conversations %}
       <div class="row g-3">
-        {% for conv in conversations %}
-        <div class="col-12 col-md-6 col-lg-4" id="conv-{{ conv.id }}">
+        {% for conv in all_conversations %}
+        <div class="col-12 col-md-6 col-lg-4 filterable-card" id="conv-{{ conv.id }}"
+             data-search="{{ (conv.title or 'Sans titre')|lower }} {{ (conv.user_id or '')|lower }} {% for tag in conv.tags %}{{ tag.label|lower }} {{ tag.name|lower }} {% endfor %}">
           <div class="card conversation-card h-100">
             <a href="/explorations/{{ conv.id }}" class="card-body text-decoration-none"
                hx-get="/explorations/{{ conv.id }}" hx-target="#main" hx-select="#main > *" hx-push-url="true">
               <h5 class="card-title mb-2">{{ conv.title or 'Sans titre' }}</h5>
               <p class="card-text text-muted small mb-0">
                 {{ conv.updated_at.strftime('%d/%m/%Y %H:%M') }}
+                {% if conv.user_id %}<span class="ms-2">· {{ conv.user_id.split('@')[0] }}</span>{% endif %}
               </p>
+              {% if conv.tags %}
+              <div class="conv-tags mt-2">
+                {% for tag in conv.tags %}
+                <span class="badge badge-tag badge-{{ tag.type }}">{{ tag.label }}</span>
+                {% endfor %}
+              </div>
+              {% endif %}
             </a>
             <div class="card-footer-row">
               <div class="d-flex align-items-center gap-2">
                 {% if conv.is_running %}
                 <span class="badge bg-success running-badge"><i class="ri-loader-4-line ri-spin"></i> En cours</span>
-                <button class="btn btn-link btn-sm text-danger p-0 kill-agent-btn" title="Arrêter l'agent"
+                <button class="btn btn-link btn-sm text-danger p-0 kill-agent-btn" title="Arreter l'agent"
                         onclick="killAgent('{{ conv.id }}', null, this.closest('.card'))">
                   <i class="ri-stop-circle-line"></i>
                 </button>
@@ -165,10 +264,11 @@
       <div class="empty-state" id="emptyState">
         <i class="ri-chat-3-line ri-4x text-disabled mb-3"></i>
         <p class="mb-0 text-muted">Aucune conversation</p>
-        <p class="small text-muted">Posez une question pour commencer</p>
+        <p class="small text-muted">{% if active_tags %}Aucun resultat pour ces filtres{% else %}Posez une question pour commencer{% endif %}</p>
       </div>
       {% endif %}
     </div>
+    </div><!-- /#filterContent -->
     {% endif %}
   </div>
 
@@ -204,6 +304,86 @@
 
 {% block scripts %}
 <script>
+  // Filter functions with HTMX
+  function buildFilterUrl() {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('tag');
+    url.searchParams.delete('mine');
+
+    // Collect all checked tags
+    document.querySelectorAll('.filter-checkbox-item input:checked').forEach(cb => {
+      const tagName = cb.closest('label').dataset.tag;
+      if (tagName) url.searchParams.append('tag', tagName);
+    });
+
+    // Check mine toggle
+    const mineBtn = document.querySelector('.filter-toggle');
+    if (mineBtn && mineBtn.classList.contains('active')) {
+      url.searchParams.set('mine', '1');
+    }
+
+    return url.toString();
+  }
+
+  function toggleFilter(tagName) {
+    const url = buildFilterUrl();
+    history.pushState({}, '', url);
+    htmx.ajax('GET', url, {target: '#filterContent', select: '#filterContent', swap: 'outerHTML'});
+  }
+
+  function toggleMineOnly(btn) {
+    btn.classList.toggle('active');
+    btn.dataset.active = btn.classList.contains('active') ? 'true' : 'false';
+    const url = buildFilterUrl();
+    history.pushState({}, '', url);
+    htmx.ajax('GET', url, {target: '#filterContent', select: '#filterContent', swap: 'outerHTML'});
+  }
+
+  function resetFilters() {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('tag');
+    url.searchParams.delete('mine');
+    history.pushState({}, '', url.toString());
+    htmx.ajax('GET', url.toString(), {target: '#filterContent', select: '#filterContent', swap: 'outerHTML'});
+  }
+
+  function removeFilter(tagName) {
+    // Uncheck the checkbox
+    const checkbox = document.querySelector(`.filter-checkbox-item[data-tag="${tagName}"] input`);
+    if (checkbox) checkbox.checked = false;
+    // Rebuild URL and refresh
+    const url = buildFilterUrl();
+    history.pushState({}, '', url);
+    htmx.ajax('GET', url.toString(), {target: '#filterContent', select: '#filterContent', swap: 'outerHTML'});
+  }
+
+  function filterByText(query) {
+    const search = query.toLowerCase().trim();
+    const cards = document.querySelectorAll('.filterable-card');
+    let visibleCount = 0;
+
+    cards.forEach(card => {
+      const searchData = card.dataset.search || '';
+      const matches = !search || searchData.includes(search);
+      card.style.display = matches ? '' : 'none';
+      if (matches) visibleCount++;
+    });
+
+    // Show/hide empty state
+    const emptyState = document.getElementById('emptyState');
+    const cardContainer = document.querySelector('.conversation-list .row, .reports-list .row');
+    if (emptyState && cardContainer) {
+      if (visibleCount === 0 && cards.length > 0) {
+        cardContainer.style.display = 'none';
+        emptyState.style.display = '';
+        emptyState.querySelector('p.small').textContent = 'Aucun résultat pour cette recherche';
+      } else {
+        cardContainer.style.display = '';
+        emptyState.style.display = 'none';
+      }
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', async () => {
     {% if current_conv %}
     // Set conversation ID before initChat to prevent duplicate loadConversation call

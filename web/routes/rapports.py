@@ -96,22 +96,79 @@ def scan_interactive_apps():
 
 @bp.route("/rapports")
 def rapports():
-    """Rapports section - saved reports browser."""
+    """Rapports section - saved reports browser with optional filtering."""
     data = get_sidebar_data()
     report_id = request.args.get("id", type=int)
 
     current_report = None
+    current_report_tags = []
     if report_id:
         current_report = store.get_report(report_id)
+        if current_report:
+            current_report_tags = store.get_report_tags(report_id)
 
-    reports = store.list_reports(limit=50) if not current_report else []
-    interactive_apps = scan_interactive_apps() if not current_report else []
+    # Filter params
+    tag_params = request.args.getlist("tag")
+
+    # Get reports with tags (only when not viewing a specific report)
+    items = []
+    if not current_report:
+        reports_with_tags = store.list_reports_with_tags(
+            tag_names=tag_params if tag_params else None,
+            limit=100,
+        )
+        for report, tags in reports_with_tags:
+            report.tag_objects = tags
+            items.append({
+                "type": "report",
+                "report": report,
+                "updated": report.updated_at,
+            })
+
+        # Get interactive apps and filter by tags if needed
+        interactive_apps = scan_interactive_apps()
+        for app in interactive_apps:
+            # Apps implicitly have type_demande "appli"
+            app["type_demande"] = "appli"
+
+            # Check if app matches tag filters
+            if tag_params:
+                app_tags = set(app.get("tags", []))
+                app_tags.add(app.get("website", ""))
+                app_tags.add(app.get("category", ""))
+                app_tags.add("appli")  # type_demande
+
+                # All tag_params must match
+                if not all(t in app_tags for t in tag_params):
+                    continue
+
+            items.append({
+                "type": "app",
+                "app": app,
+                "updated": app.get("updated") or datetime.min,
+            })
+
+        # Sort combined list by date (newest first)
+        items.sort(key=lambda x: x["updated"], reverse=True)
+
+    # Get only tags that are actually used by reports + add "appli" for apps
+    all_tags = store.get_used_report_tags_by_type()
+    # Ensure "appli" type is available if we have apps
+    if not current_report:
+        appli_tag = store.get_tag_by_name("appli")
+        if appli_tag:
+            if "type_demande" not in all_tags:
+                all_tags["type_demande"] = []
+            if appli_tag not in all_tags["type_demande"]:
+                all_tags["type_demande"].append(appli_tag)
 
     return render_template(
         "rapports.html",
         section="rapports",
         current_report=current_report,
-        reports=reports,
-        interactive_apps=interactive_apps,
+        current_report_tags=current_report_tags,
+        items=items,
+        all_tags=all_tags,
+        active_tags=tag_params,
         **data
     )

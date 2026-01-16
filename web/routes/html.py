@@ -54,13 +54,49 @@ def index():
 
 @bp.route("/explorations")
 def explorations():
-    """Explorations section - conversation list or redirect from old URL."""
+    """Explorations section - conversation list with optional filtering."""
     # Redirect old query param format to new path format
     if conv_id := request.args.get("conv"):
         return redirect(f"/explorations/{conv_id}", code=301)
 
+    user_email = getattr(g, "user_email", None)
+    agent = get_agent_instance()
+
+    # Filter params
+    mine_only = request.args.get("mine") == "1"
+    tag_params = request.args.getlist("tag")
+
+    # Get conversations with tags
+    filter_user = user_email if mine_only else None
+    conversations_with_tags = store.list_conversations_with_tags(
+        user_id=filter_user,
+        tag_names=tag_params if tag_params else None,
+        limit=100,
+    )
+
+    # Add runtime info
+    conversations = []
+    for conv, tags in conversations_with_tags:
+        if conv.title:
+            conv.title = humanize_title(conv.title)
+        conv.is_running = agent.is_running(conv.id)
+        conv.tags = tags
+        conversations.append(conv)
+
+    # Get only tags that are actually used by conversations
+    all_tags = store.get_used_conversation_tags_by_type()
+
     data = get_sidebar_data()
-    return render_template("explorations.html", section="explorations", current_conv=None, **data)
+    return render_template(
+        "explorations.html",
+        section="explorations",
+        current_conv=None,
+        all_conversations=conversations,
+        all_tags=all_tags,
+        active_tags=tag_params,
+        mine_only=mine_only,
+        **data
+    )
 
 
 @bp.route("/explorations/new")
@@ -163,25 +199,3 @@ def is_admin() -> bool:
     """Check if current user is an admin."""
     user_email = getattr(g, "user_email", None)
     return user_email in ADMIN_USERS
-
-
-@bp.route("/admin/conversations")
-def admin_conversations():
-    """List all conversations from all users."""
-    agent = get_agent_instance()
-
-    # Get ALL conversations (no user filter)
-    all_conversations = store.list_conversations(limit=100)
-
-    for conv in all_conversations:
-        if conv.title:
-            conv.title = humanize_title(conv.title)
-        conv.is_running = agent.is_running(conv.id)
-
-    data = get_sidebar_data()
-    return render_template(
-        "admin_conversations.html",
-        section="admin",
-        all_conversations=all_conversations,
-        **data
-    )
