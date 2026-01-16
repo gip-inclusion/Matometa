@@ -46,8 +46,41 @@
     {% else %}
     <!-- Reports list view -->
     <div class="reports-list" id="reportsList">
-      {% if reports %}
+      {% if reports or interactive_apps %}
       <div class="row g-3">
+        {# Interactive apps #}
+        {% for app in interactive_apps %}
+        <div class="col-12 col-md-6 col-lg-4">
+          <div class="card report-card h-100 border-primary">
+            <a href="{{ app.url }}" target="_blank" class="card-body text-decoration-none d-flex flex-column">
+              <h6 class="card-title mb-2">
+                <i class="ri-external-link-line me-1 text-primary"></i>
+                {{ app.title }}
+              </h6>
+              {% if app.description %}
+              <p class="card-text small text-muted mb-2">{{ app.description }}</p>
+              {% endif %}
+              <div class="report-badges">
+                <span class="badge text-bg-primary">Interactive</span>
+                {% if app.website %}<span class="badge text-bg-secondary">{{ app.website }}</span>{% endif %}
+                {% if app.category %}<span class="badge text-bg-info">{{ app.category }}</span>{% endif %}
+                {% for tag in app.tags %}<span class="badge text-bg-light">{{ tag }}</span>{% endfor %}
+              </div>
+            </a>
+            <div class="card-footer d-flex align-items-center justify-content-between py-2 px-3">
+              <small class="text-muted">{% if app.updated %}{{ app.updated.strftime('%d/%m/%Y') }}{% else %}-{% endif %}</small>
+              {% if app.conversation_id %}
+              <a href="/explorations?conv={{ app.conversation_id }}" class="btn btn-link btn-sm text-muted p-0" title="Conversation d'origine">
+                <i class="ri-chat-3-line"></i>
+              </a>
+              {% else %}
+              <span></span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+        {# Regular reports #}
         {% for report in reports %}
         <div class="col-12 col-md-6 col-lg-4" id="report-{{ report.id }}">
           <div class="card report-card h-100">

@@ -489,7 +489,9 @@ When running in Docker (web UI mode):
 
 ### Downloadable Files
 
-Files in `/app/data/interactive/` are publicly served at `/interactive/`:
+Files in `/app/data/interactive/` are publicly served at `/interactive/`.
+
+**For building interactive apps** (dashboards, data explorers), see `docs/interactive-apps.md`.
 
 ```python
 # Export CSV for user download
