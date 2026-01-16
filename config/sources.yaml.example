@@ -39,4 +39,4 @@ matomo:
 
   inclusion:
     url: https://matomo.inclusion.beta.gouv.fr
-    token: ${env.MATOMO_TOKEN}
+    token: ${env.MATOMO_API_KEY}
