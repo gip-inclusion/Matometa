@@ -50,11 +50,45 @@ Optional documentation about the app, how to use it, how to regenerate data, etc
 **Optional fields:**
 - `description` — Shown below the title in the card
 - `updated` — Date in YYYY-MM-DD format (shown in card footer)
-- `website` — Associated website (emplois, marche, etc.)
+- `website` — Associated website (use valid product tags, see below)
 - `category` — Category for filtering
-- `tags` — Comma-separated or `[tag1, tag2]` format
+- `tags` — Comma-separated or `[tag1, tag2]` format (use valid tags, see below)
 - `authors` — Comma-separated email addresses
 - `conversation_id` — Links to the conversation that created this app
+
+## Valid Tags
+
+Use these controlled tag values for `website` and `tags` fields:
+
+### Products (for `website` field)
+- `emplois` — Emplois
+- `dora` — Dora
+- `marche` — Marché
+- `communaute` — Communauté
+- `pilotage` — Pilotage
+- `plateforme` — Plateforme
+- `rdv-insertion` — RDV-Insertion
+- `mon-recap` — Mon Récap
+- `multi` — Multi-produits
+
+### Themes (for `tags` field)
+**Acteurs:**
+- `candidats`, `prescripteurs`, `employeurs`, `structures`, `acheteurs`, `fournisseurs`
+
+**Concepts métier:**
+- `iae`, `orientation`, `depot-de-besoin`, `demande-de-devis`, `commandes`
+
+**Métriques:**
+- `trafic`, `conversions`, `retention`, `geographique`
+
+### Types de demande (for `tags` field)
+- `extraction` — Data extraction
+- `analyse` — Analysis/report
+- `appli` — Interactive app
+- `meta` — Meta/tooling
+
+### Sources (for `tags` field)
+- `matomo`, `stats`, `datalake`
 
 Apps without a valid `APP.md` will not appear in the reports list.
 
