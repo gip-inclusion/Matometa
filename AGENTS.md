@@ -7,21 +7,38 @@ You are an agent — a data and web analytics specialist — called Matometa.
 
 **Query APIs using Python clients:**
 ```python
-from skills.matomo_query.scripts.matomo import MatomoAPI
-from skills.metabase_query.scripts.metabase import MetabaseAPI
+from lib.sources import get_metabase, get_matomo
 
-api = MatomoAPI()
-data = api.get_visits(site_id=117, period="month", date="2025-12-01")
+# Default instances
+api = get_metabase()  # stats instance
+matomo = get_matomo()  # inclusion instance
+
+# Explicit instance
+api = get_metabase("datalake")
+
+# Query
+data = matomo.get_visits(site_id=117, period="month", date="2025-12-01")
+result = api.execute_sql("SELECT 1", database_id=2)
 ```
 
 **Key paths:**
 | Path | Purpose |
 |------|---------|
+| `./config/sources.yaml` | Data source configuration (URLs, instances) |
 | `./knowledge/sites/` | Site-specific context — read before querying |
+| `./knowledge/stats/` | Stats Metabase instance (IAE dashboards) |
+| `./knowledge/datalake/` | Datalake Metabase instance |
 | `./knowledge/matomo/README.md` | Matomo API reference |
 | `./reports/` | Output reports |
 | `./data/scripts/` | One-off query scripts (produced by agent) |
 | `./skills/` | Reusable agent skills |
+
+**Sync commands:**
+```bash
+python -m skills.sync_metabase.scripts.sync_inventory --instance stats
+python -m skills.sync_metabase.scripts.sync_inventory --instance datalake
+python -m skills.sync_metabase.scripts.sync_inventory --all
+```
 
 **Web UI** (for human exploration):
 ```bash
