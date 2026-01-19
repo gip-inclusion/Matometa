@@ -61,7 +61,10 @@ class SDKBackend(AgentBackend):
             # Add system prompt from AGENTS.md
             agents_md_path = config.BASE_DIR / "AGENTS.md"
             if agents_md_path.exists():
-                options.system_prompt = agents_md_path.read_text()
+                from datetime import date
+                today = date.today().strftime("%A %d %B %Y")
+                agents_content = agents_md_path.read_text()
+                options.system_prompt = f"Aujourd'hui, nous sommes le {today}.\n\n{agents_content}"
 
             # Resume session if available
             resume_id = session_id or self._sessions.get(conversation_id)

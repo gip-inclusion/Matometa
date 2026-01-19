@@ -64,7 +64,10 @@ class CLIBackend(AgentBackend):
         # Add AGENTS.md as system prompt
         agents_md_path = config.BASE_DIR / "AGENTS.md"
         if agents_md_path.exists():
+            from datetime import date
+            today = date.today().strftime("%A %d %B %Y")
             agents_content = agents_md_path.read_text()
+            agents_content = f"Aujourd'hui, nous sommes le {today}.\n\n{agents_content}"
             cmd.extend(["--system-prompt", agents_content])
 
         # Whitelist safe tools only
