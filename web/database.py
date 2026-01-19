@@ -1145,7 +1145,7 @@ class ConversationStore:
                 return Tag(id=row["id"], name=row["name"], type=row["type"], label=row["label"])
             return None
 
-    def set_conversation_tags(self, conv_id: str, tag_names: list[str]) -> bool:
+    def set_conversation_tags(self, conv_id: str, tag_names: list[str], update_timestamp: bool = True) -> bool:
         """Set tags for a conversation (replaces existing tags)."""
         with get_db() as conn:
             # Clear existing tags
@@ -1163,10 +1163,11 @@ class ConversationStore:
                     )
 
             # Update conversation timestamp
-            conn.execute(
-                "UPDATE conversations SET updated_at = ? WHERE id = ?",
-                (datetime.now().isoformat(), conv_id)
-            )
+            if update_timestamp:
+                conn.execute(
+                    "UPDATE conversations SET updated_at = ? WHERE id = ?",
+                    (datetime.now().isoformat(), conv_id)
+                )
             return True
 
     def get_conversation_tags(self, conv_id: str) -> list[Tag]:
@@ -1184,7 +1185,7 @@ class ConversationStore:
                 for row in rows
             ]
 
-    def set_report_tags(self, report_id: int, tag_names: list[str]) -> bool:
+    def set_report_tags(self, report_id: int, tag_names: list[str], update_timestamp: bool = True) -> bool:
         """Set tags for a report (replaces existing tags)."""
         with get_db() as conn:
             # Clear existing tags
@@ -1202,10 +1203,11 @@ class ConversationStore:
                     )
 
             # Update report timestamp
-            conn.execute(
-                "UPDATE reports SET updated_at = ? WHERE id = ?",
-                (datetime.now().isoformat(), report_id)
-            )
+            if update_timestamp:
+                conn.execute(
+                    "UPDATE reports SET updated_at = ? WHERE id = ?",
+                    (datetime.now().isoformat(), report_id)
+                )
             return True
 
     def get_report_tags(self, report_id: int) -> list[Tag]:

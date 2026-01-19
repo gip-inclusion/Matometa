@@ -241,7 +241,7 @@ def backfill_tags(dry_run: bool = False, limit: int = 100, delay: float = 1.0):
         print(f"    Tags: {', '.join(tags)}")
 
         if not dry_run:
-            store.set_conversation_tags(conv_id, tags)
+            store.set_conversation_tags(conv_id, tags, update_timestamp=False)
             print("    Saved!")
 
         tagged_count += 1

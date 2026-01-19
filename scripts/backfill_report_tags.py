@@ -70,7 +70,7 @@ def backfill_tags(dry_run: bool = False):
             print(f"       Tags: {', '.join(tags)}")
 
             if not dry_run:
-                store.set_report_tags(report.id, tags)
+                store.set_report_tags(report.id, tags, update_timestamp=False)
 
             tagged_count += 1
         else:

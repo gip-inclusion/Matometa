@@ -48,7 +48,7 @@ def save_report(
 
     # Set tags if provided
     if tags:
-        store.set_report_tags(report.id, tags)
+        store.set_report_tags(report.id, tags, update_timestamp=False)
 
     # Add link message to source conversation if provided
     if source_conversation_id:

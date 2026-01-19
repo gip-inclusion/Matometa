@@ -116,6 +116,10 @@ def create_report():
     if not report:
         return jsonify({"error": "Failed to create report"}), 500
 
+    # Set tags in the new-style join table
+    if data.get("tags"):
+        store.set_report_tags(report.id, data["tags"], update_timestamp=False)
+
     # Optionally add link message to source conversation
     if data.get("source_conversation_id"):
         store.add_message(
