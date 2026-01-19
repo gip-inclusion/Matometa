@@ -62,6 +62,159 @@ def generate_conversation_title(user_message: str, conv_id: str) -> None:
     threading.Thread(target=_generate, daemon=True).start()
 
 
+def generate_conversation_tags(user_message: str, conv_id: str) -> None:
+    """Auto-tag a conversation (async, in background).
+
+    Uses the configured AGENT_BACKEND (cli or sdk) to analyze the first user
+    message and assign relevant tags from the predefined taxonomy.
+    Runs in a background thread.
+    """
+    import subprocess
+
+    # Tag taxonomy (must match database _seed_tags)
+    TAG_TAXONOMY = """
+## Produits (choisir 1 seul, obligatoire)
+- emplois: Les Emplois de l'inclusion
+- dora: Dora (annuaire de services)
+- marche: Le Marché de l'inclusion
+- communaute: La Communauté de l'inclusion
+- pilotage: Pilotage de l'inclusion
+- plateforme: inclusion.gouv.fr (site vitrine)
+- rdv-insertion: RDV-Insertion
+- mon-recap: Mon Récap
+- multi: Multi-produits (concerne plusieurs produits)
+
+## Thèmes - Acteurs (0 à 2)
+- candidats: Candidats / demandeurs d'emploi
+- prescripteurs: Prescripteurs
+- employeurs: Employeurs / SIAE
+- structures: Structures / SIAE (angle organisation)
+- acheteurs: Acheteurs (Marché)
+- fournisseurs: Fournisseurs (Marché)
+
+## Thèmes - Concepts métier (0 à 2)
+- iae: IAE en général
+- orientation: Orientation
+- depot-de-besoin: Dépôt de besoin (Marché)
+- demande-de-devis: Demande de devis (Marché)
+- commandes: Commandes (Mon Récap)
+
+## Thèmes - Métriques (0 à 2)
+- trafic: Analyse de trafic
+- conversions: Conversions / funnel
+- retention: Rétention / fidélisation
+- geographique: Analyse géographique
+
+## Type de demande (choisir 1 seul, obligatoire)
+- extraction: Extraction de données brutes
+- analyse: Analyse / rapport
+- appli: Application interactive
+- meta: Question sur Matometa lui-même
+"""
+
+    VALID_TAGS = {
+        "emplois", "dora", "marche", "communaute", "pilotage",
+        "plateforme", "rdv-insertion", "mon-recap", "multi",
+        "matomo", "stats", "datalake",
+        "candidats", "prescripteurs", "employeurs", "structures",
+        "acheteurs", "fournisseurs",
+        "iae", "orientation", "depot-de-besoin", "demande-de-devis", "commandes",
+        "trafic", "conversions", "retention", "geographique",
+        "extraction", "analyse", "appli", "meta",
+    }
+
+    prompt = f"""Analyse cette demande utilisateur et attribue des tags parmi la taxonomie suivante.
+
+{TAG_TAXONOMY}
+
+Règles:
+- OBLIGATOIRE: exactement 1 tag produit
+- OBLIGATOIRE: exactement 1 tag type_demande
+- OPTIONNEL: 0 à 2 tags thème (acteurs, concepts, métriques)
+- Si la demande mentionne plusieurs produits, utilise "multi"
+- Si c'est une question sur l'outil Matometa, utilise "meta"
+
+Demande: {user_message[:1000]}
+
+Réponds UNIQUEMENT avec les noms des tags séparés par des virgules, rien d'autre.
+Exemple: emplois, candidats, trafic, analyse"""
+
+    def _parse_tags(response: str) -> list[str]:
+        """Extract valid tag names from response."""
+        # Handle potential explanation text - take just the tag line
+        if "\n" in response:
+            for line in response.split("\n"):
+                if "," in line and not line.startswith("#"):
+                    response = line
+                    break
+
+        tag_names = []
+        for part in response.replace("\n", ",").split(","):
+            tag = part.strip().lower().strip(".-*")
+            if tag in VALID_TAGS:
+                tag_names.append(tag)
+        return tag_names
+
+    def _generate_cli():
+        """Generate tags using CLI backend."""
+        try:
+            result = subprocess.run(
+                [config.CLAUDE_CLI, "--print", "-p", prompt],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                cwd=str(config.BASE_DIR),
+            )
+
+            if result.returncode != 0:
+                logger.warning(f"Failed to generate tags: {result.stderr}")
+                return
+
+            tag_names = _parse_tags(result.stdout.strip())
+            if tag_names:
+                store.set_conversation_tags(conv_id, tag_names)
+                logger.info(f"Auto-tagged conversation {conv_id}: {tag_names}")
+
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Timeout generating tags for {conv_id}")
+        except Exception as e:
+            logger.warning(f"Failed to generate tags: {e}")
+
+    def _generate_sdk():
+        """Generate tags using SDK backend."""
+        try:
+            from anthropic import Anthropic
+        except ImportError:
+            logger.warning("anthropic package not installed, cannot use SDK backend")
+            return
+
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            logger.warning("ANTHROPIC_API_KEY not set, cannot use SDK backend")
+            return
+
+        try:
+            client = Anthropic(api_key=api_key)
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=100,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            tag_names = _parse_tags(response.content[0].text.strip())
+            if tag_names:
+                store.set_conversation_tags(conv_id, tag_names)
+                logger.info(f"Auto-tagged conversation {conv_id}: {tag_names}")
+
+        except Exception as e:
+            logger.warning(f"Failed to generate tags: {e}")
+
+    # Choose backend based on config
+    if config.AGENT_BACKEND == "sdk":
+        threading.Thread(target=_generate_sdk, daemon=True).start()
+    else:
+        threading.Thread(target=_generate_cli, daemon=True).start()
+
+
 @bp.route("", methods=["POST"])
 def create_conversation():
     """Create a new conversation."""
@@ -278,6 +431,7 @@ def send_message(conv_id: str):
 
     if is_first_message:
         generate_conversation_title(content, conv_id)
+        generate_conversation_tags(content, conv_id)
 
     return jsonify({
         "status": "started",

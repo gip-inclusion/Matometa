@@ -134,8 +134,8 @@ For every query, follow this process:
 
 6. **Analyze and report** — Produce the report. Tag it for easy retrieval.
 
-7. **Capitalize** — MANDATORY. Update knowledge files and skills. Log changes
-   in JOURNAL.md (new entries on top, format: `- YYYY-MM-DD. Change description.`).
+7. **Capitalize** — MANDATORY. Update knowledge files and skills when you learn
+   something new that will be useful for future queries.
 
 ## Behavioral Guidelines
 
@@ -455,17 +455,6 @@ gitgraph
 - No `<br/>` tags or slashes
 - No ASCII art or inline HTML
 - Use DSFR colors: `#006ADC` (blue), `#000638` (navy), `#ADB6FF` (periwinkle), `#E57200` (orange), `#FFA347` (light orange)
-
-### JOURNAL.md
-
-Log all changes to long-term context (AGENTS.md, ./knowledge, ./skills) in
-JOURNAL.md. New entries on top. Format:
-
-```
-- YYYY-MM-DD. Description of change. (Context)
-```
-
-This is MANDATORY for every context update.
 
 ## Site Documentation Methodology
 
