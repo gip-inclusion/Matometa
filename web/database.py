@@ -879,7 +879,7 @@ class ConversationStore:
 
             # Auto-generate title from first user message
             if row["title"] is None and type == "user":
-                title = content[:50] + ("..." if len(content) > 50 else "")
+                title = content[:80] + ("..." if len(content) > 80 else "")
                 conn.execute(
                     "UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?",
                     (title, now, conv_id)

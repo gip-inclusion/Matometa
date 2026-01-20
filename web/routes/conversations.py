@@ -50,10 +50,10 @@ def generate_conversation_title(user_message: str, conv_id: str) -> None:
                 max_tokens=50,
                 messages=[{
                     "role": "user",
-                    "content": f"Ecris un resume concis EN FRANCAIS (max 6 mots, sans guillemets) de cette demande:\n\n{user_message[:500]}"
+                    "content": f"Ecris un resume concis EN FRANCAIS (max 10 mots, sans guillemets) de cette demande:\n\n{user_message[:500]}"
                 }]
             )
-            title = response.content[0].text.strip()[:60]
+            title = response.content[0].text.strip()[:100]
             if title:
                 store.update_conversation(conv_id, title=title)
         except Exception as e:
@@ -358,10 +358,10 @@ def generate_title(conv_id: str):
             max_tokens=50,
             messages=[{
                 "role": "user",
-                "content": f"Ecris un titre court et direct (4-8 mots) sur le theme de cette conversation. En francais uniquement. Pas de guillemets.\n\n{context}"
+                "content": f"Ecris un titre court et direct (6-10 mots) sur le theme de cette conversation. En francais uniquement. Pas de guillemets.\n\n{context}"
             }]
         )
-        title = response.content[0].text.strip().strip('"\'')[:60]
+        title = response.content[0].text.strip().strip('"\'')[:100]
         store.update_conversation(conv_id, title=title)
         return jsonify({"title": title})
 
