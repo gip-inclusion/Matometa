@@ -77,7 +77,7 @@
       {% if conversations %}
       <div class="sidebar-conversations">
         <ul class="nav flex-column">
-          {% for conv in conversations[:15] %}
+          {% for conv in conversations[:6] %}
           <li class="nav-item">
             <a href="/explorations/{{ conv.id }}"
                class="nav-link nav-link-conversation {% if current_conv and current_conv.id == conv.id %}active{% endif %}"
@@ -144,7 +144,7 @@
         {% if conversations %}
         <hr class="my-2">
         <ul class="nav flex-column">
-          {% for conv in conversations[:10] %}
+          {% for conv in conversations[:6] %}
           <li class="nav-item">
             <a href="/explorations/{{ conv.id }}" class="nav-link nav-link-conversation {% if current_conv and current_conv.id == conv.id %}active{% endif %}">
               {{ conv.title or 'Sans titre' }}
