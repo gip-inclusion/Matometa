@@ -1320,10 +1320,7 @@ body.has-sidebar {
   font-size: 0.85rem;
   color: var(--bs-secondary);
   padding: 0.35rem 1rem;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  white-space: normal;
   line-height: 1.4;
 }
 
@@ -1342,8 +1339,11 @@ body.has-sidebar {
 }
 
 .conv-title-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
 }
 
 .sidebar-view-more {
