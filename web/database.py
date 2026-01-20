@@ -14,7 +14,7 @@ from . import config
 DB_PATH = config.BASE_DIR / "data" / "matometa.db"
 
 # Schema version for migrations
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 # Valid column names for dynamic updates (security: prevents SQL injection)
 VALID_CONVERSATION_COLUMNS = frozenset({"title", "session_id", "user_id", "status", "pr_url", "updated_at"})
@@ -99,6 +99,9 @@ def init_db():
 
         if current_version < 9:
             _migrate_to_v9(conn)
+
+        if current_version < 10:
+            _migrate_to_v10(conn)
 
 
 def _create_schema_v1(conn: sqlite3.Connection):
@@ -387,6 +390,20 @@ def _seed_tags(conn: sqlite3.Connection):
     )
 
 
+def _migrate_to_v10(conn: sqlite3.Connection):
+    """Migrate to v10: add token tracking columns to conversations."""
+    cursor = conn.execute("PRAGMA table_info(conversations)")
+    columns = {row["name"] for row in cursor.fetchall()}
+
+    if "input_tokens" not in columns:
+        conn.execute("ALTER TABLE conversations ADD COLUMN input_tokens INTEGER DEFAULT 0")
+
+    if "output_tokens" not in columns:
+        conn.execute("ALTER TABLE conversations ADD COLUMN output_tokens INTEGER DEFAULT 0")
+
+    conn.execute("UPDATE schema_version SET version = 10")
+
+
 # =============================================================================
 # Data Classes
 # =============================================================================
@@ -448,6 +465,8 @@ class Conversation:
     forked_from: Optional[str] = None  # ID of source conversation if forked
     messages: list[Message] = field(default_factory=list)
     report: Optional[Report] = None
+    input_tokens: int = 0  # cumulative input tokens used
+    output_tokens: int = 0  # cumulative output tokens used
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
 
@@ -467,6 +486,8 @@ class Conversation:
             "status": self.status,
             "pr_url": self.pr_url,
             "has_report": self.has_report,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
             "messages": [
                 {
                     "id": m.id,
@@ -598,6 +619,8 @@ class ConversationStore:
                 forked_from=row["forked_from"] if "forked_from" in row.keys() else None,
                 messages=messages,
                 report=report,
+                input_tokens=row["input_tokens"] if "input_tokens" in row.keys() else 0,
+                output_tokens=row["output_tokens"] if "output_tokens" in row.keys() else 0,
                 created_at=datetime.fromisoformat(row["created_at"]),
                 updated_at=datetime.fromisoformat(row["updated_at"]),
             )
@@ -783,6 +806,30 @@ class ConversationStore:
             cursor = conn.execute(
                 f"UPDATE conversations SET {set_clause} WHERE id = ?",
                 values
+            )
+            return cursor.rowcount > 0
+
+    def update_conversation_tokens(self, conv_id: str, input_tokens: int, output_tokens: int) -> bool:
+        """Set token counts on a conversation (overwrites existing values)."""
+        with get_db() as conn:
+            cursor = conn.execute(
+                """UPDATE conversations
+                   SET input_tokens = ?, output_tokens = ?, updated_at = ?
+                   WHERE id = ?""",
+                (input_tokens, output_tokens, datetime.now().isoformat(), conv_id)
+            )
+            return cursor.rowcount > 0
+
+    def accumulate_tokens(self, conv_id: str, input_tokens: int, output_tokens: int) -> bool:
+        """Add tokens to existing counts (for incremental updates)."""
+        with get_db() as conn:
+            cursor = conn.execute(
+                """UPDATE conversations
+                   SET input_tokens = COALESCE(input_tokens, 0) + ?,
+                       output_tokens = COALESCE(output_tokens, 0) + ?,
+                       updated_at = ?
+                   WHERE id = ?""",
+                (input_tokens, output_tokens, datetime.now().isoformat(), conv_id)
             )
             return cursor.rowcount > 0
 

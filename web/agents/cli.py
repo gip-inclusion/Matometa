@@ -240,11 +240,14 @@ class CLIBackend(AgentBackend):
             )
 
         elif event_type == "result":
-            # Final result message
+            # Final result message - preserve usage info if present
+            raw = dict(event)
+            if "usage" in event:
+                raw["usage"] = event["usage"]
             return AgentMessage(
                 type="system",
                 content=f"Completed: {event.get('subtype', 'done')}",
-                raw=event,
+                raw=raw,
             )
 
         return None

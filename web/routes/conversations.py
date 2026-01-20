@@ -590,10 +590,20 @@ User request: """
                             content = json.dumps(event.content) if isinstance(event.content, dict) else str(event.content)
                             store.add_message(conv_id, event.type, content)
 
-                        if event.type == "system" and event.raw.get("subtype") == "init":
-                            new_session_id = event.raw.get("session_id")
-                            if new_session_id:
-                                store.update_conversation(conv_id, session_id=new_session_id)
+                        if event.type == "system":
+                            # Handle session ID from init event
+                            if event.raw.get("subtype") == "init":
+                                new_session_id = event.raw.get("session_id")
+                                if new_session_id:
+                                    store.update_conversation(conv_id, session_id=new_session_id)
+
+                            # Extract and store token usage from result event
+                            if event.raw.get("usage"):
+                                usage = event.raw["usage"]
+                                input_tokens = usage.get("input_tokens", 0)
+                                output_tokens = usage.get("output_tokens", 0)
+                                if input_tokens or output_tokens:
+                                    store.accumulate_tokens(conv_id, input_tokens, output_tokens)
 
                         # Then queue for SSE (may fail if client disconnected - that's OK)
                         event_queue.put(("event", event))

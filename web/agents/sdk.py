@@ -202,10 +202,18 @@ User: {message}"""
             ))
 
         elif isinstance(sdk_message, ResultMessage):
+            raw = {"result": True}
+            # Extract token usage if available
+            if hasattr(sdk_message, 'usage') and sdk_message.usage:
+                usage = sdk_message.usage
+                raw["usage"] = {
+                    "input_tokens": getattr(usage, 'input_tokens', 0),
+                    "output_tokens": getattr(usage, 'output_tokens', 0),
+                }
             messages.append(AgentMessage(
                 type="system",
                 content=f"Completed: {getattr(sdk_message, 'subtype', 'done')}",
-                raw={"result": True}
+                raw=raw
             ))
 
         return messages

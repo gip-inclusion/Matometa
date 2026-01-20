@@ -17,11 +17,15 @@ class AgentMessage:
 
     def to_dict(self) -> dict:
         """Convert to JSON-serializable dict."""
-        return {
+        result = {
             "type": self.type,
             "content": self.content,
             "timestamp": self.timestamp,
         }
+        # Include raw data for system events (contains usage info)
+        if self.type == "system" and self.raw:
+            result["raw"] = self.raw
+        return result
 
 
 class AgentBackend(ABC):
