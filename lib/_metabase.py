@@ -96,9 +96,23 @@ class MetabaseAPI:
         endpoint: str,
         data: Optional[dict] = None,
         timeout: int = 60,
+        query_type: Optional[str] = None,
     ) -> Any:
-        """Make an API request."""
+        """Make an API request with automatic logging."""
+        start_time = time.time()
         url = f"{self.url}{endpoint}"
+
+        # Determine query type from endpoint if not provided
+        if query_type is None:
+            query_type = endpoint.split("/")[2] if endpoint.startswith("/api/") else "request"
+
+        query_details = {"endpoint": endpoint, "method": method}
+        if data:
+            # Truncate SQL if present
+            if "native" in data and "query" in data.get("native", {}):
+                query_details["sql"] = data["native"]["query"][:500]
+            else:
+                query_details["data"] = str(data)[:200]
 
         headers = {
             "X-API-KEY": self.api_key,
@@ -110,12 +124,59 @@ class MetabaseAPI:
 
         try:
             with urllib.request.urlopen(req, timeout=timeout) as response:
-                return json.loads(response.read().decode())
+                result = json.loads(response.read().decode())
+
+                execution_time_ms = int((time.time() - start_time) * 1000)
+                log_query(
+                    source="metabase",
+                    instance=self.instance,
+                    caller=self.caller,
+                    conversation_id=None,
+                    query_type=query_type,
+                    query_details=query_details,
+                    success=True,
+                    error=None,
+                    execution_time_ms=execution_time_ms,
+                )
+
+                return result
+
         except urllib.error.HTTPError as e:
             error_body = e.read().decode() if e.fp else str(e)
-            raise MetabaseError(f"HTTP {e.code}: {error_body}")
+            execution_time_ms = int((time.time() - start_time) * 1000)
+            error_msg = f"HTTP {e.code}: {error_body}"
+
+            log_query(
+                source="metabase",
+                instance=self.instance,
+                caller=self.caller,
+                conversation_id=None,
+                query_type=query_type,
+                query_details=query_details,
+                success=False,
+                error=error_msg,
+                execution_time_ms=execution_time_ms,
+            )
+
+            raise MetabaseError(error_msg)
+
         except urllib.error.URLError as e:
-            raise MetabaseError(f"Request failed: {e}")
+            execution_time_ms = int((time.time() - start_time) * 1000)
+            error_msg = f"Request failed: {e}"
+
+            log_query(
+                source="metabase",
+                instance=self.instance,
+                caller=self.caller,
+                conversation_id=None,
+                query_type=query_type,
+                query_details=query_details,
+                success=False,
+                error=error_msg,
+                execution_time_ms=execution_time_ms,
+            )
+
+            raise MetabaseError(error_msg)
 
     def _parse_result(self, data: dict) -> QueryResult:
         """Parse Metabase query result into QueryResult."""
@@ -148,52 +209,13 @@ class MetabaseAPI:
         Returns:
             QueryResult with columns and rows
         """
-        start_time = time.time()
-        query_details = {"sql": sql[:500], "database_id": self.database_id}
-
-        try:
-            data = {
-                "database": self.database_id,
-                "type": "native",
-                "native": {"query": sql},
-            }
-            result_data = self._request("POST", "/api/dataset", data, timeout=timeout)
-            result = self._parse_result(result_data)
-
-            execution_time_ms = int((time.time() - start_time) * 1000)
-
-            log_query(
-                source="metabase",
-                instance=self.instance,
-                caller=self.caller,
-                conversation_id=None,  # Auto-read from env
-                query_type="sql",
-                query_details=query_details,
-                success=True,
-                error=None,
-                execution_time_ms=execution_time_ms,
-                row_count=result.row_count,
-            )
-
-            return result
-
-        except Exception as e:
-            execution_time_ms = int((time.time() - start_time) * 1000)
-            error_msg = str(e)
-
-            log_query(
-                source="metabase",
-                instance=self.instance,
-                caller=self.caller,
-                conversation_id=None,
-                query_type="sql",
-                query_details=query_details,
-                success=False,
-                error=error_msg,
-                execution_time_ms=execution_time_ms,
-            )
-
-            raise
+        data = {
+            "database": self.database_id,
+            "type": "native",
+            "native": {"query": sql},
+        }
+        result_data = self._request("POST", "/api/dataset", data, timeout=timeout, query_type="sql")
+        return self._parse_result(result_data)
 
     def execute_card(self, card_id: int, timeout: int = 60) -> QueryResult:
         """
@@ -206,49 +228,10 @@ class MetabaseAPI:
         Returns:
             QueryResult with columns and rows
         """
-        start_time = time.time()
-        query_details = {"card_id": card_id}
-
-        try:
-            result_data = self._request(
-                "POST", f"/api/card/{card_id}/query", {}, timeout=timeout
-            )
-            result = self._parse_result(result_data)
-
-            execution_time_ms = int((time.time() - start_time) * 1000)
-
-            log_query(
-                source="metabase",
-                instance=self.instance,
-                caller=self.caller,
-                conversation_id=None,
-                query_type="card",
-                query_details=query_details,
-                success=True,
-                error=None,
-                execution_time_ms=execution_time_ms,
-                row_count=result.row_count,
-            )
-
-            return result
-
-        except Exception as e:
-            execution_time_ms = int((time.time() - start_time) * 1000)
-            error_msg = str(e)
-
-            log_query(
-                source="metabase",
-                instance=self.instance,
-                caller=self.caller,
-                conversation_id=None,
-                query_type="card",
-                query_details=query_details,
-                success=False,
-                error=error_msg,
-                execution_time_ms=execution_time_ms,
-            )
-
-            raise
+        result_data = self._request(
+            "POST", f"/api/card/{card_id}/query", {}, timeout=timeout, query_type="card"
+        )
+        return self._parse_result(result_data)
 
     def get_card(self, card_id: int) -> dict:
         """Get card metadata."""
