@@ -119,6 +119,8 @@ Variables d'environnement principales :
 
 ## Déploiement
 
+### Docker (auto-hébergé)
+
 ```bash
 # Build et run avec Docker
 docker-compose up -d
@@ -128,6 +130,42 @@ docker-compose up -d
 ```
 
 Le conteneur utilise OAuth2-Proxy pour l'authentification. L'email de l'utilisateur est passé via le header `X-Forwarded-Email`.
+
+### Scalingo
+
+L'application est prête pour un déploiement sur Scalingo avec PostgreSQL.
+
+```bash
+# Créer l'application
+scalingo create matometa
+
+# Ajouter PostgreSQL
+scalingo addons-add postgresql postgresql-starter-512
+
+# Configurer les variables d'environnement
+scalingo env-set MATOMO_TOKEN=xxx
+scalingo env-set METABASE_USER=xxx
+scalingo env-set METABASE_PASSWORD=xxx
+scalingo env-set ANTHROPIC_API_KEY=xxx
+scalingo env-set ADMIN_USERS=user@example.com
+
+# (Optionnel) Stockage S3 pour les fichiers interactifs
+scalingo env-set S3_BUCKET=matometa-files
+scalingo env-set S3_ENDPOINT=https://s3.fr-par.scw.cloud
+scalingo env-set S3_ACCESS_KEY=xxx
+scalingo env-set S3_SECRET_KEY=xxx
+
+# Déployer
+git push scalingo main
+```
+
+**Variables automatiques Scalingo :**
+- `DATABASE_URL` : fournie automatiquement par l'addon PostgreSQL
+- `PORT` : port d'écoute (utilisé par le Procfile)
+
+**Fichiers de configuration :**
+- `Procfile` : commande de démarrage gunicorn
+- `runtime.txt` : version Python (3.11)
 
 ## Développement
 
