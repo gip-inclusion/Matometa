@@ -115,6 +115,7 @@ Variables d'environnement principales :
 | `METABASE_PASSWORD` | Mot de passe Metabase |
 | `ANTHROPIC_API_KEY` | Clé API Anthropic (optionnel, OAuth par défaut) |
 | `AGENT_BACKEND` | `cli` (défaut) ou `sdk` |
+| `DB_BACKEND` | `sqlite` (défaut) ou `postgres` |
 | `ADMIN_USERS` | Emails des admins (séparés par virgules) |
 
 ## Déploiement
@@ -143,6 +144,7 @@ scalingo create matometa
 scalingo addons-add postgresql postgresql-starter-512
 
 # Configurer les variables d'environnement
+scalingo env-set DB_BACKEND=postgres
 scalingo env-set MATOMO_TOKEN=xxx
 scalingo env-set METABASE_USER=xxx
 scalingo env-set METABASE_PASSWORD=xxx

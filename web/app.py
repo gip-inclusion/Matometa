@@ -1,9 +1,8 @@
 """Matometa web application - Flask server with SSE streaming."""
 
 import logging
-from pathlib import Path
 
-from flask import Flask, g, request, send_from_directory, abort, redirect, Response
+from flask import Flask, g, request, send_from_directory, abort, redirect
 
 from . import config
 from .routes import (
@@ -16,18 +15,10 @@ from .routes import (
     query_bp,
 )
 
-# Configure logging
-# On Scalingo (DATABASE_URL set), use stdout only - Scalingo captures it automatically
-# Locally, also write to file for persistence
-_log_handlers = [logging.StreamHandler()]
-if not config.DATABASE_URL:
-    config.LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _log_handlers.append(logging.FileHandler(config.LOG_FILE))
-
+# Configure logging (stdout only)
 logging.basicConfig(
     level=logging.DEBUG if config.DEBUG else logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=_log_handlers,
 )
 logger = logging.getLogger(__name__)
 

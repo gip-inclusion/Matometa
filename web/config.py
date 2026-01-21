@@ -43,15 +43,10 @@ ADMIN_USERS = [
     if email.strip()
 ]
 
-# Database
-# If DATABASE_URL is set (Scalingo provides this), use PostgreSQL
-# Otherwise, fall back to SQLite for local development
-DATABASE_URL = os.getenv("DATABASE_URL")
+# Database backend: "sqlite" (default) or "postgres"
+DB_BACKEND = os.getenv("DB_BACKEND", "sqlite")
+DATABASE_URL = os.getenv("DATABASE_URL")  # Required when DB_BACKEND=postgres
 SQLITE_PATH = BASE_DIR / "data" / "matometa.db"
-
-# Logging
-LOG_FILE = BASE_DIR / "data" / "agent.log"
-# Don't create log directory here - let app.py handle it based on environment
 
 # Interactive files directory (agent-generated exports, dashboards)
 # Used for local storage fallback when S3 is not configured

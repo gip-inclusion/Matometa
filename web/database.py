@@ -11,9 +11,8 @@ import os
 
 from . import config
 
-# Detect database type from DATABASE_URL
-DATABASE_URL = config.DATABASE_URL
-USE_POSTGRES = DATABASE_URL is not None and DATABASE_URL.startswith(("postgres://", "postgresql://"))
+# Database backend from config
+USE_POSTGRES = config.DB_BACKEND == "postgres"
 
 if USE_POSTGRES:
     import psycopg2
@@ -153,7 +152,7 @@ class ConnectionWrapper:
 def get_connection() -> ConnectionWrapper:
     """Get a database connection with row factory."""
     if USE_POSTGRES:
-        conn = psycopg2.connect(DATABASE_URL)
+        conn = psycopg2.connect(config.DATABASE_URL)
         return ConnectionWrapper(conn, is_postgres=True)
     else:
         config.SQLITE_PATH.parent.mkdir(parents=True, exist_ok=True)
