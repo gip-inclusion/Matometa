@@ -664,6 +664,13 @@ body.has-sidebar {
   margin-top: 0;
 }
 
+.event-assistant img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1rem 0;
+}
+
 .event-assistant pre {
   background: var(--bs-tertiary-bg);
   border: 1px solid var(--bs-border-color);

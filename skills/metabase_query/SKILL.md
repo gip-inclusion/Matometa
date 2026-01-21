@@ -42,25 +42,35 @@ result = execute_metabase_query(
 )
 ```
 
-### Advanced: Card discovery
+### Advanced: Direct API access
 
-Use these patterns to find and explore saved cards:
+For more control (searching cards, getting metadata), use `get_metabase()`:
 
 ```python
-from lib.query import execute_metabase_query, CallerType
+from lib.query import get_metabase
+
+api = get_metabase(instance='stats')
+
+# Execute SQL
+result = api.execute_sql("SELECT 1")
+print(result.to_markdown())
+
+# Execute a saved card
+result = api.execute_card(7073)
+print(result.to_dicts())
 
 # Get card SQL to understand/modify it
-result = execute_metabase_query(
-    instance='stats',
-    caller=CallerType.AGENT,
-    card_id=7073,
-)
-# Check result.data for the query results
+sql = api.get_card_sql(7073)
 
-# To search for cards or get metadata, read the knowledge files:
-# - knowledge/stats/dashboards/ - Dashboard cards with IDs and SQL
-# - knowledge/stats/cards/ - Cards grouped by topic
+# Search for cards
+cards = api.search_cards("candidatures")
+for card in cards:
+    print(f"{card['id']}: {card['name']}")
 ```
+
+Card metadata is also documented in:
+- `knowledge/stats/dashboards/` - Dashboard cards with IDs and SQL
+- `knowledge/stats/cards/` - Cards grouped by topic
 
 ## Available Methods
 

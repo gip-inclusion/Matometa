@@ -104,6 +104,24 @@ result = execute_matomo_query(
 )
 ```
 
+### Advanced: Direct API access
+
+For convenience methods, use `get_matomo()`:
+
+```python
+from lib.query import get_matomo
+
+api = get_matomo(instance='inclusion')
+
+# Convenience methods
+summary = api.get_visits(site_id=117, period="month", date="2025-12-01")
+dimensions = api.get_dimension(site_id=117, dimension_id=1, period="month", date="2025-12-01")
+events = api.get_event_categories(site_id=117, period="month", date="2025-12-01")
+
+# Raw API call for any method
+data = api.request("Events.getName", idSite=211, period="month", date="2025-12-01")
+```
+
 ## CRITICAL: Timeout Prevention
 
 **Matomo has a 30-second query limit. Segmented queries on large date ranges WILL timeout.**

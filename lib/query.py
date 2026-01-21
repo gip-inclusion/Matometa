@@ -2,21 +2,25 @@
 Query execution with observability logging.
 
 Usage:
-    from lib.query import execute_query, CallerType, MatomoAPI, MetabaseAPI
+    from lib.query import execute_metabase_query, execute_matomo_query, CallerType
 
     # Using execute functions (returns QueryResult, never raises)
-    result = execute_query(
-        source="metabase",
+    result = execute_metabase_query(
         instance="datalake",
-        caller=CallerType.APP,
+        caller=CallerType.AGENT,
         sql="SELECT * FROM table LIMIT 10",
         database_id=2,
     )
     if result.success:
         print(result.data)
 
-    # Using API classes directly (raises on error, auto-logs)
-    api = MatomoAPI(url="matomo.example.com", token="...", instance="inclusion")
+    # Using helpers to get configured API clients
+    from lib.query import get_metabase, get_matomo
+
+    api = get_metabase(instance='stats')
+    result = api.execute_sql("SELECT 1")
+
+    api = get_matomo(instance='inclusion')
     visits = api.get_visits(site_id=117, period="month", date="2025-12-01")
 """
 
@@ -29,10 +33,9 @@ from typing import Any, Optional
 from ._sources import get_metabase, get_matomo
 from ._audit import log_query, _get_db_connection
 
-# Re-export API classes for convenience
+# Re-export API classes and helpers for convenience
 from ._matomo import MatomoAPI, MatomoError
 from ._metabase import MetabaseAPI, MetabaseError
-
 
 class CallerType(str, Enum):
     """Type of caller making the query."""
