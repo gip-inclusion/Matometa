@@ -17,13 +17,17 @@ from .routes import (
 )
 
 # Configure logging
+# On Scalingo (DATABASE_URL set), use stdout only - Scalingo captures it automatically
+# Locally, also write to file for persistence
+_log_handlers = [logging.StreamHandler()]
+if not config.DATABASE_URL:
+    config.LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _log_handlers.append(logging.FileHandler(config.LOG_FILE))
+
 logging.basicConfig(
     level=logging.DEBUG if config.DEBUG else logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[
-        logging.FileHandler(config.LOG_FILE),
-        logging.StreamHandler(),
-    ],
+    handlers=_log_handlers,
 )
 logger = logging.getLogger(__name__)
 
@@ -63,24 +67,23 @@ app.register_blueprint(query_bp)
 
 # =============================================================================
 # Static files: /interactive (served from data/interactive/)
+# Note: On Scalingo, this is ephemeral - files are lost on deploy/restart
 # =============================================================================
-
-INTERACTIVE_DIR = config.BASE_DIR / "data" / "interactive"
 
 
 @app.route("/interactive/")
 @app.route("/interactive/<path:filename>")
 def serve_interactive(filename=""):
     """Serve static files from the data/interactive directory."""
-    if not INTERACTIVE_DIR.exists():
-        INTERACTIVE_DIR.mkdir(parents=True, exist_ok=True)
+    if not config.INTERACTIVE_DIR.exists():
+        config.INTERACTIVE_DIR.mkdir(parents=True, exist_ok=True)
 
     # If path is a directory, serve index.html
-    full_path = INTERACTIVE_DIR / filename
+    full_path = config.INTERACTIVE_DIR / filename
     if full_path.is_dir():
-        filename = str((full_path / "index.html").relative_to(INTERACTIVE_DIR))
+        filename = str((full_path / "index.html").relative_to(config.INTERACTIVE_DIR))
 
-    return send_from_directory(INTERACTIVE_DIR, filename)
+    return send_from_directory(config.INTERACTIVE_DIR, filename)
 
 
 # =============================================================================

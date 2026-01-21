@@ -1,17 +1,23 @@
-"""SQLite database for conversation and report persistence."""
+"""Database for conversation and report persistence (SQLite or PostgreSQL)."""
 
 import json
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 import uuid
+import os
 
 from . import config
 
-# Database path
-DB_PATH = config.BASE_DIR / "data" / "matometa.db"
+# Detect database type from DATABASE_URL
+DATABASE_URL = config.DATABASE_URL
+USE_POSTGRES = DATABASE_URL is not None and DATABASE_URL.startswith(("postgres://", "postgresql://"))
+
+if USE_POSTGRES:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
 
 # Schema version for migrations
 SCHEMA_VERSION = 10
@@ -19,6 +25,12 @@ SCHEMA_VERSION = 10
 # Valid column names for dynamic updates (security: prevents SQL injection)
 VALID_CONVERSATION_COLUMNS = frozenset({"title", "session_id", "user_id", "status", "pr_url", "updated_at"})
 VALID_REPORT_COLUMNS = frozenset({"title", "website", "category", "tags", "original_query", "content", "updated_at"})
+
+
+def _placeholder(n: int = 1) -> str:
+    """Return the appropriate placeholder(s) for the database type."""
+    ph = "%s" if USE_POSTGRES else "?"
+    return ", ".join([ph] * n)
 
 
 def _build_update_clause(updates: dict, valid_columns: frozenset) -> tuple[str, list]:
@@ -34,18 +46,121 @@ def _build_update_clause(updates: dict, valid_columns: frozenset) -> tuple[str, 
         if key not in valid_columns:
             raise ValueError(f"Invalid column name: {key}")
 
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
+    ph = "%s" if USE_POSTGRES else "?"
+    set_clause = ", ".join(f"{k} = {ph}" for k in updates)
     values = list(updates.values())
     return set_clause, values
 
 
-def get_connection() -> sqlite3.Connection:
+class DictRowWrapper:
+    """Wrapper to make psycopg2 RealDictRow behave like sqlite3.Row for .keys() method."""
+    def __init__(self, row: dict):
+        self._row = row
+
+    def __getitem__(self, key):
+        return self._row[key]
+
+    def keys(self):
+        return self._row.keys()
+
+
+class ConnectionWrapper:
+    """Wrapper to normalize sqlite3 and psycopg2 connection interfaces."""
+
+    def __init__(self, conn, is_postgres: bool):
+        self._conn = conn
+        self._is_postgres = is_postgres
+        self._cursor = None
+
+    def execute(self, sql: str, params: tuple = ()) -> "ConnectionWrapper":
+        """Execute a query, converting placeholders if needed."""
+        if self._is_postgres:
+            # Convert ? to %s for PostgreSQL
+            sql = sql.replace("?", "%s")
+            self._cursor = self._conn.cursor(cursor_factory=RealDictCursor)
+        else:
+            self._cursor = self._conn.cursor()
+        self._cursor.execute(sql, params)
+        return self
+
+    def executescript(self, sql: str) -> "ConnectionWrapper":
+        """Execute multiple statements (SQLite) or single execution (PostgreSQL)."""
+        if self._is_postgres:
+            # PostgreSQL can execute multiple statements in one call
+            self._cursor = self._conn.cursor()
+            self._cursor.execute(sql)
+        else:
+            self._conn.executescript(sql)
+            self._cursor = self._conn.cursor()
+        return self
+
+    def executemany(self, sql: str, params_list: list) -> "ConnectionWrapper":
+        """Execute a query with multiple parameter sets."""
+        if self._is_postgres:
+            sql = sql.replace("?", "%s")
+            self._cursor = self._conn.cursor()
+        else:
+            self._cursor = self._conn.cursor()
+        self._cursor.executemany(sql, params_list)
+        return self
+
+    def fetchone(self) -> Optional[Any]:
+        """Fetch one row."""
+        if self._cursor is None:
+            return None
+        row = self._cursor.fetchone()
+        if row is None:
+            return None
+        if self._is_postgres:
+            return DictRowWrapper(row)
+        return row
+
+    def fetchall(self) -> list:
+        """Fetch all rows."""
+        if self._cursor is None:
+            return []
+        rows = self._cursor.fetchall()
+        if self._is_postgres:
+            return [DictRowWrapper(row) for row in rows]
+        return rows
+
+    @property
+    def lastrowid(self) -> Optional[int]:
+        """Get last inserted row ID."""
+        if self._cursor is None:
+            return None
+        if self._is_postgres:
+            # PostgreSQL needs RETURNING clause, handle in caller
+            return None
+        return self._cursor.lastrowid
+
+    @property
+    def rowcount(self) -> int:
+        """Get number of affected rows."""
+        if self._cursor is None:
+            return 0
+        return self._cursor.rowcount
+
+    def commit(self):
+        """Commit the transaction."""
+        self._conn.commit()
+
+    def close(self):
+        """Close the connection."""
+        self._conn.close()
+
+
+def get_connection() -> ConnectionWrapper:
     """Get a database connection with row factory."""
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    if USE_POSTGRES:
+        conn = psycopg2.connect(DATABASE_URL)
+        return ConnectionWrapper(conn, is_postgres=True)
+    else:
+        config.SQLITE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(config.SQLITE_PATH), check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        return ConnectionWrapper(conn, is_postgres=False)
 
 
 @contextmanager
@@ -59,13 +174,32 @@ def get_db():
         conn.close()
 
 
-def get_schema_version(conn: sqlite3.Connection) -> int:
+def get_schema_version(conn: ConnectionWrapper) -> int:
     """Get current schema version."""
     try:
         row = conn.execute("SELECT version FROM schema_version").fetchone()
         return row["version"] if row else 0
-    except sqlite3.OperationalError:
-        return 0
+    except (sqlite3.OperationalError, Exception) as e:
+        # Table doesn't exist yet
+        if "schema_version" in str(e).lower() or "does not exist" in str(e).lower():
+            return 0
+        # For PostgreSQL, check if it's a "relation does not exist" error
+        if USE_POSTGRES and "psycopg2" in str(type(e).__module__):
+            return 0
+        raise
+
+
+def _get_table_columns(conn: ConnectionWrapper, table_name: str) -> set[str]:
+    """Get column names for a table (works with both SQLite and PostgreSQL)."""
+    if USE_POSTGRES:
+        rows = conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = %s",
+            (table_name,)
+        ).fetchall()
+        return {row["column_name"] for row in rows}
+    else:
+        rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+        return {row["name"] for row in rows}
 
 
 def init_db():
@@ -104,47 +238,81 @@ def init_db():
             _migrate_to_v10(conn)
 
 
-def _create_schema_v1(conn: sqlite3.Connection):
+def _create_schema_v1(conn: ConnectionWrapper):
     """Create initial schema (v1 - legacy)."""
-    conn.executescript("""
-        CREATE TABLE IF NOT EXISTS schema_version (
-            version INTEGER PRIMARY KEY
-        );
+    if USE_POSTGRES:
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS schema_version (
+                version INTEGER PRIMARY KEY
+            );
 
-        CREATE TABLE IF NOT EXISTS conversations (
-            id TEXT PRIMARY KEY,
-            user_id TEXT,
-            title TEXT,
-            session_id TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
+            CREATE TABLE IF NOT EXISTS conversations (
+                id TEXT PRIMARY KEY,
+                user_id TEXT,
+                title TEXT,
+                session_id TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
 
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            conversation_id TEXT NOT NULL,
-            role TEXT NOT NULL,
-            content TEXT NOT NULL,
-            raw_events TEXT,
-            timestamp TEXT NOT NULL,
-            FOREIGN KEY (conversation_id) REFERENCES conversations(id)
-        );
+            CREATE TABLE IF NOT EXISTS messages (
+                id SERIAL PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                raw_events TEXT,
+                timestamp TEXT NOT NULL,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+            );
 
-        CREATE INDEX IF NOT EXISTS idx_messages_conversation
-            ON messages(conversation_id);
+            CREATE INDEX IF NOT EXISTS idx_messages_conversation
+                ON messages(conversation_id);
 
-        CREATE INDEX IF NOT EXISTS idx_conversations_updated
-            ON conversations(updated_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_conversations_updated
+                ON conversations(updated_at DESC);
 
-        INSERT OR REPLACE INTO schema_version (version) VALUES (1);
-    """)
+            INSERT INTO schema_version (version) VALUES (1)
+                ON CONFLICT (version) DO UPDATE SET version = 1;
+        """)
+    else:
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS schema_version (
+                version INTEGER PRIMARY KEY
+            );
+
+            CREATE TABLE IF NOT EXISTS conversations (
+                id TEXT PRIMARY KEY,
+                user_id TEXT,
+                title TEXT,
+                session_id TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                raw_events TEXT,
+                timestamp TEXT NOT NULL,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_messages_conversation
+                ON messages(conversation_id);
+
+            CREATE INDEX IF NOT EXISTS idx_conversations_updated
+                ON conversations(updated_at DESC);
+
+            INSERT OR REPLACE INTO schema_version (version) VALUES (1);
+        """)
 
 
-def _migrate_to_v2(conn: sqlite3.Connection):
+def _migrate_to_v2(conn: ConnectionWrapper):
     """Migrate to v2 schema: add type to messages, add reports table."""
     # Check if we need to migrate messages
-    cursor = conn.execute("PRAGMA table_info(messages)")
-    columns = {row["name"] for row in cursor.fetchall()}
+    columns = _get_table_columns(conn, "messages")
 
     if "type" not in columns:
         # Add type column, rename role to type
@@ -153,37 +321,63 @@ def _migrate_to_v2(conn: sqlite3.Connection):
         # Note: SQLite doesn't support DROP COLUMN easily, keep role for now
 
     # Create reports table
-    conn.executescript("""
-        CREATE TABLE IF NOT EXISTS reports (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            conversation_id TEXT NOT NULL,
-            message_id INTEGER,
-            title TEXT NOT NULL,
-            website TEXT,
-            category TEXT,
-            tags TEXT,
-            original_query TEXT,
-            version INTEGER DEFAULT 1,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            FOREIGN KEY (conversation_id) REFERENCES conversations(id),
-            FOREIGN KEY (message_id) REFERENCES messages(id)
-        );
+    if USE_POSTGRES:
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS reports (
+                id SERIAL PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                message_id INTEGER,
+                title TEXT NOT NULL,
+                website TEXT,
+                category TEXT,
+                tags TEXT,
+                original_query TEXT,
+                version INTEGER DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id),
+                FOREIGN KEY (message_id) REFERENCES messages(id)
+            );
 
-        CREATE INDEX IF NOT EXISTS idx_reports_conversation
-            ON reports(conversation_id);
+            CREATE INDEX IF NOT EXISTS idx_reports_conversation
+                ON reports(conversation_id);
 
-        CREATE INDEX IF NOT EXISTS idx_reports_updated
-            ON reports(updated_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_reports_updated
+                ON reports(updated_at DESC);
 
-        UPDATE schema_version SET version = 2;
-    """)
+            UPDATE schema_version SET version = 2;
+        """)
+    else:
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id TEXT NOT NULL,
+                message_id INTEGER,
+                title TEXT NOT NULL,
+                website TEXT,
+                category TEXT,
+                tags TEXT,
+                original_query TEXT,
+                version INTEGER DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id),
+                FOREIGN KEY (message_id) REFERENCES messages(id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_reports_conversation
+                ON reports(conversation_id);
+
+            CREATE INDEX IF NOT EXISTS idx_reports_updated
+                ON reports(updated_at DESC);
+
+            UPDATE schema_version SET version = 2;
+        """)
 
 
-def _migrate_to_v3(conn: sqlite3.Connection):
+def _migrate_to_v3(conn: ConnectionWrapper):
     """Migrate to v3 schema: add type, file_path, status to conversations for knowledge editing."""
-    cursor = conn.execute("PRAGMA table_info(conversations)")
-    columns = {row["name"] for row in cursor.fetchall()}
+    columns = _get_table_columns(conn, "conversations")
 
     if "conv_type" not in columns:
         conn.execute("ALTER TABLE conversations ADD COLUMN conv_type TEXT DEFAULT 'exploration'")
@@ -202,10 +396,9 @@ def _migrate_to_v3(conn: sqlite3.Connection):
     conn.execute("UPDATE schema_version SET version = 3")
 
 
-def _migrate_to_v4(conn: sqlite3.Connection):
+def _migrate_to_v4(conn: ConnectionWrapper):
     """Migrate to v4: add columns to reports (partial migration, see v5)."""
-    cursor = conn.execute("PRAGMA table_info(reports)")
-    columns = {row["name"] for row in cursor.fetchall()}
+    columns = _get_table_columns(conn, "reports")
 
     if "content" not in columns:
         conn.execute("ALTER TABLE reports ADD COLUMN content TEXT")
@@ -219,58 +412,65 @@ def _migrate_to_v4(conn: sqlite3.Connection):
     conn.execute("UPDATE schema_version SET version = 4")
 
 
-def _migrate_to_v5(conn: sqlite3.Connection):
+def _migrate_to_v5(conn: ConnectionWrapper):
     """Migrate to v5: recreate reports table with nullable conversation_id."""
-    # Recreate table with new schema (conversation_id nullable)
-    # Disable FK checks temporarily for table recreation
-    conn.executescript("""
-        PRAGMA foreign_keys = OFF;
+    if USE_POSTGRES:
+        # PostgreSQL: ALTER TABLE to drop NOT NULL constraint is simpler
+        # Check if conversation_id has NOT NULL constraint and remove it
+        conn.executescript("""
+            ALTER TABLE reports ALTER COLUMN conversation_id DROP NOT NULL;
+            UPDATE schema_version SET version = 5;
+        """)
+    else:
+        # SQLite: Recreate table with new schema (conversation_id nullable)
+        # Disable FK checks temporarily for table recreation
+        conn.executescript("""
+            PRAGMA foreign_keys = OFF;
 
-        DROP TABLE IF EXISTS reports_new;
+            DROP TABLE IF EXISTS reports_new;
 
-        CREATE TABLE reports_new (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            content TEXT,
-            website TEXT,
-            category TEXT,
-            tags TEXT,
-            original_query TEXT,
-            source_conversation_id TEXT,
-            user_id TEXT,
-            version INTEGER DEFAULT 1,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            -- Legacy columns (nullable for backwards compat)
-            conversation_id TEXT,
-            message_id INTEGER
-        );
+            CREATE TABLE reports_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                content TEXT,
+                website TEXT,
+                category TEXT,
+                tags TEXT,
+                original_query TEXT,
+                source_conversation_id TEXT,
+                user_id TEXT,
+                version INTEGER DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                -- Legacy columns (nullable for backwards compat)
+                conversation_id TEXT,
+                message_id INTEGER
+            );
 
-        INSERT INTO reports_new (id, title, content, website, category, tags, original_query,
-                                 source_conversation_id, user_id, version, created_at, updated_at,
-                                 conversation_id, message_id)
-        SELECT id, title, content, website, category, tags, original_query,
-               source_conversation_id, user_id, version, created_at, updated_at,
-               conversation_id, message_id
-        FROM reports;
+            INSERT INTO reports_new (id, title, content, website, category, tags, original_query,
+                                     source_conversation_id, user_id, version, created_at, updated_at,
+                                     conversation_id, message_id)
+            SELECT id, title, content, website, category, tags, original_query,
+                   source_conversation_id, user_id, version, created_at, updated_at,
+                   conversation_id, message_id
+            FROM reports;
 
-        DROP TABLE reports;
+            DROP TABLE reports;
 
-        ALTER TABLE reports_new RENAME TO reports;
+            ALTER TABLE reports_new RENAME TO reports;
 
-        CREATE INDEX IF NOT EXISTS idx_reports_updated
-            ON reports(updated_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_reports_updated
+                ON reports(updated_at DESC);
 
-        UPDATE schema_version SET version = 5;
+            UPDATE schema_version SET version = 5;
 
-        PRAGMA foreign_keys = ON;
-    """)
+            PRAGMA foreign_keys = ON;
+        """)
 
 
-def _migrate_to_v6(conn: sqlite3.Connection):
+def _migrate_to_v6(conn: ConnectionWrapper):
     """Migrate to v6: add archived column to reports."""
-    cursor = conn.execute("PRAGMA table_info(reports)")
-    columns = {row["name"] for row in cursor.fetchall()}
+    columns = _get_table_columns(conn, "reports")
 
     if "archived" not in columns:
         conn.execute("ALTER TABLE reports ADD COLUMN archived INTEGER DEFAULT 0")
@@ -278,10 +478,9 @@ def _migrate_to_v6(conn: sqlite3.Connection):
     conn.execute("UPDATE schema_version SET version = 6")
 
 
-def _migrate_to_v7(conn: sqlite3.Connection):
+def _migrate_to_v7(conn: ConnectionWrapper):
     """Migrate to v7: add pr_url column to conversations for GitHub PR tracking."""
-    cursor = conn.execute("PRAGMA table_info(conversations)")
-    columns = {row["name"] for row in cursor.fetchall()}
+    columns = _get_table_columns(conn, "conversations")
 
     if "pr_url" not in columns:
         conn.execute("ALTER TABLE conversations ADD COLUMN pr_url TEXT")
@@ -289,10 +488,9 @@ def _migrate_to_v7(conn: sqlite3.Connection):
     conn.execute("UPDATE schema_version SET version = 7")
 
 
-def _migrate_to_v8(conn: sqlite3.Connection):
+def _migrate_to_v8(conn: ConnectionWrapper):
     """Migrate to v8: add forked_from column to conversations for fork tracking."""
-    cursor = conn.execute("PRAGMA table_info(conversations)")
-    columns = {row["name"] for row in cursor.fetchall()}
+    columns = _get_table_columns(conn, "conversations")
 
     if "forked_from" not in columns:
         conn.execute("ALTER TABLE conversations ADD COLUMN forked_from TEXT")
@@ -300,19 +498,29 @@ def _migrate_to_v8(conn: sqlite3.Connection):
     conn.execute("UPDATE schema_version SET version = 8")
 
 
-def _migrate_to_v9(conn: sqlite3.Connection):
+def _migrate_to_v9(conn: ConnectionWrapper):
     """Migrate to v9: add tags system with normalized tables."""
-    # Create tags table
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS tags (
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE,
-            type TEXT NOT NULL,
-            label TEXT NOT NULL
-        )
-    """)
+    if USE_POSTGRES:
+        # Create tags table
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS tags (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                type TEXT NOT NULL,
+                label TEXT NOT NULL
+            )
+        """)
+    else:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS tags (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                type TEXT NOT NULL,
+                label TEXT NOT NULL
+            )
+        """)
 
-    # Create join tables
+    # Create join tables (same syntax for both)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS conversation_tags (
             conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
@@ -342,7 +550,7 @@ def _migrate_to_v9(conn: sqlite3.Connection):
     conn.execute("UPDATE schema_version SET version = 9")
 
 
-def _seed_tags(conn: sqlite3.Connection):
+def _seed_tags(conn: ConnectionWrapper):
     """Seed the tags table with our taxonomy."""
     tags = [
         # Produits (9)
@@ -384,16 +592,21 @@ def _seed_tags(conn: sqlite3.Connection):
         ("meta", "type_demande", "Meta"),
     ]
 
-    conn.executemany(
-        "INSERT OR IGNORE INTO tags (name, type, label) VALUES (?, ?, ?)",
-        tags
-    )
+    if USE_POSTGRES:
+        conn.executemany(
+            "INSERT INTO tags (name, type, label) VALUES (%s, %s, %s) ON CONFLICT (name) DO NOTHING",
+            tags
+        )
+    else:
+        conn.executemany(
+            "INSERT OR IGNORE INTO tags (name, type, label) VALUES (?, ?, ?)",
+            tags
+        )
 
 
-def _migrate_to_v10(conn: sqlite3.Connection):
+def _migrate_to_v10(conn: ConnectionWrapper):
     """Migrate to v10: add token tracking columns to conversations."""
-    cursor = conn.execute("PRAGMA table_info(conversations)")
-    columns = {row["name"] for row in cursor.fetchall()}
+    columns = _get_table_columns(conn, "conversations")
 
     if "input_tokens" not in columns:
         conn.execute("ALTER TABLE conversations ADD COLUMN input_tokens INTEGER DEFAULT 0")
@@ -867,12 +1080,21 @@ class ConversationStore:
                 return None
 
             # Insert message
-            cursor = conn.execute(
-                """INSERT INTO messages (conversation_id, type, role, content, timestamp)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (conv_id, type, type, content, msg.created_at.isoformat())
-            )
-            msg.id = cursor.lastrowid
+            if USE_POSTGRES:
+                cursor = conn.execute(
+                    """INSERT INTO messages (conversation_id, type, role, content, timestamp)
+                       VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+                    (conv_id, type, type, content, msg.created_at.isoformat())
+                )
+                row = cursor.fetchone()
+                msg.id = row["id"] if row else None
+            else:
+                cursor = conn.execute(
+                    """INSERT INTO messages (conversation_id, type, role, content, timestamp)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (conv_id, type, type, content, msg.created_at.isoformat())
+                )
+                msg.id = cursor.lastrowid
 
             # Update conversation timestamp
             now = datetime.now().isoformat()
@@ -965,17 +1187,31 @@ class ConversationStore:
         )
 
         with get_db() as conn:
-            cursor = conn.execute(
-                """INSERT INTO reports
-                   (title, content, website, category, tags, original_query,
-                    source_conversation_id, user_id, version, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (title, content, website, category,
-                 json.dumps(tags) if tags else None, original_query,
-                 source_conversation_id, user_id,
-                 1, report.created_at.isoformat(), report.updated_at.isoformat())
-            )
-            report.id = cursor.lastrowid
+            if USE_POSTGRES:
+                cursor = conn.execute(
+                    """INSERT INTO reports
+                       (title, content, website, category, tags, original_query,
+                        source_conversation_id, user_id, version, created_at, updated_at)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                    (title, content, website, category,
+                     json.dumps(tags) if tags else None, original_query,
+                     source_conversation_id, user_id,
+                     1, report.created_at.isoformat(), report.updated_at.isoformat())
+                )
+                row = cursor.fetchone()
+                report.id = row["id"] if row else None
+            else:
+                cursor = conn.execute(
+                    """INSERT INTO reports
+                       (title, content, website, category, tags, original_query,
+                        source_conversation_id, user_id, version, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (title, content, website, category,
+                     json.dumps(tags) if tags else None, original_query,
+                     source_conversation_id, user_id,
+                     1, report.created_at.isoformat(), report.updated_at.isoformat())
+                )
+                report.id = cursor.lastrowid
 
         return report
 
@@ -1204,10 +1440,16 @@ class ConversationStore:
                     "SELECT id FROM tags WHERE name = ?", (tag_name,)
                 ).fetchone()
                 if tag_row:
-                    conn.execute(
-                        "INSERT OR IGNORE INTO conversation_tags (conversation_id, tag_id) VALUES (?, ?)",
-                        (conv_id, tag_row["id"])
-                    )
+                    if USE_POSTGRES:
+                        conn.execute(
+                            "INSERT INTO conversation_tags (conversation_id, tag_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                            (conv_id, tag_row["id"])
+                        )
+                    else:
+                        conn.execute(
+                            "INSERT OR IGNORE INTO conversation_tags (conversation_id, tag_id) VALUES (?, ?)",
+                            (conv_id, tag_row["id"])
+                        )
 
             # Update conversation timestamp
             if update_timestamp:
@@ -1244,10 +1486,16 @@ class ConversationStore:
                     "SELECT id FROM tags WHERE name = ?", (tag_name,)
                 ).fetchone()
                 if tag_row:
-                    conn.execute(
-                        "INSERT OR IGNORE INTO report_tags (report_id, tag_id) VALUES (?, ?)",
-                        (report_id, tag_row["id"])
-                    )
+                    if USE_POSTGRES:
+                        conn.execute(
+                            "INSERT INTO report_tags (report_id, tag_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                            (report_id, tag_row["id"])
+                        )
+                    else:
+                        conn.execute(
+                            "INSERT OR IGNORE INTO report_tags (report_id, tag_id) VALUES (?, ?)",
+                            (report_id, tag_row["id"])
+                        )
 
             # Update report timestamp
             if update_timestamp:

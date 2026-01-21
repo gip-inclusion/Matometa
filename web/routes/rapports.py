@@ -18,13 +18,13 @@ def scan_interactive_apps():
 
     An app is valid if it has an APP.md file with YAML front-matter.
     Returns list of dicts matching report structure where possible.
+    Note: On Scalingo, interactive apps are ephemeral (lost on deploy/restart).
     """
-    interactive_dir = config.BASE_DIR / "data" / "interactive"
-    if not interactive_dir.exists():
+    if not config.INTERACTIVE_DIR.exists():
         return []
 
     apps = []
-    for folder in interactive_dir.iterdir():
+    for folder in config.INTERACTIVE_DIR.iterdir():
         if not folder.is_dir():
             continue
 

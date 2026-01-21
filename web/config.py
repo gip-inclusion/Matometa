@@ -43,9 +43,19 @@ ADMIN_USERS = [
     if email.strip()
 ]
 
+# Database
+# If DATABASE_URL is set (Scalingo provides this), use PostgreSQL
+# Otherwise, fall back to SQLite for local development
+DATABASE_URL = os.getenv("DATABASE_URL")
+SQLITE_PATH = BASE_DIR / "data" / "matometa.db"
+
 # Logging
 LOG_FILE = BASE_DIR / "data" / "agent.log"
-LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+# Don't create log directory here - let app.py handle it based on environment
+
+# Interactive files directory (agent-generated exports, dashboards)
+# Note: On Scalingo, this is ephemeral storage - files are lost on deploy/restart
+INTERACTIVE_DIR = BASE_DIR / "data" / "interactive"
 
 # Additional directories the agent can access (beyond working directory)
 ADDITIONAL_DIRS = ["/tmp"]
