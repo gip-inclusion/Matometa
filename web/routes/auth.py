@@ -2,18 +2,35 @@
 
 from flask import Blueprint, jsonify, request
 
-from .. import claude_auth, claude_credentials
+from .. import claude_auth, claude_credentials, config
 
 bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
 
 @bp.route("/status", methods=["GET"])
 def status():
-    """Get current authentication status."""
+    """Get current authentication status.
+
+    Returns backend type so frontend knows whether auth UI is needed.
+    Auth is only required for CLI backend, not SDK (which uses API key).
+    """
+    backend = config.AGENT_BACKEND
+
+    # SDK backend doesn't need interactive auth
+    if backend != "cli":
+        return jsonify({
+            "backend": backend,
+            "auth_required": False,
+            "authenticated": True,  # SDK uses API key, always "authenticated"
+        })
+
+    # CLI backend - check credentials
     creds_info = claude_credentials.get_credentials_info()
 
     if creds_info:
         return jsonify({
+            "backend": backend,
+            "auth_required": True,
             "authenticated": True,
             "subscription_type": creds_info.get("subscription_type"),
             "expires_at": creds_info.get("expires_at"),
@@ -23,6 +40,8 @@ def status():
     session_status = claude_auth.get_auth_status()
     if session_status["status"] != "no_session":
         return jsonify({
+            "backend": backend,
+            "auth_required": True,
             "authenticated": False,
             "auth_in_progress": True,
             "session_status": session_status["status"],
@@ -30,6 +49,8 @@ def status():
         })
 
     return jsonify({
+        "backend": backend,
+        "auth_required": True,
         "authenticated": False,
         "auth_in_progress": False,
     })

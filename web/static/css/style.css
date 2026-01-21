@@ -1584,3 +1584,36 @@ body.has-sidebar {
   border-radius: 0.75rem;
   margin-left: 0.25rem;
 }
+
+/* ==========================================================================
+   Auth Banner
+   ========================================================================== */
+.auth-banner {
+  position: fixed;
+  top: 0;
+  left: var(--sidebar-width);
+  right: 0;
+  z-index: 1000;
+  padding: 0.5rem 0;
+  background: rgba(255, 193, 7, 0.95);
+  backdrop-filter: blur(4px);
+}
+
+@media (max-width: 991.98px) {
+  .auth-banner {
+    left: 0;
+    top: 56px; /* Below mobile header */
+  }
+}
+
+.auth-banner .alert {
+  margin: 0;
+  border: none;
+  background: transparent;
+  padding: 0.5rem 1rem;
+}
+
+/* Push main content down when banner is visible */
+.auth-banner:not(.d-none) ~ .app-main {
+  padding-top: 3.5rem;
+}

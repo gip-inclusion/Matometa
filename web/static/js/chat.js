@@ -1271,3 +1271,159 @@ function formatReportCard(data) {
     </div>
   `;
 }
+
+
+// =============================================================================
+// Auth Management
+// =============================================================================
+
+let authModal = null;
+let isAuthenticated = false;
+
+/**
+ * Check authentication status on page load
+ * Only shows auth banner when using CLI backend (not SDK/API)
+ */
+async function checkAuthStatus() {
+  try {
+    const resp = await fetch('/api/auth/status');
+    const data = await resp.json();
+    isAuthenticated = data.authenticated;
+
+    const banner = document.getElementById('authBanner');
+    if (banner) {
+      // Only show banner if auth is required (CLI backend) AND not authenticated
+      const showBanner = data.auth_required && !data.authenticated;
+      banner.classList.toggle('d-none', !showBanner);
+    }
+
+    return isAuthenticated;
+  } catch (e) {
+    console.error('Failed to check auth status:', e);
+    return false;
+  }
+}
+
+/**
+ * Show auth modal
+ */
+function showAuthModal() {
+  // Reset modal to step 1
+  document.getElementById('authStep1').classList.remove('d-none');
+  document.getElementById('authStep2').classList.add('d-none');
+  document.getElementById('authStep3').classList.add('d-none');
+  document.getElementById('authStep4').classList.add('d-none');
+  document.getElementById('authError').classList.add('d-none');
+  document.getElementById('authCodeInput').value = '';
+
+  // Show modal
+  if (!authModal) {
+    authModal = new bootstrap.Modal(document.getElementById('authModal'));
+  }
+  authModal.show();
+}
+
+/**
+ * Start authentication flow
+ */
+async function startAuth() {
+  const step1 = document.getElementById('authStep1');
+  const step2 = document.getElementById('authStep2');
+  const step3 = document.getElementById('authStep3');
+  const loadingText = document.getElementById('authLoadingText');
+
+  // Show loading
+  step1.classList.add('d-none');
+  step3.classList.remove('d-none');
+  loadingText.textContent = 'Démarrage de l\'authentification...';
+
+  try {
+    const resp = await fetch('/api/auth/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force: true })
+    });
+    const data = await resp.json();
+
+    if (data.status === 'waiting_for_code' && data.oauth_url) {
+      // Show step 2 with OAuth URL
+      step3.classList.add('d-none');
+      step2.classList.remove('d-none');
+      document.getElementById('authOauthUrl').href = data.oauth_url;
+    } else if (data.status === 'already_authenticated') {
+      // Already authenticated
+      isAuthenticated = true;
+      document.getElementById('authBanner').classList.add('d-none');
+      step3.classList.add('d-none');
+      document.getElementById('authStep4').classList.remove('d-none');
+      setTimeout(() => authModal.hide(), 1500);
+    } else {
+      // Error
+      step3.classList.add('d-none');
+      step1.classList.remove('d-none');
+      alert('Erreur: ' + (data.error || 'Impossible de démarrer l\'authentification'));
+    }
+  } catch (e) {
+    step3.classList.add('d-none');
+    step1.classList.remove('d-none');
+    alert('Erreur réseau: ' + e.message);
+  }
+}
+
+/**
+ * Complete authentication with code
+ */
+async function completeAuth() {
+  const code = document.getElementById('authCodeInput').value.trim();
+  if (!code) {
+    document.getElementById('authError').textContent = 'Veuillez entrer le code';
+    document.getElementById('authError').classList.remove('d-none');
+    return;
+  }
+
+  const step2 = document.getElementById('authStep2');
+  const step3 = document.getElementById('authStep3');
+  const step4 = document.getElementById('authStep4');
+  const loadingText = document.getElementById('authLoadingText');
+  const errorDiv = document.getElementById('authError');
+
+  // Show loading
+  step2.classList.add('d-none');
+  step3.classList.remove('d-none');
+  loadingText.textContent = 'Validation du code...';
+  errorDiv.classList.add('d-none');
+
+  try {
+    const resp = await fetch('/api/auth/complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+    const data = await resp.json();
+
+    if (data.status === 'done') {
+      // Success
+      isAuthenticated = true;
+      document.getElementById('authBanner').classList.add('d-none');
+      step3.classList.add('d-none');
+      step4.classList.remove('d-none');
+      setTimeout(() => authModal.hide(), 1500);
+    } else {
+      // Error - go back to step 2
+      step3.classList.add('d-none');
+      step2.classList.remove('d-none');
+      errorDiv.textContent = data.error || 'Code invalide';
+      errorDiv.classList.remove('d-none');
+    }
+  } catch (e) {
+    step3.classList.add('d-none');
+    step2.classList.remove('d-none');
+    errorDiv.textContent = 'Erreur réseau: ' + e.message;
+    errorDiv.classList.remove('d-none');
+  }
+}
+
+// Check auth status on page load
+document.addEventListener('DOMContentLoaded', checkAuthStatus);
+// Also check after htmx navigations
+document.body.addEventListener('htmx:afterSettle', checkAuthStatus);
