@@ -574,24 +574,6 @@ GROUP BY 1
 ORDER BY total_orientations DESC
 ```
 
-## Analysis Insights (Jan 2025)
-
-Key findings from iMER/orientation analysis:
-
-**France Travail dominates volume but not quality:**
-- 62% of orientations come from FT
-- FT has 42% mobilisation→orientation conversion rate vs 1-15% for others
-- But FT validation rate (33%) is lower than services publics (63%)
-
-**Top converting categories:**
-- Remobilisation: 25% conversion, 69% validation
-- Difficultés financières: 23% conversion, 71% validation
-- Santé: 18% conversion, variable validation
-
-**Problem areas:**
-- Logement: only 4.5% conversion rate
-- 2,816 orientations to DI services without category mapping
-
 ## Related Resources
 
 - Site knowledge: `knowledge/sites/dora.md` (Matomo tracking, events, funnels)
