@@ -68,7 +68,11 @@ def serve_interactive(filename=""):
 
     When S3 is enabled, tries S3 first then falls back to local filesystem.
     This allows the agent to write files locally while still serving from S3 when available.
+    Content is proxied (not redirected) to avoid exposing internal S3 endpoints.
     """
+    from flask import Response
+    import mimetypes
+
     # Handle directory requests - try index.html
     if not filename or filename.endswith("/"):
         filename = filename + "index.html"
@@ -77,12 +81,11 @@ def serve_interactive(filename=""):
     if config.USE_S3:
         from . import s3
 
-        if s3.file_exists(filename):
-            url = s3.get_file_url(filename)
-            if url:
-                return redirect(url)
-            logger.error(f"Failed to generate presigned URL for existing file: {filename}")
-            abort(500)
+        content = s3.download_file(filename)
+        if content is not None:
+            # Guess content type
+            mime_type, _ = mimetypes.guess_type(filename)
+            return Response(content, mimetype=mime_type or "application/octet-stream")
 
     # Fallback to local filesystem (always, even when S3 is enabled)
     if not config.INTERACTIVE_DIR.exists():
