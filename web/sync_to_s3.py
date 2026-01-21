@@ -54,12 +54,18 @@ def _watch_loop():
 
     known_files: dict[Path, float] = {}  # path -> mtime
 
-    # Initial scan
+    # Initial sync: upload all existing local files to S3 (if not already there)
+    initial_count = 0
     for path in config.INTERACTIVE_DIR.rglob("*"):
         if path.is_file():
+            initial_count += 1
+            relative_path = path.relative_to(config.INTERACTIVE_DIR)
+            # Upload if not in S3
+            if not s3.file_exists(str(relative_path)):
+                _upload_file(path, s3)
             known_files[path] = path.stat().st_mtime
 
-    logger.debug(f"Initial scan found {len(known_files)} files")
+    logger.debug(f"Initial scan found {initial_count} files")
 
     while not _stop_event.is_set():
         try:
