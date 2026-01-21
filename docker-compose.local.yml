@@ -58,7 +58,8 @@ services:
         condition: service_completed_successfully
     environment:
       - AGENT_BACKEND=cli
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # Note: ANTHROPIC_API_KEY intentionally not set for CLI backend
+      # CLI uses OAuth credentials from ~/.claude/.credentials.json
       - GITHUB_PR_TOKEN=${GITHUB_PR_TOKEN}
       - GITHUB_REPO=${GITHUB_REPO}
       - NOTION_TOKEN=${NOTION_TOKEN}
