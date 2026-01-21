@@ -31,6 +31,10 @@ HOST = os.getenv("WEB_HOST", "127.0.0.1")
 PORT = int(os.getenv("WEB_PORT", "5000"))
 DEBUG = os.getenv("WEB_DEBUG", "true").lower() == "true"
 
+# Public URL for generating links (used by agent for shareable URLs)
+# Defaults to local dev URL if not set
+PUBLIC_URL = os.getenv("PUBLIC_URL", f"http://{HOST}:{PORT}").rstrip("/")
+
 # Default user for local development (when oauth-proxy not present)
 DEFAULT_USER = os.getenv("DEFAULT_USER", "admin@localhost")
 
