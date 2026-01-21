@@ -23,7 +23,7 @@ from lib.query import execute_metabase_query, CallerType
 
 # Execute a SQL query
 result = execute_metabase_query(
-    instance='stats',        # or 'datalake'
+    instance='stats',        # or 'datalake', 'dora'
     caller=CallerType.AGENT,
     sql="SELECT COUNT(*) FROM candidatures WHERE etat = 'Candidature acceptee'",
     database_id=2,
@@ -99,3 +99,4 @@ for card in cards:
 |----------|-----|-------------|---------|
 | stats | stats.inclusion.beta.gouv.fr | 2 | IAE employment statistics |
 | datalake | datalake.inclusion.beta.gouv.fr | 2 | Cross-product analytics |
+| dora | metabase.dora.inclusion.gouv.fr | 2 | Dora services directory (structures, services, orientations) |

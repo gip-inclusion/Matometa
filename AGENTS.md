@@ -44,6 +44,7 @@ result = execute_query(
 | `./knowledge/sites/` | Site-specific context — read before querying |
 | `./knowledge/stats/` | Stats Metabase instance (IAE dashboards) |
 | `./knowledge/datalake/` | Datalake Metabase instance |
+| `./knowledge/dora/` | Dora Metabase instance (services directory) |
 | `./knowledge/matomo/README.md` | Matomo API reference |
 | `./reports/` | Output reports |
 | `./data/scripts/` | One-off query scripts (produced by agent) |
