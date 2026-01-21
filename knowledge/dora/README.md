@@ -25,6 +25,56 @@ The API key (`METABASE_DORA_API_KEY`) has database query access but limited coll
 
 To get full access, the API key needs to be added to a group with collection permissions in Metabase admin.
 
+## Querying Dora Metabase
+
+### IMPORTANT: Always specify database_id=2
+
+When using `execute_metabase_query()`, you MUST include `database_id=2`:
+
+```python
+from lib.query import execute_metabase_query, CallerType
+
+# CORRECT
+result = execute_metabase_query(
+    instance='dora',
+    caller=CallerType.AGENT,
+    sql="SELECT COUNT(*) FROM structures_structure",
+    database_id=2,  # REQUIRED!
+)
+
+# WRONG - will error "Either sql+database_id or card_id must be provided"
+result = execute_metabase_query(
+    instance='dora',
+    caller=CallerType.AGENT,
+    sql="SELECT COUNT(*) FROM structures_structure",
+    # missing database_id!
+)
+```
+
+### Simpler: Use get_metabase() helper
+
+The helper handles database_id automatically:
+
+```python
+from lib.query import get_metabase
+
+api = get_metabase(instance='dora')
+result = api.execute_sql("SELECT COUNT(*) FROM structures_structure")
+print(result.rows[0][0])
+```
+
+### Case-sensitive table names
+
+The `int_iMER` table name is case-sensitive in PostgreSQL. Use quotes:
+
+```sql
+-- CORRECT
+SELECT * FROM public_intermediate."int_iMER" LIMIT 10
+
+-- WRONG - will error "relation does not exist"
+SELECT * FROM public_intermediate.int_imer LIMIT 10
+```
+
 ## Domain Model
 
 Dora is a directory of social services (services d'insertion) that connects professionals (prescribers) with services for their beneficiaries.
@@ -449,6 +499,98 @@ FROM services_service
 GROUP BY 1
 ORDER BY 2 DESC
 ```
+
+### iMER and orientations by organization type
+```sql
+-- Compare mobilisations and orientations by organization cluster
+WITH imer_by_org AS (
+    SELECT
+        CASE
+            WHEN s.typology = 'FT' THEN 'France Travail'
+            WHEN s.typology IN ('CD', 'MDS', 'CCAS', 'DEPT') THEN 'Services publics generalistes'
+            WHEN s.typology IN ('ML', 'CAP_EMPLOI') THEN 'Operateurs emploi'
+            ELSE 'Autres'
+        END as cluster,
+        i.kind,
+        COUNT(*) as count
+    FROM public_intermediate."int_iMER" i
+    JOIN structures_structuremember sm ON i.user_id = sm.user_id
+    JOIN structures_structure s ON sm.structure_id = s.id
+    WHERE i.date >= '2025-01-01'
+    GROUP BY 1, 2
+)
+SELECT cluster, kind, count
+FROM imer_by_org
+ORDER BY cluster, kind
+```
+
+### Conversion rates by category (mobilisation → orientation)
+```sql
+-- Calculate conversion rate from mobilisation to orientation by service category
+WITH mobs AS (
+    SELECT
+        i.service_categories,  -- comma-separated list
+        COUNT(*) as mobilisations
+    FROM public_intermediate."int_iMER" i
+    WHERE i.kind = 'mobilisation' AND i.date >= '2025-01-01'
+    GROUP BY 1
+),
+orients AS (
+    SELECT
+        i.service_categories,
+        COUNT(*) as orientations
+    FROM public_intermediate."int_iMER" i
+    WHERE i.kind = 'orientation' AND i.date >= '2025-01-01'
+    GROUP BY 1
+)
+SELECT
+    COALESCE(m.service_categories, o.service_categories) as categories,
+    COALESCE(m.mobilisations, 0) as mobilisations,
+    COALESCE(o.orientations, 0) as orientations,
+    ROUND(100.0 * COALESCE(o.orientations, 0) / NULLIF(COALESCE(m.mobilisations, 0), 0), 1) as conversion_rate
+FROM mobs m
+FULL OUTER JOIN orients o ON m.service_categories = o.service_categories
+ORDER BY mobilisations DESC
+```
+
+### Orientation validation rate by organization type
+```sql
+-- Validation rate (VALIDEE / total) by organization cluster
+SELECT
+    CASE
+        WHEN s.typology = 'FT' THEN 'France Travail'
+        WHEN s.typology IN ('CD', 'MDS', 'CCAS', 'DEPT') THEN 'Services publics'
+        WHEN s.typology IN ('ML', 'CAP_EMPLOI') THEN 'Operateurs emploi'
+        ELSE 'Autres'
+    END as cluster,
+    COUNT(*) as total_orientations,
+    COUNT(*) FILTER (WHERE o.status = 'VALIDEE') as validated,
+    ROUND(100.0 * COUNT(*) FILTER (WHERE o.status = 'VALIDEE') / COUNT(*), 1) as validation_rate
+FROM orientations_orientation o
+JOIN structures_structuremember sm ON o.prescriber_id = sm.user_id
+JOIN structures_structure s ON sm.structure_id = s.id
+WHERE o.creation_date >= '2025-01-01'
+GROUP BY 1
+ORDER BY total_orientations DESC
+```
+
+## Analysis Insights (Jan 2025)
+
+Key findings from iMER/orientation analysis:
+
+**France Travail dominates volume but not quality:**
+- 62% of orientations come from FT
+- FT has 42% mobilisation→orientation conversion rate vs 1-15% for others
+- But FT validation rate (33%) is lower than services publics (63%)
+
+**Top converting categories:**
+- Remobilisation: 25% conversion, 69% validation
+- Difficultés financières: 23% conversion, 71% validation
+- Santé: 18% conversion, variable validation
+
+**Problem areas:**
+- Logement: only 4.5% conversion rate
+- 2,816 orientations to DI services without category mapping
 
 ## Related Resources
 
