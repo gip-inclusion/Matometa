@@ -89,8 +89,18 @@ def credentials_exist() -> bool:
 
 
 def get_credentials_info() -> dict | None:
-    """Get non-sensitive info about current credentials."""
+    """Get non-sensitive info about current credentials.
+
+    Set SKIP_CLI_AUTH_CHECK=true when running outside container (e.g., local dev
+    with `.venv/bin/python -m web.app`) where the user's Claude CLI is already
+    authenticated through their own setup.
+    """
+    import os
+
     if not CREDENTIALS_FILE.exists():
+        # Local dev outside container: assume CLI is authenticated
+        if os.getenv("SKIP_CLI_AUTH_CHECK", "").lower() == "true":
+            return {"authenticated": True, "local_dev": True}
         return None
 
     try:
