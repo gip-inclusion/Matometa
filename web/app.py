@@ -3,7 +3,7 @@
 import logging
 from pathlib import Path
 
-from flask import Flask, g, request, send_from_directory, abort
+from flask import Flask, g, request, send_from_directory, abort, redirect, Response
 
 from . import config
 from .routes import (
@@ -66,24 +66,40 @@ app.register_blueprint(query_bp)
 
 
 # =============================================================================
-# Static files: /interactive (served from data/interactive/)
-# Note: On Scalingo, this is ephemeral - files are lost on deploy/restart
+# Static files: /interactive (served from S3 or local data/interactive/)
 # =============================================================================
 
 
 @app.route("/interactive/")
 @app.route("/interactive/<path:filename>")
 def serve_interactive(filename=""):
-    """Serve static files from the data/interactive directory."""
-    if not config.INTERACTIVE_DIR.exists():
-        config.INTERACTIVE_DIR.mkdir(parents=True, exist_ok=True)
+    """Serve static files from S3 or local data/interactive directory."""
+    if config.USE_S3:
+        from . import s3
 
-    # If path is a directory, serve index.html
-    full_path = config.INTERACTIVE_DIR / filename
-    if full_path.is_dir():
-        filename = str((full_path / "index.html").relative_to(config.INTERACTIVE_DIR))
+        # Handle directory requests - try index.html
+        if not filename or filename.endswith("/"):
+            filename = filename + "index.html"
 
-    return send_from_directory(config.INTERACTIVE_DIR, filename)
+        # Check if file exists and redirect to presigned URL
+        if s3.file_exists(filename):
+            url = s3.get_file_url(filename)
+            if url:
+                return redirect(url)
+
+        # File not found
+        abort(404)
+    else:
+        # Local filesystem fallback
+        if not config.INTERACTIVE_DIR.exists():
+            config.INTERACTIVE_DIR.mkdir(parents=True, exist_ok=True)
+
+        # If path is a directory, serve index.html
+        full_path = config.INTERACTIVE_DIR / filename
+        if full_path.is_dir():
+            filename = str((full_path / "index.html").relative_to(config.INTERACTIVE_DIR))
+
+        return send_from_directory(config.INTERACTIVE_DIR, filename)
 
 
 # =============================================================================

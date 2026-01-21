@@ -12,82 +12,106 @@ from .. import config
 bp = Blueprint("rapports", __name__)
 
 
+def _parse_app_md(content: str, folder_name: str) -> dict | None:
+    """Parse APP.md content and return app dict, or None if invalid."""
+    if not content.startswith("---"):
+        return None
+
+    # Extract front-matter
+    parts = content.split("---", 2)
+    if len(parts) < 3:
+        return None
+
+    fm = {}
+    for line in parts[1].strip().split("\n"):
+        if ":" in line:
+            key, value = line.split(":", 1)
+            fm[key.strip().lower()] = value.strip()
+
+    if "title" not in fm:
+        return None
+
+    # Parse updated date
+    updated = None
+    if "updated" in fm:
+        try:
+            updated = datetime.strptime(fm["updated"], "%Y-%m-%d")
+        except ValueError:
+            pass
+
+    # Parse tags (comma-separated or YAML list)
+    tags = []
+    if "tags" in fm:
+        raw_tags = fm["tags"]
+        if raw_tags.startswith("[") and raw_tags.endswith("]"):
+            # YAML list syntax: [tag1, tag2]
+            tags = [t.strip() for t in raw_tags[1:-1].split(",") if t.strip()]
+        else:
+            # Comma-separated
+            tags = [t.strip() for t in raw_tags.split(",") if t.strip()]
+
+    # Parse authors (comma-separated)
+    authors = []
+    if "authors" in fm:
+        authors = [a.strip() for a in fm["authors"].split(",") if a.strip()]
+
+    return {
+        "slug": folder_name,
+        "title": fm.get("title"),
+        "description": fm.get("description", ""),
+        "website": fm.get("website"),
+        "category": fm.get("category"),
+        "tags": tags,
+        "authors": authors,
+        "conversation_id": fm.get("conversation_id"),
+        "updated": updated,
+        "url": f"/interactive/{folder_name}/",
+        "is_interactive": True,
+    }
+
+
 def scan_interactive_apps():
     """
-    Scan /data/interactive/ for valid apps.
+    Scan /data/interactive/ for valid apps (S3 or local filesystem).
 
     An app is valid if it has an APP.md file with YAML front-matter.
     Returns list of dicts matching report structure where possible.
-    Note: On Scalingo, interactive apps are ephemeral (lost on deploy/restart).
     """
-    if not config.INTERACTIVE_DIR.exists():
-        return []
-
     apps = []
-    for folder in config.INTERACTIVE_DIR.iterdir():
-        if not folder.is_dir():
-            continue
 
-        app_md = folder / "APP.md"
-        if not app_md.exists():
-            continue
+    if config.USE_S3:
+        from .. import s3
 
-        # Parse front-matter
-        content = app_md.read_text()
-        if not content.startswith("---"):
-            continue
+        # List directories in S3
+        directories = s3.list_directories()
+        for folder_name in directories:
+            # Try to download APP.md
+            app_md_content = s3.download_file(f"{folder_name}/APP.md")
+            if app_md_content:
+                try:
+                    content = app_md_content.decode("utf-8")
+                    app = _parse_app_md(content, folder_name)
+                    if app:
+                        apps.append(app)
+                except UnicodeDecodeError:
+                    continue
+    else:
+        # Local filesystem
+        if not config.INTERACTIVE_DIR.exists():
+            return []
 
-        # Extract front-matter
-        parts = content.split("---", 2)
-        if len(parts) < 3:
-            continue
+        for folder in config.INTERACTIVE_DIR.iterdir():
+            if not folder.is_dir():
+                continue
 
-        fm = {}
-        for line in parts[1].strip().split("\n"):
-            if ":" in line:
-                key, value = line.split(":", 1)
-                fm[key.strip().lower()] = value.strip()
+            app_md = folder / "APP.md"
+            if not app_md.exists():
+                continue
 
-        if "title" not in fm:
-            continue
-
-        # Parse updated date
-        updated = None
-        if "updated" in fm:
-            try:
-                updated = datetime.strptime(fm["updated"], "%Y-%m-%d")
-            except ValueError:
-                pass
-
-        # Parse tags (comma-separated or YAML list)
-        tags = []
-        if "tags" in fm:
-            raw_tags = fm["tags"]
-            if raw_tags.startswith("[") and raw_tags.endswith("]"):
-                # YAML list syntax: [tag1, tag2]
-                tags = [t.strip() for t in raw_tags[1:-1].split(",") if t.strip()]
-            else:
-                # Comma-separated
-                tags = [t.strip() for t in raw_tags.split(",") if t.strip()]
-
-        # Parse authors (comma-separated)
-        authors = []
-        if "authors" in fm:
-            authors = [a.strip() for a in fm["authors"].split(",") if a.strip()]
-
-        apps.append({
-            "slug": folder.name,
-            "title": fm.get("title"),
-            "description": fm.get("description", ""),
-            "website": fm.get("website"),
-            "category": fm.get("category"),
-            "tags": tags,
-            "authors": authors,
-            "conversation_id": fm.get("conversation_id"),
-            "updated": updated,
-            "url": f"/interactive/{folder.name}/",
-            "is_interactive": True,
-        })
+            content = app_md.read_text()
+            app = _parse_app_md(content, folder.name)
+            if app:
+                apps.append(app)
 
     # Sort by updated date (newest first), then by title
     apps.sort(key=lambda a: (a["updated"] or datetime.min, a["title"]), reverse=True)

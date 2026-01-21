@@ -54,8 +54,21 @@ LOG_FILE = BASE_DIR / "data" / "agent.log"
 # Don't create log directory here - let app.py handle it based on environment
 
 # Interactive files directory (agent-generated exports, dashboards)
-# Note: On Scalingo, this is ephemeral storage - files are lost on deploy/restart
+# Used for local storage fallback when S3 is not configured
 INTERACTIVE_DIR = BASE_DIR / "data" / "interactive"
+
+# S3-compatible object storage for interactive files
+# If configured, files are stored in S3 instead of local filesystem
+# Works with AWS S3, Scaleway Object Storage, MinIO, etc.
+S3_BUCKET = os.getenv("S3_BUCKET")
+S3_ENDPOINT = os.getenv("S3_ENDPOINT")  # e.g., https://s3.fr-par.scw.cloud
+S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY")
+S3_SECRET_KEY = os.getenv("S3_SECRET_KEY")
+S3_REGION = os.getenv("S3_REGION", "fr-par")
+S3_PREFIX = os.getenv("S3_PREFIX", "interactive/")  # Key prefix for all files
+
+# S3 is enabled if bucket and credentials are configured
+USE_S3 = bool(S3_BUCKET and S3_ACCESS_KEY and S3_SECRET_KEY)
 
 # Additional directories the agent can access (beyond working directory)
 ADDITIONAL_DIRS = ["/tmp"]

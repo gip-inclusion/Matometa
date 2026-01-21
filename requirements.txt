@@ -37,3 +37,6 @@ gevent==24.11.1
 
 # Database
 psycopg2-binary==2.9.10
+
+# S3-compatible object storage
+boto3==1.35.0
