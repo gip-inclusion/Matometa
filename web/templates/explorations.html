@@ -28,11 +28,11 @@
                 {% if current_conv.forked_from %}
                   · <a href="/explorations/{{ current_conv.forked_from }}" class="text-muted"><i class="ri-git-branch-line"></i> fork</a>
                 {% endif %}
-                <span id="tokenDisplay" class="{% if not (current_conv.input_tokens or current_conv.output_tokens) %}d-none{% endif %}"
-                      data-input="{{ current_conv.input_tokens or 0 }}"
-                      data-output="{{ current_conv.output_tokens or 0 }}">
-                  {% set total_tokens = (current_conv.input_tokens or 0) + (current_conv.output_tokens or 0) %}
-                  · <span title="Tokens utilisés: {{ current_conv.input_tokens or 0 }} entrée, {{ current_conv.output_tokens or 0 }} sortie"><i class="ri-coin-line"></i> <span id="tokenCount">{{ "{:,}".format(total_tokens) }}</span> tokens</span>
+                <span id="tokenDisplay" class="{% if not (current_conv.usage_input_tokens or current_conv.usage_output_tokens) %}d-none{% endif %}"
+                      data-input="{{ current_conv.usage_input_tokens or 0 }}"
+                      data-output="{{ current_conv.usage_output_tokens or 0 }}">
+                  {% set total_tokens = (current_conv.usage_input_tokens or 0) + (current_conv.usage_output_tokens or 0) %}
+                  · <span title="Tokens utilisés: {{ current_conv.usage_input_tokens or 0 }} entrée, {{ current_conv.usage_output_tokens or 0 }} sortie"><i class="ri-coin-line"></i> <span id="tokenCount">{{ "{:,}".format(total_tokens) }}</span> tokens</span>
                 </span>
               {% elif is_new %}
                 Nouvelle conversation
@@ -220,54 +220,54 @@
     {% endif %}
 
     <div class="conversation-list" id="conversationList">
-      {% if all_conversations %}
-      <div class="row g-3">
-        {% for conv in all_conversations %}
-        <div class="col-12 col-md-6 col-lg-4 filterable-card" id="conv-{{ conv.id }}"
-             data-search="{{ (conv.title or 'Sans titre')|lower }} {{ (conv.user_id or '')|lower }} {% for tag in conv.tags %}{{ tag.label|lower }} {{ tag.name|lower }} {% endfor %}">
-          <div class="card conversation-card h-100">
-            <a href="/explorations/{{ conv.id }}" class="card-body text-decoration-none d-flex flex-column"
-               hx-get="/explorations/{{ conv.id }}" hx-target="#main" hx-select="#main > *" hx-push-url="true">
-              <p class="card-text text-muted small mb-1">
-                {{ conv.updated_at.strftime('%d/%m/%Y %H:%M') }}
-              </p>
-              <h5 class="card-title mb-0">{{ conv.title or 'Sans titre' }}</h5>
-              {% if conv.tags %}
-              <div class="conv-tags mt-auto pt-2">
-                {% for tag in conv.tags %}
-                <span class="badge badge-tag badge-{{ tag.type }}">{{ tag.label }}</span>
-                {% endfor %}
+      {% if grouped_conversations %}
+        {% for group_name, convs in grouped_conversations.items() %}
+        <div class="conv-group">
+          <div class="conv-group-header">{{ group_name }}</div>
+          <div class="conv-group-items">
+            {% for conv in convs %}
+            <a href="/explorations/{{ conv.id }}"
+               class="conv-list-item filterable-card"
+               id="conv-{{ conv.id }}"
+               data-search="{{ (conv.title or 'Sans titre')|lower }} {{ (conv.user_id or '')|lower }} {% for tag in conv.tags %}{{ tag.label|lower }} {{ tag.name|lower }} {% endfor %}"
+               hx-get="/explorations/{{ conv.id }}"
+               hx-target="#main"
+               hx-select="#main > *"
+               hx-push-url="true">
+              <div class="conv-item-main">
+                <div class="conv-item-icon-wrapper">
+                  {% if conv.is_running %}
+                  <i class="ri-loader-4-line ri-spin conv-item-spinner"></i>
+                  {% endif %}
+                  <i class="{{ conv.icon }} conv-item-icon"></i>
+                </div>
+                <div class="conv-item-content">
+                  <div class="conv-item-row">
+                    <span class="conv-item-title">{{ conv.title or 'Sans titre' }}</span>
+                    <span class="conv-item-date">{{ conv.formatted_date }}</span>
+                  </div>
+                  <div class="conv-item-author-row">
+                    {% if conv.user_id %}
+                    <span class="conv-item-author">{{ conv.user_id.split('@')[0] }}</span>
+                    {% endif %}
+                    {% if is_admin or conv.user_id == user_email %}
+                    <button class="conv-item-delete-btn" title="Supprimer"
+                            onclick="event.preventDefault(); event.stopPropagation();"
+                            hx-delete="/api/conversations/{{ conv.id }}"
+                            hx-target="#conv-{{ conv.id }}"
+                            hx-swap="outerHTML"
+                            hx-confirm="Supprimer cette conversation ?">
+                      <i class="ri-delete-bin-line"></i>
+                    </button>
+                    {% endif %}
+                  </div>
+                </div>
               </div>
-              {% endif %}
             </a>
-            <div class="card-footer-row">
-              <div class="d-flex align-items-center gap-2">
-                {% if conv.is_running %}
-                <span class="badge bg-success running-badge"><i class="ri-loader-4-line ri-spin"></i> En cours</span>
-                <button class="btn btn-link btn-sm text-danger p-0 kill-agent-btn" title="Arreter l'agent"
-                        onclick="killAgent('{{ conv.id }}', null, this.closest('.card'))">
-                  <i class="ri-stop-circle-line"></i>
-                </button>
-                {% endif %}
-                {% if conv.has_report %}
-                <span class="badge bg-primary">Rapport</span>
-                {% endif %}
-                {% if conv.user_id %}<small class="text-muted">{{ conv.user_id.split('@')[0] }}</small>{% endif %}
-              </div>
-              {% if is_admin or conv.user_id == user_email %}
-              <button class="btn btn-link btn-sm text-muted card-delete-btn" title="Supprimer"
-                      hx-delete="/api/conversations/{{ conv.id }}"
-                      hx-target="#conv-{{ conv.id }}"
-                      hx-swap="outerHTML"
-                      hx-confirm="Supprimer cette conversation ?">
-                <i class="ri-delete-bin-line"></i>
-              </button>
-              {% endif %}
-            </div>
+            {% endfor %}
           </div>
         </div>
         {% endfor %}
-      </div>
       {% else %}
       <div class="empty-state" id="emptyState">
         <i class="ri-chat-3-line ri-4x text-disabled mb-3"></i>
