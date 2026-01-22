@@ -485,6 +485,7 @@ class Tag:
     name: str = ""
     type: str = ""  # product | theme | source | type_demande
     label: str = ""
+    count: int = 0  # Number of conversations/reports with this tag
 
 
 @dataclass
@@ -1262,20 +1263,69 @@ class ConversationStore:
             result[tag.type].append(tag)
         return result
 
-    def get_used_conversation_tags_by_type(self) -> dict[str, list[Tag]]:
-        """Get tags that are actually used by conversations, grouped by type."""
+    def get_used_conversation_tags_by_type(
+        self,
+        active_tag_names: Optional[list[str]] = None,
+        user_id: Optional[str] = None
+    ) -> dict[str, list[Tag]]:
+        """Get tags that are actually used by conversations, grouped by type with counts.
+
+        Only returns tags that have at least 1 conversation in the database.
+        Counts show how many conversations match the current filters.
+        Tags with 0 count (due to filters) should be disabled in the UI.
+        """
         with get_db() as conn:
-            rows = conn.execute(
-                """SELECT DISTINCT t.* FROM tags t
-                   JOIN conversation_tags ct ON t.id = ct.tag_id
-                   JOIN conversations c ON ct.conversation_id = c.id
-                   WHERE c.conv_type = 'exploration' OR c.conv_type IS NULL
-                   ORDER BY t.type, t.label"""
-            ).fetchall()
+            # Build base query - only include tags used by at least one conversation
+            params = []
+
+            # Build conversation filter subquery
+            conv_filter = "(c.conv_type = 'exploration' OR c.conv_type IS NULL)"
+
+            if user_id:
+                conv_filter += " AND c.user_id = ?"
+                params.append(user_id)
+
+            if active_tag_names:
+                # Find conversations that have all active tags
+                placeholders = ','.join('?' * len(active_tag_names))
+                conv_filter += f"""
+                    AND c.id IN (
+                        SELECT conversation_id FROM conversation_tags ct2
+                        JOIN tags t2 ON ct2.tag_id = t2.id
+                        WHERE t2.name IN ({placeholders})
+                        GROUP BY conversation_id
+                        HAVING COUNT(DISTINCT t2.name) = ?
+                    )
+                """
+                params.extend(active_tag_names)
+                params.append(len(active_tag_names))
+
+            query = f"""
+                SELECT t.*,
+                       COUNT(DISTINCT CASE
+                           WHEN c.id IS NOT NULL AND {conv_filter} THEN c.id
+                           ELSE NULL
+                       END) as count
+                FROM tags t
+                INNER JOIN conversation_tags ct ON t.id = ct.tag_id
+                INNER JOIN conversations c ON ct.conversation_id = c.id
+                WHERE (c.conv_type = 'exploration' OR c.conv_type IS NULL)
+                GROUP BY t.id
+                HAVING COUNT(DISTINCT c.id) > 0
+                ORDER BY t.type, t.label
+            """
+
+            rows = conn.execute(query, params).fetchall()
 
             result: dict[str, list[Tag]] = {}
             for row in rows:
-                tag = Tag(id=row["id"], name=row["name"], type=row["type"], label=row["label"])
+                tag = Tag(
+                    id=row["id"],
+                    name=row["name"],
+                    type=row["type"],
+                    label=row["label"],
+                    count=row["count"]
+                )
                 if tag.type not in result:
                     result[tag.type] = []
                 result[tag.type].append(tag)

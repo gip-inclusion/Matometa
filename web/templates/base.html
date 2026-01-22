@@ -77,13 +77,13 @@
       {% if conversations %}
       <div class="sidebar-conversations">
         <ul class="nav flex-column">
-          {% for conv in conversations[:6] %}
+          {% for conv in conversations[:10] %}
           <li class="nav-item">
             <a href="/explorations/{{ conv.id }}"
                class="nav-link nav-link-conversation {% if current_conv and current_conv.id == conv.id %}active{% endif %}"
                hx-get="/explorations/{{ conv.id }}" hx-target="#main" hx-select="#main > *" hx-push-url="true"
                title="{{ conv.title or 'Sans titre' }}">
-              {% if conv.is_running %}<i class="ri-loader-4-line ri-spin" aria-hidden="true"></i>{% endif %}
+              {% if conv.is_running %}<i class="ri-loader-4-line ri-spin" aria-hidden="true"></i>{% else %}<i class="{{ conv.icon }}" aria-hidden="true"></i>{% endif %}
               <span class="conv-title-text">{{ conv.title or 'Sans titre' }}</span>
             </a>
           </li>
@@ -144,7 +144,7 @@
         {% if conversations %}
         <hr class="my-2">
         <ul class="nav flex-column">
-          {% for conv in conversations[:6] %}
+          {% for conv in conversations[:10] %}
           <li class="nav-item">
             <a href="/explorations/{{ conv.id }}" class="nav-link nav-link-conversation {% if current_conv and current_conv.id == conv.id %}active{% endif %}">
               {{ conv.title or 'Sans titre' }}

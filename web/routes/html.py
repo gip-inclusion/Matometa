@@ -1,6 +1,8 @@
 """HTML page routes."""
 
 import re
+from datetime import datetime, timedelta
+from collections import OrderedDict
 
 from flask import Blueprint, render_template, request, g, redirect, abort
 
@@ -24,10 +26,110 @@ def humanize_title(title: str) -> str:
     return title.strip()
 
 
+def format_relative_date(dt):
+    """Format a datetime as a relative date string.
+
+    - If today: just time → "14:32"
+    - If yesterday: → "hier, 12:45"
+    - If this week (not today/yesterday): → "mercredi 11:11"
+    - If older: → "23/01/2026 à 22:00"
+    """
+    now = datetime.now()
+    today = now.date()
+    dt_date = dt.date()
+
+    day_names = {
+        0: "lundi", 1: "mardi", 2: "mercredi", 3: "jeudi",
+        4: "vendredi", 5: "samedi", 6: "dimanche"
+    }
+
+    # Calculate start of this week (Monday)
+    days_since_monday = today.weekday()
+    this_week_start = today - timedelta(days=days_since_monday)
+
+    if dt_date == today:
+        # Today: just time
+        return dt.strftime("%H:%M")
+    elif dt_date == today - timedelta(days=1):
+        # Yesterday
+        return f"hier, {dt.strftime('%H:%M')}"
+    elif this_week_start <= dt_date < today:
+        # Earlier this week
+        day_name = day_names[dt_date.weekday()]
+        return f"{day_name} {dt.strftime('%H:%M')}"
+    else:
+        # Older: full date with time
+        return dt.strftime("%d/%m/%Y à %H:%M")
+
+
+def group_conversations_by_date(conversations):
+    """Group conversations by relative date periods.
+
+    Returns OrderedDict with keys like 'aujourd'hui', 'hier', etc.
+    and values as lists of conversations.
+    """
+    now = datetime.now()
+    today = now.date()
+
+    groups = OrderedDict()
+    groups["aujourd'hui"] = []
+    groups["hier"] = []
+    groups["plus tôt cette semaine"] = []
+    groups["la semaine dernière"] = []
+    groups["plus tôt ce mois-ci"] = []
+
+    # Calculate date boundaries
+    yesterday = today - timedelta(days=1)
+
+    # Start of this week (Monday)
+    days_since_monday = today.weekday()
+    this_week_start = today - timedelta(days=days_since_monday)
+
+    # Last week boundaries
+    last_week_start = this_week_start - timedelta(days=7)
+    last_week_end = this_week_start - timedelta(days=1)
+
+    # Start of this month
+    this_month_start = today.replace(day=1)
+
+    # Track which months we've seen for older conversations
+    month_names = {
+        1: "janvier", 2: "février", 3: "mars", 4: "avril",
+        5: "mai", 6: "juin", 7: "juillet", 8: "août",
+        9: "septembre", 10: "octobre", 11: "novembre", 12: "décembre"
+    }
+
+    for conv in conversations:
+        conv_date = conv.updated_at.date()
+
+        if conv_date == today:
+            groups["aujourd'hui"].append(conv)
+        elif conv_date == yesterday:
+            groups["hier"].append(conv)
+        elif this_week_start <= conv_date < today:
+            groups["plus tôt cette semaine"].append(conv)
+        elif last_week_start <= conv_date <= last_week_end:
+            groups["la semaine dernière"].append(conv)
+        elif this_month_start <= conv_date < this_week_start:
+            groups["plus tôt ce mois-ci"].append(conv)
+        else:
+            # Older conversations - group by month name
+            month_key = month_names[conv_date.month]
+            if conv_date.year < today.year:
+                month_key = f"{month_key} {conv_date.year}"
+
+            if month_key not in groups:
+                groups[month_key] = []
+            groups[month_key].append(conv)
+
+    # Remove empty groups
+    return OrderedDict((k, v) for k, v in groups.items() if v)
+
+
 def get_sidebar_data():
     """Get data for sidebar (recent conversations for current user)."""
     user_email = getattr(g, "user_email", None)
-    conversations = store.list_conversations(limit=15, user_id=user_email)
+    conversations = store.list_conversations(limit=20, user_id=user_email)
     agent = get_agent_instance()
 
     running_ids = []
@@ -37,6 +139,23 @@ def get_sidebar_data():
         conv.is_running = agent.is_running(conv.id)
         if conv.is_running:
             running_ids.append(conv.id)
+
+        # Get tags and determine icon
+        tags = store.get_conversation_tags(conv.id)
+        conv.icon = "ri-chat-3-fill"  # Default
+        for tag in tags:
+            if tag.name == "extraction":
+                conv.icon = "ri-table-fill"
+                break
+            elif tag.name == "meta":
+                conv.icon = "ri-settings-3-fill"
+                break
+            elif tag.name == "appli":
+                conv.icon = "ri-window-fill"
+                break
+            elif tag.name == "analyse":
+                conv.icon = "ri-chat-3-fill"
+                break
 
     return {
         "conversations": conversations,
@@ -48,9 +167,8 @@ def get_sidebar_data():
 
 @bp.route("/")
 def index():
-    """Redirect to explorations."""
-    data = get_sidebar_data()
-    return render_template("explorations.html", section="explorations", **data)
+    """Redirect to new conversation."""
+    return redirect("/explorations/new")
 
 
 @bp.route("/explorations")
@@ -75,17 +193,43 @@ def explorations():
         limit=100,
     )
 
-    # Add runtime info
+    # Add runtime info and formatting
     conversations = []
     for conv, tags in conversations_with_tags:
         if conv.title:
             conv.title = humanize_title(conv.title)
         conv.is_running = agent.is_running(conv.id)
         conv.tags = tags
+
+        # Add formatted relative date
+        conv.formatted_date = format_relative_date(conv.updated_at)
+
+        # Determine icon based on type tag (use filled icons)
+        conv.icon = "ri-chat-3-fill"  # Default
+        for tag in tags:
+            if tag.name == "analyse":
+                conv.icon = "ri-chat-3-fill"
+                break
+            elif tag.name == "meta":
+                conv.icon = "ri-settings-3-fill"
+                break
+            elif tag.name == "appli":
+                conv.icon = "ri-window-fill"
+                break
+
+        # Check if author is current user
+        conv.is_mine = conv.user_id == user_email
+
         conversations.append(conv)
 
-    # Get only tags that are actually used by conversations
-    all_tags = store.get_used_conversation_tags_by_type()
+    # Get tags with counts based on current filters
+    all_tags = store.get_used_conversation_tags_by_type(
+        active_tag_names=tag_params if tag_params else None,
+        user_id=filter_user
+    )
+
+    # Group conversations by date
+    grouped_conversations = group_conversations_by_date(conversations)
 
     data = get_sidebar_data()
     return render_template(
@@ -93,6 +237,7 @@ def explorations():
         section="explorations",
         current_conv=None,
         all_conversations=conversations,
+        grouped_conversations=grouped_conversations,
         all_tags=all_tags,
         active_tags=tag_params,
         mine_only=mine_only,
