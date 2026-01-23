@@ -83,6 +83,9 @@ due to database size.
 2. Test queries with existing segments first to validate your approach
 3. Don't assume a timeout means the query is wrong — it might just need processing time
 
+### Geo data
+Matomo's geo data is very unprecise, as it often relies on IP address. A lot of our users being professionnals, they often use shared IP range that will not give an accurate representation of their location.
+As much as possible, when in need with geo data, use Metabase (Dora, Stats or Datalake). You may not get data for all products/services, and only for logged-in users, but the geo data is accurate, and may serve as a proxy.
 
 ## Python Client Quick Reference
 
