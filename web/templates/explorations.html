@@ -15,47 +15,35 @@
         {% endif %}
         <i class="ri-compass-discover-line ri-2x text-primary conv-header-icon"></i>
         <div class="conv-title-wrapper">
-          <div class="conv-meta-row">
-            <p class="text-muted mb-0 small">
-              {% if current_conv %}
-                {% if is_shared %}
-                  <i class="ri-user-shared-line"></i> Conversation de {{ owner_email }}
-                {% elif current_conv.has_report %}
-                  <i class="ri-file-text-line"></i> Rapport
-                {% else %}
-                  Conversation
-                {% endif %}
-                {% if current_conv.forked_from %}
-                  · <a href="/explorations/{{ current_conv.forked_from }}" class="text-muted"><i class="ri-git-branch-line"></i> fork</a>
-                {% endif %}
-                <span id="tokenDisplay" class="{% if not (current_conv.usage_input_tokens or current_conv.usage_output_tokens) %}d-none{% endif %}"
-                      data-input="{{ current_conv.usage_input_tokens or 0 }}"
-                      data-output="{{ current_conv.usage_output_tokens or 0 }}">
-                  {% set total_tokens = (current_conv.usage_input_tokens or 0) + (current_conv.usage_output_tokens or 0) %}
-                  · <span title="Tokens utilisés: {{ current_conv.usage_input_tokens or 0 }} entrée, {{ current_conv.usage_output_tokens or 0 }} sortie"><i class="ri-coin-line"></i> <span id="tokenCount">{{ "{:,}".format(total_tokens) }}</span> tokens</span>
-                </span>
-              {% elif is_new %}
-                Nouvelle conversation
-              {% else %}
-                Toutes les conversations
-              {% endif %}
-            </p>
+          <p class="conv-meta-row text-muted mb-0 small">
             {% if current_conv %}
-            <div class="conv-actions" id="convActions">
-              {% if not is_shared %}
-              <button type="button" class="conv-action-btn" id="editTitleBtn">
-                <i class="ri-pencil-line"></i> <span>Renommer</span>
-              </button>
-              <button type="button" class="conv-action-btn d-none" id="autoTitleBtn">
-                <i class="ri-magic-line"></i> <span>Générer titre</span>
-              </button>
+              {% if is_shared %}
+                <i class="ri-user-shared-line"></i> Conversation de {{ owner_email }}
+              {% elif current_conv.has_report %}
+                <i class="ri-file-text-line"></i> Rapport
+              {% else %}
+                Conversation
               {% endif %}
-              <button type="button" class="conv-action-btn" id="forkConvBtn">
-                <i class="ri-git-branch-line"></i> <span>Dupliquer</span>
-              </button>
-            </div>
+              {% if current_conv.forked_from %}
+                · <a href="/explorations/{{ current_conv.forked_from }}" class="text-muted"><i class="ri-git-branch-line"></i> fork</a>
+              {% endif %}
+              <span id="tokenDisplay" class="{% if not (current_conv.usage_input_tokens or current_conv.usage_output_tokens) %}d-none{% endif %}"
+                    data-input="{{ current_conv.usage_input_tokens or 0 }}"
+                    data-output="{{ current_conv.usage_output_tokens or 0 }}">
+                {% set total_tokens = (current_conv.usage_input_tokens or 0) + (current_conv.usage_output_tokens or 0) %}
+                · <span title="Tokens utilisés: {{ current_conv.usage_input_tokens or 0 }} entrée, {{ current_conv.usage_output_tokens or 0 }} sortie"><i class="ri-coin-line"></i> <span id="tokenCount">{{ "{:,}".format(total_tokens) }}</span> tokens</span>
+              </span>
+              {% if not is_shared %}
+              <button type="button" class="conv-action-btn" id="editTitleBtn"><i class="ri-pencil-line"></i> Renommer</button>
+              <button type="button" class="conv-action-btn d-none" id="autoTitleBtn"><i class="ri-magic-line"></i> Générer titre</button>
+              {% endif %}
+              <button type="button" class="conv-action-btn" id="forkConvBtn"><i class="ri-git-branch-line"></i> Dupliquer</button>
+            {% elif is_new %}
+              Nouvelle conversation
+            {% else %}
+              Toutes les conversations
             {% endif %}
-          </div>
+          </p>
           <div class="conv-title-display" id="convTitleDisplay">
             <h1 class="mb-0">{% if current_conv %}{{ current_conv.title or 'Sans titre' }}{% elif is_new %}Posez vos questions sur les données{% else %}Explorations{% endif %}</h1>
           </div>
