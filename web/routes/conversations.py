@@ -14,6 +14,8 @@ from ..storage import store
 from ..agents import get_agent
 from .. import config
 from ..config import ADMIN_USERS
+from lib.tool_taxonomy import classify_tool
+from lib.api_signals import parse_api_signals
 
 logger = logging.getLogger(__name__)
 
@@ -614,7 +616,28 @@ User request: """
                             assistant_msg_id = None
                             assistant_text_parts = []
 
-                        content = json.dumps(event.content) if isinstance(event.content, dict) else str(event.content)
+                        # Add taxonomy category to tool_use events
+                        if event.type == "tool_use" and isinstance(event.content, dict):
+                            tool_name = event.content.get("tool", "")
+                            tool_input = event.content.get("input", {})
+                            category = classify_tool(tool_name, tool_input)
+                            enriched = {**event.content, "category": category}
+                            content = json.dumps(enriched)
+                        # Parse API signals from tool_result events
+                        elif event.type == "tool_result":
+                            raw_content = str(event.content) if not isinstance(event.content, str) else event.content
+                            api_calls = parse_api_signals(raw_content)
+                            if api_calls:
+                                enriched = {
+                                    "output": event.content,
+                                    "api_calls": api_calls,
+                                }
+                                content = json.dumps(enriched)
+                            else:
+                                content = json.dumps(event.content) if isinstance(event.content, dict) else str(event.content)
+                        else:
+                            content = json.dumps(event.content) if isinstance(event.content, dict) else str(event.content)
+
                         store.add_message(conv_id, event.type, content)
 
                     if event.type == "system":
