@@ -623,6 +623,8 @@ User request: """
                             category = classify_tool(tool_name, tool_input)
                             enriched = {**event.content, "category": category}
                             content = json.dumps(enriched)
+                            # Attach enriched content for SSE
+                            event._sse_content = enriched
                         # Parse API signals from tool_result events
                         elif event.type == "tool_result":
                             raw_content = str(event.content) if not isinstance(event.content, str) else event.content
@@ -633,6 +635,8 @@ User request: """
                                     "api_calls": api_calls,
                                 }
                                 content = json.dumps(enriched)
+                                # Attach enriched content for SSE
+                                event._sse_content = enriched
                             else:
                                 content = json.dumps(event.content) if isinstance(event.content, dict) else str(event.content)
                         else:
@@ -705,8 +709,14 @@ User request: """
                             tool_input=tool_data.get("input", {}),
                         )
 
+                    # Use enriched content if available (tool_use with category, tool_result with api_calls)
+                    if hasattr(event, '_sse_content'):
+                        sse_data = {"type": event.type, "content": event._sse_content}
+                    else:
+                        sse_data = event.to_dict()
+
                     yield f"event: {event.type}\n"
-                    yield f"data: {json.dumps(event.to_dict())}\n\n"
+                    yield f"data: {json.dumps(sse_data)}\n\n"
 
             except queue.Empty:
                 yield ": keepalive\n\n"

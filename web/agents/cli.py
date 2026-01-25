@@ -45,10 +45,47 @@ class CLIBackend(AgentBackend):
         history: list[dict],
         session_id: Optional[str] = None,
     ) -> AsyncIterator[AgentMessage]:
-        """Spawn claude CLI and stream responses."""
+        """Spawn claude CLI and stream responses.
 
-        # Build command with system context
-        prompt = self._build_prompt(message, history)
+        If session resume fails with 'tool_use ids must be unique' error,
+        automatically retries without session (using history instead).
+        """
+        # Try with session first, retry without if it fails with duplicate ID error
+        retry_without_session = False
+
+        async for msg in self._run_cli(conversation_id, message, history, session_id):
+            # Detect session corruption error
+            if msg.type == "error" and "tool_use ids must be unique" in str(msg.content):
+                logger.warning(f"Session {session_id} corrupted, retrying without resume")
+                retry_without_session = True
+                # Emit a system message about the retry
+                yield AgentMessage(
+                    type="system",
+                    content="Session corrompue, redémarrage...",
+                    raw={"retry": True},
+                )
+                break
+            yield msg
+
+        # Retry without session if needed
+        if retry_without_session:
+            async for msg in self._run_cli(conversation_id, message, history, None):
+                yield msg
+
+    async def _run_cli(
+        self,
+        conversation_id: str,
+        message: str,
+        history: list[dict],
+        session_id: Optional[str],
+    ) -> AsyncIterator[AgentMessage]:
+        """Internal: run the CLI process."""
+        # When resuming a session, don't include history in prompt (session already has it)
+        # This prevents duplicate tool_use IDs which cause API errors
+        if session_id:
+            prompt = message
+        else:
+            prompt = self._build_prompt(message, history)
 
         cmd = [
             config.CLAUDE_CLI,
@@ -80,7 +117,7 @@ class CLIBackend(AgentBackend):
         if session_id:
             cmd.extend(["--resume", session_id])
 
-        logger.info(f"Starting claude CLI: {' '.join(cmd[:4])}... (prompt length: {len(prompt)})")
+        logger.info(f"Starting claude CLI: {' '.join(cmd[:4])}... (prompt length: {len(prompt)}, session: {session_id or 'none'})")
 
         # Build environment: inherit from parent but remove ANTHROPIC_API_KEY
         # so CLI uses OAuth credentials instead
@@ -143,7 +180,7 @@ class CLIBackend(AgentBackend):
                 logger.error(f"Process error: {stderr_str}")
                 yield AgentMessage(
                     type="error",
-                    content=f"Process exited with code {process.returncode}",
+                    content=f"Process exited with code {process.returncode}: {stderr_str}",
                     raw={"stderr": stderr_str, "code": process.returncode},
                 )
 
