@@ -9,6 +9,7 @@ __pycache__
 .pytest_cache
 /data/
 !/data/interactive/
+/data-remote/
 
 reports/
 knowledge-drafts/

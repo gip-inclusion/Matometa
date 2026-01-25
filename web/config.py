@@ -6,6 +6,10 @@ from pathlib import Path
 # Base directory (Matometa project root)
 BASE_DIR = Path(__file__).parent.parent.resolve()
 
+# Data directory - can be overridden for local development with remote data
+# Default: ./data (relative to BASE_DIR)
+DATA_DIR = Path(os.getenv("DATA_DIR", BASE_DIR / "data")).resolve()
+
 # Agent backend: "cli" or "sdk"
 AGENT_BACKEND = os.getenv("AGENT_BACKEND", "cli")
 
@@ -49,11 +53,11 @@ ADMIN_USERS = [
 
 # Database: uses PostgreSQL if DATABASE_URL is set, otherwise SQLite
 DATABASE_URL = os.getenv("DATABASE_URL")
-SQLITE_PATH = BASE_DIR / "data" / "matometa.db"
+SQLITE_PATH = DATA_DIR / "matometa.db"
 
 # Interactive files directory (agent-generated exports, dashboards)
 # Used for local storage fallback when S3 is not configured
-INTERACTIVE_DIR = BASE_DIR / "data" / "interactive"
+INTERACTIVE_DIR = DATA_DIR / "interactive"
 
 # S3-compatible object storage for interactive files
 # If configured, files are stored in S3 instead of local filesystem
