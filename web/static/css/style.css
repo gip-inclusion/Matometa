@@ -211,6 +211,8 @@ body.has-sidebar {
   background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
   padding: 1.5rem 0;
   border-bottom: 1px solid #dee2e6;
+  overflow: hidden;
+  max-width: 100vw;
 }
 
 .section-header h1 {
@@ -483,21 +485,24 @@ body.has-sidebar {
   margin-top: 0;
 }
 
-/* User messages - right-aligned bubble */
+/* User messages - right-aligned, offset from assistant */
 .event-user {
-  background: var(--bs-primary-bg-subtle);
-  border-color: var(--bs-primary-border-subtle);
-  margin-left: 4rem;
-  border-radius: 1rem 1rem 0.25rem 1rem;
+  background: var(--bs-gray-200);
+  border: none;
+  margin-left: 12rem;
+  margin-right: -1rem;
+  border-radius: 0.5rem 0.5rem 0 0.5rem;
+  color: var(--bs-gray-800);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .event-user::before {
   content: "Vous";
   display: block;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 600;
-  color: var(--bs-primary);
-  margin-bottom: 0.5rem;
+  color: var(--bs-gray-700);
+  margin-bottom: 0.375rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
@@ -512,6 +517,13 @@ body.has-sidebar {
 
 .event-assistant::before {
   display: none;
+}
+
+/* Clearfix for floated footnotes */
+.event-assistant::after {
+  content: '';
+  display: table;
+  clear: both;
 }
 
 /* Tool blocks - subtle, indented */
@@ -896,8 +908,25 @@ body.has-sidebar {
     padding: 1rem 0;
   }
 
+  .section-header .container {
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .section-header .d-flex {
+    min-width: 0;
+    overflow: hidden;
+  }
+
   .section-header h1 {
-    font-size: 1.5rem;
+    font-size: 1.25rem;
+    max-width: 100%;
+  }
+
+  .section-header .conv-title-wrapper p {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .section-body {
@@ -2096,13 +2125,14 @@ body.has-sidebar {
 :root {
   --actions-sidebar-width: 280px;
   --actions-sidebar-collapsed-width: 48px;
+  --chat-bar-height: 8.25rem; /* chatbox fixed at bottom */
 }
 
 .chat-with-sidebar {
   display: grid;
   grid-template-columns: 1fr var(--actions-sidebar-width);
   grid-template-rows: 1fr;
-  height: calc(100vh - var(--section-header-height) - 90px);
+  height: calc(100vh - var(--section-header-height) - var(--chat-bar-height));
   overflow: hidden;
 }
 
@@ -2120,6 +2150,7 @@ body.has-sidebar {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0; /* critical for grid child to respect container height */
   border-left: 1px solid var(--bs-border-color);
   background: var(--sidebar-bg);
   transition: width 0.2s ease;
@@ -2131,8 +2162,11 @@ body.has-sidebar {
   border-bottom: 1px solid var(--bs-border-color);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
+  gap: 1rem;
+}
+
+.actions-sidebar-toggle {
+  margin-left: auto;
 }
 
 .actions-sidebar-title {
@@ -2168,6 +2202,45 @@ body.has-sidebar {
   transform: rotate(180deg);
 }
 
+/* Filter toggle (data/detailed) */
+.actions-filter-toggle {
+  display: flex;
+  gap: 0.0625rem;
+  background: var(--bs-gray-100);
+  border-radius: 1rem;
+  padding: 0.125rem;
+}
+
+.actions-filter-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--bs-gray-500);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: background 0.15s, color 0.15s;
+  font-size: 0.75rem;
+}
+
+.actions-filter-btn:hover {
+  color: var(--bs-gray-700);
+}
+
+.actions-filter-btn.active {
+  background: white;
+  color: var(--bs-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* Hide filter toggle when sidebar collapsed */
+.sidebar-collapsed .actions-filter-toggle {
+  display: none;
+}
+
 .actions-sidebar-content {
   flex: 1;
   overflow-y: auto;
@@ -2193,46 +2266,22 @@ body.has-sidebar {
 @media (max-width: 991.98px) {
   .chat-with-sidebar {
     grid-template-columns: 1fr;
-    height: calc(100vh - var(--section-header-height) - 90px - 56px); /* account for mobile header */
+    height: calc(100vh - var(--section-header-height) - var(--chat-bar-height) - 56px); /* account for mobile header */
   }
 
   .actions-sidebar {
     display: none;
   }
 
-  .actions-sidebar-mobile-toggle {
-    display: flex;
-  }
-}
-
-@media (min-width: 992px) {
+  /* Mobile: hide toggle button, users tap footnotes to see actions */
   .actions-sidebar-mobile-toggle {
     display: none;
   }
 }
 
-/* Mobile toggle button in header */
+/* Hide mobile toggle everywhere (users tap footnotes instead) */
 .actions-sidebar-mobile-toggle {
-  align-items: center;
-  justify-content: center;
-  gap: 0.375rem;
-  padding: 0.375rem 0.75rem;
-  border: 1px solid var(--bs-border-color);
-  border-radius: 0.375rem;
-  background: white;
-  color: var(--bs-gray-700);
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: border-color 0.15s;
-}
-
-.actions-sidebar-mobile-toggle:hover {
-  border-color: var(--bs-primary);
-}
-
-.actions-sidebar-mobile-toggle .badge {
-  font-size: 0.7rem;
-  padding: 0.2em 0.45em;
+  display: none;
 }
 
 /* Offcanvas for mobile sidebar */
@@ -2287,8 +2336,23 @@ body.has-sidebar {
 
 .action-pill-label {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0; /* Allow text truncation */
+}
+
+.action-pill-label-main {
   font-size: 0.8125rem;
   color: var(--bs-gray-700);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-pill-label-sub {
+  font-size: 0.6875rem;
+  color: var(--bs-gray-500);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2297,77 +2361,128 @@ body.has-sidebar {
 .action-pill-content {
   display: none;
   padding: 0.5rem 0.625rem;
-  padding-top: 0;
   font-size: 0.8125rem;
   border-top: 1px solid var(--bs-border-color);
+  max-height: 50vh;
+  overflow-y: auto;
 }
 
 .action-pill.expanded .action-pill-content {
   display: block;
 }
 
-.action-pill-content pre {
-  margin: 0;
-  padding: 0.5rem;
-  background: var(--bs-gray-100);
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
-  overflow-x: auto;
-  max-height: 200px;
-  overflow-y: auto;
+/* Filtered out pills */
+.action-pill.filtered-out {
+  display: none;
 }
 
-.action-pill-content code {
-  font-size: 0.75rem;
+/* API call links container */
+.action-api-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
 }
 
-/* API call links inside pill content */
-.action-api-link {
+.action-api-link,
+.action-knowledge-link {
   display: flex;
   align-items: center;
   gap: 0.375rem;
   padding: 0.375rem 0.5rem;
-  margin-top: 0.375rem;
   background: var(--bs-gray-100);
   border-radius: 0.25rem;
   text-decoration: none;
   color: var(--bs-gray-700);
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   transition: background 0.15s, color 0.15s;
 }
 
-.action-api-link:hover {
+.action-knowledge-link {
+  margin-bottom: 0.5rem;
+}
+
+.action-api-link:hover,
+.action-knowledge-link:hover {
   background: var(--bs-primary-bg-subtle);
   color: var(--bs-primary);
 }
 
 .action-api-link i {
   font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
+.action-api-link i:first-child {
   color: var(--bs-primary);
 }
 
-.action-file-name {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.25rem 0.5rem;
-  background: var(--bs-gray-100);
-  border-radius: 0.25rem;
-  font-family: var(--bs-font-monospace);
+.action-api-link i:last-child {
+  color: var(--bs-gray-400);
   font-size: 0.75rem;
+  margin-left: auto;
+}
+
+.action-api-link span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Key-value layout for inputs */
+.action-kv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.action-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.action-kv:first-child {
+  margin-top: 0.375rem;
+}
+
+/* Description field - no header, plain text style */
+.action-description {
+  font-size: 0.8125rem;
   color: var(--bs-gray-700);
+  margin-top: 0.375rem;
+  margin-bottom: 0.25rem;
+}
+
+.action-description + .action-kv {
+  margin-top: 0.375rem;
+}
+
+.action-kv-key {
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: var(--bs-gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.action-kv-value {
+  font-size: 0.8125rem;
+  color: var(--bs-gray-800);
+  word-break: break-word;
+  white-space: pre-wrap;
+  font-family: var(--bs-font-monospace);
 }
 
 /* ==========================================================================
    Actions Sidebar - Footnotes
    ========================================================================== */
 .action-footnotes {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
   gap: 0.25rem;
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
+  margin-top: 0.375rem;
 }
 
 .action-footnote {
