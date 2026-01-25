@@ -10,7 +10,7 @@
       <div class="d-flex align-items-center justify-content-between gap-3">
         <div class="d-flex align-items-center gap-3">
           {% if current_report %}
-          <a href="/rapports" class="btn btn-link p-0 me-2" hx-get="/rapports" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+          <a href="/rapports" class="btn btn-link p-0 me-2" hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
             <i class="ri-arrow-left-line ri-xl"></i>
           </a>
           {% endif %}
@@ -139,7 +139,7 @@
              data-search="{{ report.title|lower }} {{ (report.website or '')|lower }} {{ (report.category or '')|lower }} {% for tag in report.tag_objects %}{{ tag.label|lower }} {{ tag.name|lower }} {% endfor %}">
           <div class="card report-card h-100">
             <a href="/rapports/{{ report.id }}" class="card-body text-decoration-none d-flex flex-column"
-               hx-get="/rapports/{{ report.id }}" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+               hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
               <h6 class="card-title mb-2">{{ report.title }}</h6>
               <div class="report-badges">
                 {% if report.tag_objects %}

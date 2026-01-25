@@ -10,7 +10,7 @@
       <div class="d-flex align-items-center justify-content-between gap-3">
         <div class="d-flex align-items-center gap-3">
           {% if current_file %}
-          <a href="/connaissances" class="btn btn-link p-0 me-2" hx-get="/connaissances" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+          <a href="/connaissances" class="btn btn-link p-0 me-2" hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
             <i class="ri-arrow-left-line ri-xl"></i>
           </a>
           {% endif %}
@@ -104,7 +104,7 @@
         <div class="col-12 col-md-6 col-lg-4">
           <div class="card knowledge-card h-100">
             <a href="/connaissances?file={{ file.path }}" class="card-body text-decoration-none"
-               hx-get="/connaissances?file={{ file.path }}" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+               hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
               <h5 class="card-title mb-2">{{ file.name }}</h5>
               <p class="card-text text-muted small mb-0">
                 {{ file.path }}

@@ -42,7 +42,7 @@
       <ul class="nav flex-column">
         <li class="nav-item">
           <a href="/explorations/new" class="nav-link nav-link-primary {% if section == 'explorations' and not current_conv %}active{% endif %}"
-             hx-get="/explorations/new" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+             hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
             <i class="ri-add-line" aria-hidden="true"></i>
             <span>Nouvelle conversation</span>
           </a>
@@ -50,7 +50,7 @@
 
         <li class="nav-item">
           <a href="/rapports" class="nav-link {% if section == 'rapports' %}active{% endif %}"
-             hx-get="/rapports" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+             hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
             <i class="ri-file-text-line" aria-hidden="true"></i>
             <span>Rapports et applis</span>
           </a>
@@ -58,7 +58,7 @@
 
         <li class="nav-item">
           <a href="/connaissances" class="nav-link {% if section == 'connaissances' %}active{% endif %}"
-             hx-get="/connaissances" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+             hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
             <i class="ri-book-open-line" aria-hidden="true"></i>
             <span>Connaissances</span>
           </a>
@@ -66,7 +66,7 @@
 
         <li class="nav-item">
           <a href="/explorations" class="nav-link {% if section == 'explorations' and not current_conv and not is_new %}active{% endif %}"
-             hx-get="/explorations" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+             hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
             <i class="ri-group-line" aria-hidden="true"></i>
             <span>Toutes les conversations</span>
           </a>
@@ -81,7 +81,7 @@
           <li class="nav-item">
             <a href="/explorations/{{ conv.id }}"
                class="nav-link nav-link-conversation {% if current_conv and current_conv.id == conv.id %}active{% endif %}"
-               hx-get="/explorations/{{ conv.id }}" hx-target="#main" hx-select="#main > *" hx-push-url="true"
+               hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true"
                title="{{ conv.title or 'Sans titre' }}">
               {% if conv.is_running %}<i class="ri-loader-4-line ri-spin" aria-hidden="true"></i>{% else %}<i class="{{ conv.icon }}" aria-hidden="true"></i>{% endif %}
               <span class="conv-title-text">{{ conv.title or 'Sans titre' }}</span>
@@ -90,7 +90,7 @@
           {% endfor %}
         </ul>
         <a href="/explorations" class="sidebar-view-more"
-           hx-get="/explorations" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+           hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
           Voir plus...
         </a>
       </div>
@@ -249,9 +249,14 @@
   <!-- Allow cmd/ctrl+click to open links in new tabs (bypass htmx) -->
   <script>
   document.body.addEventListener('htmx:beforeRequest', function(e) {
-    const evt = e.detail.triggeringEvent;
-    if (evt && (evt.metaKey || evt.ctrlKey)) {
-      e.preventDefault();
+    const triggerEvent = e.detail.triggeringEvent;
+    if (triggerEvent && (triggerEvent.metaKey || triggerEvent.ctrlKey)) {
+      const elt = e.detail.elt;
+      const url = elt.getAttribute('href');
+      if (url) {
+        e.preventDefault();
+        window.open(url, '_blank');
+      }
     }
   });
   </script>
