@@ -288,39 +288,61 @@ def explorations_conversation(conv_id: str):
 
 @bp.route("/connaissances")
 def connaissances():
-    """Connaissances section - knowledge file browser."""
-    data = get_sidebar_data()
+    """Connaissances section - knowledge file browser (index)."""
+    # Redirect old ?file= pattern to RESTful URL
     file_param = request.args.get("file")
+    if file_param:
+        return redirect(f"/connaissances/{file_param}", code=301)
+
+    data = get_sidebar_data()
+    categories = list_knowledge_files()
+    active_conversations = store.list_active_knowledge_conversations()
+    active_files = {c.file_path: c for c in active_conversations if c.file_path}
+
+    return render_template(
+        "connaissances.html",
+        section="connaissances",
+        categories=categories,
+        current_file=None,
+        file_content=None,
+        current_conv=None,
+        staged_files=[],
+        active_files=active_files,
+        active_conversations=active_conversations,
+        feature_knowledge_chat=FEATURE_KNOWLEDGE_CHAT,
+        **data
+    )
+
+
+@bp.route("/connaissances/<path:file_path>")
+def connaissances_file(file_path):
+    """Connaissances section - view a specific knowledge file."""
+    data = get_sidebar_data()
     conv_id = request.args.get("conv")
 
-    current_file = None
-    file_content = None
+    validated_path = validate_knowledge_path(file_path)
+    if not validated_path:
+        return render_template(
+            "connaissances.html",
+            section="connaissances",
+            error="Fichier non trouvé",
+            categories=list_knowledge_files(),
+            active_conversations=store.list_active_knowledge_conversations(),
+            feature_knowledge_chat=FEATURE_KNOWLEDGE_CHAT,
+            **data
+        )
+
+    file_content = validated_path.read_text()
     current_conv = None
     staged_files = []
 
-    if file_param:
-        validated_path = validate_knowledge_path(file_param)
-        if validated_path:
-            current_file = file_param
-            file_content = validated_path.read_text()
+    if conv_id:
+        current_conv = store.get_conversation(conv_id, include_messages=False)
+    else:
+        current_conv = store.get_active_knowledge_conversation(file_path)
 
-            if conv_id:
-                current_conv = store.get_conversation(conv_id, include_messages=False)
-            else:
-                current_conv = store.get_active_knowledge_conversation(file_param)
-
-            if current_conv:
-                staged_files = list_staged_files(current_conv.id)
-        else:
-            return render_template(
-                "connaissances.html",
-                section="connaissances",
-                error="Fichier non trouve",
-                categories=list_knowledge_files(),
-                active_conversations=store.list_active_knowledge_conversations(),
-                feature_knowledge_chat=FEATURE_KNOWLEDGE_CHAT,
-                **data
-            )
+    if current_conv:
+        staged_files = list_staged_files(current_conv.id)
 
     categories = list_knowledge_files()
     active_conversations = store.list_active_knowledge_conversations()
@@ -330,7 +352,7 @@ def connaissances():
         "connaissances.html",
         section="connaissances",
         categories=categories,
-        current_file=current_file,
+        current_file=file_path,
         file_content=file_content,
         current_conv=current_conv,
         staged_files=staged_files,
