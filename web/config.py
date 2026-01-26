@@ -55,6 +55,9 @@ ADMIN_USERS = [
 DATABASE_URL = os.getenv("DATABASE_URL")
 SQLITE_PATH = DATA_DIR / "matometa.db"
 
+# Agent-produced scripts directory
+SCRIPTS_DIR = DATA_DIR / "scripts"
+
 # Interactive files directory (agent-generated exports, dashboards)
 # Used for local storage fallback when S3 is not configured
 INTERACTIVE_DIR = DATA_DIR / "interactive"

@@ -47,8 +47,14 @@ result = execute_query(
 | `./knowledge/dora/` | Dora Metabase instance (services directory) |
 | `./knowledge/matomo/README.md` | Matomo API reference |
 | `./reports/` | Output reports |
-| `./data/scripts/` | One-off query scripts (produced by agent) |
 | `./skills/` | Reusable agent skills |
+
+**Data directory** (`DATA_DIR`, default `./data/`):
+| Path | Purpose |
+|------|---------|
+| `$DATA_DIR/scripts/` | One-off query scripts (produced by agent) |
+| `$DATA_DIR/interactive/` | User-downloadable files (CSV exports, dashboards) |
+| `$DATA_DIR/matometa.db` | SQLite database (conversations, reports) |
 
 **Sync commands:**
 ```bash
@@ -544,15 +550,17 @@ When documenting a new site (or updating an existing one):
 
 **For bulk updates**, run sites in parallel using sub-agents.
 
-Scripts go in `./data/scripts/` (one-off) or `./skills/` (reusable).
+Scripts go in `$DATA_DIR/scripts/` (one-off) or `./skills/` (reusable).
 
 ## Container Environment (Web Deployment)
 
 When running in Docker (web UI mode):
 - **Working directory:** `/app`
+- **Data directory:** `/app/data/` (DATA_DIR)
 - **Python:** `python` (no venv needed, deps pre-installed)
 - **Credentials:** `/app/.env` (auto-loaded by Python clients)
 - **Skills:** `/app/skills/<name>/skill.md`
+- **Scripts:** Write to `/app/data/scripts/` for one-off query scripts
 - **Temp files:** Write to `/tmp/` for scratch work
 - **Public files:** Write to `/app/data/interactive/` for user-downloadable files
 
