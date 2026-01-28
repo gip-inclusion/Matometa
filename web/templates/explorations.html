@@ -85,7 +85,29 @@
       </div>
       <aside class="actions-sidebar" id="actionsSidebar">
         <div class="actions-sidebar-header">
-          <span class="actions-sidebar-title">Actions</span>
+          <div class="sidebar-tab-toggle" id="sidebarTabToggle">
+            <button type="button" class="sidebar-tab-btn active" data-tab="toc" title="Sommaire">
+              <i class="ri-chat-1-line"></i>
+              <span>Sommaire</span>
+            </button>
+            <button type="button" class="sidebar-tab-btn" data-tab="actions" title="Actions">
+              <i class="ri-tools-line"></i>
+              <span>Actions</span>
+            </button>
+          </div>
+          <button type="button" class="actions-sidebar-toggle" id="sidebarToggle" title="Réduire">
+            <i class="ri-arrow-right-s-line"></i>
+          </button>
+        </div>
+        <div class="actions-sidebar-body">
+          <div class="sidebar-tab-content active" id="tocContent">
+            <!-- TOC entries will be inserted here by JS -->
+          </div>
+          <div class="sidebar-tab-content" id="actionsContent">
+            <!-- Pills will be inserted here by JS -->
+          </div>
+        </div>
+        <div class="actions-sidebar-footer" id="actionsFooter">
           <div class="actions-filter-toggle" id="actionsFilterToggle">
             <button type="button" class="actions-filter-btn active" data-filter="data" title="Données">
               <i class="ri-database-2-line"></i>
@@ -94,12 +116,6 @@
               <i class="ri-list-check"></i>
             </button>
           </div>
-          <button type="button" class="actions-sidebar-toggle" id="sidebarToggle" title="Réduire">
-            <i class="ri-arrow-right-s-line"></i>
-          </button>
-        </div>
-        <div class="actions-sidebar-content" id="actionsContent">
-          <!-- Pills will be inserted here by JS -->
         </div>
       </aside>
     </div>
@@ -127,7 +143,29 @@
       </div>
       <aside class="actions-sidebar" id="actionsSidebar">
         <div class="actions-sidebar-header">
-          <span class="actions-sidebar-title">Actions</span>
+          <div class="sidebar-tab-toggle" id="sidebarTabToggle">
+            <button type="button" class="sidebar-tab-btn active" data-tab="toc" title="Sommaire">
+              <i class="ri-chat-1-line"></i>
+              <span>Sommaire</span>
+            </button>
+            <button type="button" class="sidebar-tab-btn" data-tab="actions" title="Actions">
+              <i class="ri-tools-line"></i>
+              <span>Actions</span>
+            </button>
+          </div>
+          <button type="button" class="actions-sidebar-toggle" id="sidebarToggle" title="Réduire">
+            <i class="ri-arrow-right-s-line"></i>
+          </button>
+        </div>
+        <div class="actions-sidebar-body">
+          <div class="sidebar-tab-content active" id="tocContent">
+            <!-- TOC entries will be inserted here by JS -->
+          </div>
+          <div class="sidebar-tab-content" id="actionsContent">
+            <!-- Empty for new conversations -->
+          </div>
+        </div>
+        <div class="actions-sidebar-footer" id="actionsFooter">
           <div class="actions-filter-toggle" id="actionsFilterToggle">
             <button type="button" class="actions-filter-btn active" data-filter="data" title="Données">
               <i class="ri-database-2-line"></i>
@@ -136,12 +174,6 @@
               <i class="ri-list-check"></i>
             </button>
           </div>
-          <button type="button" class="actions-sidebar-toggle" id="sidebarToggle" title="Réduire">
-            <i class="ri-arrow-right-s-line"></i>
-          </button>
-        </div>
-        <div class="actions-sidebar-content" id="actionsContent">
-          <!-- Empty for new conversations -->
         </div>
       </aside>
     </div>

@@ -806,19 +806,12 @@ body.has-sidebar {
    View modes (segmented control)
    ========================================================================== */
 
-/* Prevent scroll jumps when hiding/showing elements */
-.event-tool_use,
-.event-tool_result,
-.event-assistant:not(.event-report):not(.event-final-answer) {
-  overflow-anchor: none;
-}
-
-/* Anchor element at bottom to stabilize scroll */
-.chat-output::after {
-  content: '';
-  display: block;
+/* Scroll anchoring (CSS approach for Chrome/Firefox, JS handles Safari)
+   When new content arrives, keep scroll position stable if user was at bottom.
+   Primary implementation is in chat.js isAtBottom() + conditional scrollToBottom().
+   CSS overflow-anchor provides additional stability for supporting browsers. */
+.chat-output {
   overflow-anchor: auto;
-  height: 1px;
 }
 
 /* Minimal: Only reports and final answers */
@@ -1176,6 +1169,18 @@ body.has-sidebar {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Mobile: larger touch targets for conversation list */
+@media (max-width: 991.98px) {
+  .nav-sublink {
+    padding: 0.875rem 1rem 0.875rem 1.5rem;
+    font-size: 0.9375rem;
+  }
+
+  .nav-sublist-empty {
+    padding: 0.75rem 1rem 0.75rem 1.5rem;
+  }
 }
 
 /* New conversation item */
@@ -1694,6 +1699,8 @@ body.has-sidebar {
   font-weight: 400;
   color: #212529;
   flex: 1;
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1743,7 +1750,16 @@ body.has-sidebar {
 /* Mobile adjustments for list view */
 @media (max-width: 991.98px) {
   .filter-list-container {
-    height: auto;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .conversation-list-wrapper {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .section-header {
@@ -2018,6 +2034,14 @@ body.has-sidebar {
   margin-right: 0.25rem;
   font-size: 0.875rem;
   opacity: 0.6;
+}
+
+/* Mobile: larger touch targets for conversation links */
+@media (max-width: 991.98px) {
+  .nav-link-conversation {
+    padding: 0.5rem 1rem;
+    font-size: 0.9375rem;
+  }
 }
 
 .conv-title-text {
@@ -2341,21 +2365,16 @@ body.has-sidebar {
 
 .actions-sidebar-header {
   flex-shrink: 0;
-  padding: 0.75rem 1rem;
+  padding: 0.5rem;
   border-bottom: 1px solid var(--bs-border-color);
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.5rem;
 }
 
 .actions-sidebar-toggle {
   margin-left: auto;
-}
-
-.actions-sidebar-title {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--bs-gray-700);
+  flex-shrink: 0;
 }
 
 .actions-sidebar-toggle {
@@ -2383,6 +2402,83 @@ body.has-sidebar {
 
 .sidebar-collapsed .actions-sidebar-toggle i {
   transform: rotate(180deg);
+}
+
+/* Sidebar tab toggle (TOC / Actions) */
+.sidebar-tab-toggle {
+  display: flex;
+  flex: 1;
+  gap: 0.125rem;
+  background: var(--bs-gray-100);
+  border-radius: 0.5rem;
+  padding: 0.1875rem;
+}
+
+.sidebar-tab-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  flex: 1;
+  padding: 0.375rem 0.5rem;
+  border: none;
+  background: transparent;
+  color: var(--bs-gray-600);
+  cursor: pointer;
+  border-radius: 0.375rem;
+  transition: background 0.15s, color 0.15s;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.sidebar-tab-btn i {
+  font-size: 0.875rem;
+}
+
+.sidebar-tab-btn:hover {
+  color: var(--bs-gray-800);
+}
+
+.sidebar-tab-btn.active {
+  background: white;
+  color: var(--bs-gray-900);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+
+/* Sidebar body - contains tab contents */
+.actions-sidebar-body {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sidebar-tab-content {
+  display: none;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 0.5rem;
+}
+
+.sidebar-tab-content.active {
+  display: block;
+}
+
+/* Sidebar footer - filter toggle */
+.actions-sidebar-footer {
+  flex-shrink: 0;
+  padding: 0.5rem;
+  border-top: 1px solid var(--bs-border-color);
+  display: flex;
+  justify-content: center;
+}
+
+/* Hide footer when TOC tab is active */
+.actions-sidebar[data-active-tab="toc"] .actions-sidebar-footer {
+  display: none;
 }
 
 /* Filter toggle (data/detailed) */
@@ -2419,16 +2515,58 @@ body.has-sidebar {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
-/* Hide filter toggle when sidebar collapsed */
-.sidebar-collapsed .actions-filter-toggle {
-  display: none;
+/* TOC entries */
+.toc-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: background 0.15s;
 }
 
-.actions-sidebar-content {
+.toc-entry:hover {
+  background: var(--bs-gray-100);
+}
+
+.toc-entry-icon {
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bs-gray-500);
+  font-size: 0.875rem;
+}
+
+.toc-entry-content {
   flex: 1;
-  overflow-y: auto;
-  min-height: 0; /* critical for flex child scroll */
-  padding: 0.5rem;
+  min-width: 0;
+}
+
+.toc-entry-text {
+  font-size: 0.8125rem;
+  color: var(--bs-gray-800);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.toc-entry-time {
+  font-size: 0.6875rem;
+  color: var(--bs-gray-500);
+  margin-top: 0.125rem;
+}
+
+.toc-empty {
+  padding: 1rem;
+  text-align: center;
+  color: var(--bs-gray-500);
+  font-size: 0.8125rem;
 }
 
 /* Collapsed state - hide content, show only toggle */
@@ -2437,11 +2575,15 @@ body.has-sidebar {
   padding: 0.75rem 0.5rem;
 }
 
-.sidebar-collapsed .actions-sidebar-title {
+.sidebar-collapsed .sidebar-tab-toggle {
   display: none;
 }
 
-.sidebar-collapsed .actions-sidebar-content {
+.sidebar-collapsed .actions-sidebar-body {
+  display: none;
+}
+
+.sidebar-collapsed .actions-sidebar-footer {
   display: none;
 }
 
