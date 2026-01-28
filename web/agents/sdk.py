@@ -49,9 +49,11 @@ class SDKBackend(AgentBackend):
 
         try:
             # Build options
-            # WebFetch/WebSearch disabled for security - use curl for allowed domains
             options = ClaudeAgentOptions(
-                allowed_tools=["Skill", "Read", "Bash", "Grep", "Glob", "Write", "Edit"],
+                allowed_tools=[
+                    "Skill", "Read", "Bash", "Grep", "Glob", "Write", "Edit",
+                    "WebFetch(*.gouv.fr)",
+                ],
                 cwd=str(config.BASE_DIR),
                 permission_mode="acceptEdits",  # Auto-approve for web use
                 setting_sources=["project"],  # Load project skills
