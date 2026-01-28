@@ -13,6 +13,10 @@ let lastUserMessage = null;
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
 
+// File upload state
+let pendingFiles = [];  // Files waiting to be uploaded
+const MAX_FILE_SIZE = 200 * 1024 * 1024;  // 200 MB
+
 // Scroll position management for htmx navigation
 let isPopState = false;
 
@@ -410,6 +414,9 @@ function initChat() {
     cancelBtn.addEventListener('click', () => cancelStream());
   }
 
+  // File upload handling
+  initFileUpload();
+
   // Actions sidebar toggle
   initActionsSidebar();
 
@@ -572,6 +579,179 @@ function initTitleEditing() {
 }
 
 /**
+ * Initialize file upload functionality
+ */
+function initFileUpload() {
+  const uploadBtn = document.getElementById('chatUploadBtn');
+  const fileInput = document.getElementById('chatFileInput');
+
+  if (!uploadBtn || !fileInput) return;
+
+  // Remove existing listeners by cloning
+  uploadBtn.replaceWith(uploadBtn.cloneNode(true));
+  const newUploadBtn = document.getElementById('chatUploadBtn');
+
+  // Click upload button to trigger file input
+  newUploadBtn.addEventListener('click', () => {
+    fileInput.click();
+  });
+
+  // Handle file selection
+  fileInput.addEventListener('change', (e) => {
+    const files = Array.from(e.target.files);
+    addPendingFiles(files);
+    fileInput.value = '';  // Reset so same file can be selected again
+  });
+
+  // Allow drag and drop on the chat input area
+  const chatBar = document.querySelector('.chat-bar');
+  if (chatBar) {
+    chatBar.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      chatBar.classList.add('drag-over');
+    });
+
+    chatBar.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      chatBar.classList.remove('drag-over');
+    });
+
+    chatBar.addEventListener('drop', (e) => {
+      e.preventDefault();
+      chatBar.classList.remove('drag-over');
+      const files = Array.from(e.dataTransfer.files);
+      addPendingFiles(files);
+    });
+  }
+}
+
+/**
+ * Add files to the pending upload queue
+ */
+function addPendingFiles(files) {
+  for (const file of files) {
+    // Check file size
+    if (file.size > MAX_FILE_SIZE) {
+      showError(`Fichier trop volumineux: ${file.name} (max 200 Mo)`);
+      continue;
+    }
+
+    // Check for duplicates
+    if (pendingFiles.some(f => f.name === file.name && f.size === file.size)) {
+      continue;
+    }
+
+    pendingFiles.push(file);
+  }
+
+  updatePendingFilesUI();
+}
+
+/**
+ * Remove a file from the pending queue
+ */
+function removePendingFile(index) {
+  pendingFiles.splice(index, 1);
+  updatePendingFilesUI();
+}
+
+/**
+ * Update the UI to show pending files
+ */
+function updatePendingFilesUI() {
+  const container = document.getElementById('chatPendingFiles');
+  if (!container) return;
+
+  if (pendingFiles.length === 0) {
+    container.innerHTML = '';
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'flex';
+  container.innerHTML = pendingFiles.map((file, index) => `
+    <div class="pending-file" data-index="${index}">
+      <i class="ri-file-line"></i>
+      <span class="pending-file-name" title="${escapeHtml(file.name)}">${escapeHtml(truncateFilename(file.name))}</span>
+      <span class="pending-file-size">(${formatFileSize(file.size)})</span>
+      <button type="button" class="pending-file-remove" onclick="removePendingFile(${index})" title="Supprimer">
+        <i class="ri-close-line"></i>
+      </button>
+    </div>
+  `).join('');
+}
+
+/**
+ * Truncate a filename for display
+ */
+function truncateFilename(name, maxLen = 25) {
+  if (name.length <= maxLen) return name;
+  const ext = name.includes('.') ? '.' + name.split('.').pop() : '';
+  const stem = name.slice(0, name.length - ext.length);
+  const truncated = stem.slice(0, maxLen - ext.length - 3) + '...';
+  return truncated + ext;
+}
+
+/**
+ * Format file size for display
+ */
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' o';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' Ko';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' Mo';
+}
+
+/**
+ * Upload pending files to the conversation
+ * Returns array of context messages for the uploaded files
+ */
+async function uploadPendingFiles() {
+  if (pendingFiles.length === 0) return [];
+  if (!currentConversationId) return [];
+
+  const contextMessages = [];
+
+  for (const file of pendingFiles) {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(`/api/conversations/${currentConversationId}/files`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        showError(`Erreur upload ${file.name}: ${err.error || 'Échec'}`);
+        continue;
+      }
+
+      const data = await response.json();
+      contextMessages.push(data.context_message);
+
+    } catch (error) {
+      console.error(`Failed to upload ${file.name}:`, error);
+      showError(`Erreur upload ${file.name}`);
+    }
+  }
+
+  // Clear pending files
+  pendingFiles = [];
+  updatePendingFilesUI();
+
+  return contextMessages;
+}
+
+/**
+ * Clear pending files (used when navigating away)
+ */
+function clearPendingFiles() {
+  pendingFiles = [];
+  updatePendingFilesUI();
+}
+
+/**
  * Auto-grow textarea to fit content
  */
 function autoGrow(textarea) {
@@ -585,8 +765,9 @@ function autoGrow(textarea) {
 async function sendMessage() {
   const input = document.getElementById('chatInput');
   const message = input.value.trim();
+  const hasFiles = pendingFiles.length > 0;
 
-  if (!message) {
+  if (!message && !hasFiles) {
     input.focus();
     return;
   }
@@ -598,8 +779,18 @@ async function sendMessage() {
       const data = await response.json();
       currentConversationId = data.id;
 
-      // Redirect to conversation page (refreshes sidebar with new conversation)
-      window.location.href = `/explorations/${currentConversationId}?message=${encodeURIComponent(message)}`;
+      // If we have pending files, we need to upload them first, then redirect
+      if (hasFiles) {
+        // Upload files to the new conversation
+        const fileContexts = await uploadPendingFiles();
+        const fullMessage = buildMessageWithFiles(message, fileContexts);
+
+        // Redirect with the full message
+        window.location.href = `/explorations/${currentConversationId}?message=${encodeURIComponent(fullMessage)}`;
+      } else {
+        // Redirect to conversation page (refreshes sidebar with new conversation)
+        window.location.href = `/explorations/${currentConversationId}?message=${encodeURIComponent(message)}`;
+      }
       return;
     } catch (error) {
       console.error('Failed to create conversation:', error);
@@ -615,15 +806,40 @@ async function sendMessage() {
   // Hide empty state
   hideEmptyState();
 
-  // Show user message
-  appendEvent('user', { content: message });
+  // Upload pending files first (if any)
+  let fullMessage = message;
+  if (hasFiles) {
+    setStreamingState(true);  // Show loading during upload
+    const fileContexts = await uploadPendingFiles();
+    fullMessage = buildMessageWithFiles(message, fileContexts);
+    setStreamingState(false);
+  }
+
+  // Show user message (with file info if any)
+  appendEvent('user', { content: fullMessage });
 
   // Save message for potential retry
-  lastUserMessage = message;
+  lastUserMessage = fullMessage;
   retryCount = 0;
 
   // Send message to API
-  await sendToAgent(message);
+  await sendToAgent(fullMessage);
+}
+
+/**
+ * Build the message content with file context prepended
+ */
+function buildMessageWithFiles(userMessage, fileContexts) {
+  if (!fileContexts || fileContexts.length === 0) {
+    return userMessage;
+  }
+
+  const fileSection = fileContexts.join('\n\n');
+  if (!userMessage) {
+    return fileSection;
+  }
+
+  return `${fileSection}\n\n---\n\n${userMessage}`;
 }
 
 /**

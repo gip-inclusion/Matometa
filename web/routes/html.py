@@ -249,7 +249,14 @@ def explorations():
 def explorations_new():
     """Start a new conversation - empty chat UI."""
     data = get_sidebar_data()
-    return render_template("explorations.html", section="explorations", current_conv=None, is_new=True, **data)
+    return render_template(
+        "explorations.html",
+        section="explorations",
+        current_conv=None,
+        is_new=True,
+        can_upload=True,  # New conversations can have uploads
+        **data
+    )
 
 
 @bp.route("/explorations/<conv_id>")
@@ -275,6 +282,13 @@ def explorations_conversation(conv_id: str):
     if current_conv.title:
         current_conv.title = humanize_title(current_conv.title)
 
+    # Determine if file uploads are allowed for this conversation
+    # Only allow for exploration conversations that the user owns
+    can_upload = (
+        not is_shared and
+        current_conv.conv_type in ('exploration', None)
+    )
+
     data = get_sidebar_data()
     return render_template(
         "explorations.html",
@@ -282,6 +296,7 @@ def explorations_conversation(conv_id: str):
         current_conv=current_conv,
         is_shared=is_shared,
         owner_email=owner_email,
+        can_upload=can_upload,
         **data
     )
 

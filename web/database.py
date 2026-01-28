@@ -15,7 +15,7 @@ from . import config
 USE_POSTGRES = config.DATABASE_URL is not None and config.DATABASE_URL.startswith(("postgres://", "postgresql://"))
 
 # Schema version - increment when adding migrations
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 if USE_POSTGRES:
     import psycopg2
@@ -264,14 +264,18 @@ def init_db():
     with get_db() as conn:
         current_version = _get_schema_version(conn)
 
-        if current_version < 11:
+        if current_version < 12:
             # Fresh install or pre-versioned database
             if current_version == 0:
                 _create_schema(conn)
                 _seed_tags(conn)
-            else:
+            elif current_version < 11:
                 # Migrate from v10 (old token columns) to v11 (usage_ prefix)
                 _migrate_to_v11(conn)
+                _migrate_to_v12(conn)
+            else:
+                # Migrate from v11 to v12 (add uploaded_files table)
+                _migrate_to_v12(conn)
 
             _set_schema_version(conn, SCHEMA_VERSION)
 
@@ -323,6 +327,33 @@ def _migrate_to_v11(conn: ConnectionWrapper):
         conn.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY)")
     else:
         conn.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY)")
+
+
+def _migrate_to_v12(conn: ConnectionWrapper):
+    """Migrate to v12: add uploaded_files table for chat file uploads."""
+    serial_pk = "SERIAL PRIMARY KEY" if conn.is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
+
+    conn.execute(f"""
+        CREATE TABLE IF NOT EXISTS uploaded_files (
+            id {serial_pk},
+            conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,
+            user_id TEXT,
+            original_filename TEXT NOT NULL,
+            stored_filename TEXT NOT NULL,
+            storage_path TEXT NOT NULL,
+            file_size INTEGER NOT NULL,
+            mime_type TEXT,
+            sha256_hash TEXT NOT NULL,
+            is_text BOOLEAN DEFAULT FALSE,
+            av_scanned BOOLEAN DEFAULT FALSE,
+            av_clean BOOLEAN,
+            created_at TEXT NOT NULL
+        )
+    """)
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_uploaded_files_conversation ON uploaded_files(conversation_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_uploaded_files_hash ON uploaded_files(sha256_hash)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_uploaded_files_user ON uploaded_files(user_id)")
 
 
 def _create_schema(conn: ConnectionWrapper):
@@ -403,6 +434,22 @@ def _create_schema(conn: ConnectionWrapper):
             PRIMARY KEY (report_id, tag_id)
         );
 
+        CREATE TABLE IF NOT EXISTS uploaded_files (
+            id {serial_pk},
+            conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,
+            user_id TEXT,
+            original_filename TEXT NOT NULL,
+            stored_filename TEXT NOT NULL,
+            storage_path TEXT NOT NULL,
+            file_size INTEGER NOT NULL,
+            mime_type TEXT,
+            sha256_hash TEXT NOT NULL,
+            is_text BOOLEAN DEFAULT FALSE,
+            av_scanned BOOLEAN DEFAULT FALSE,
+            av_clean BOOLEAN,
+            created_at TEXT NOT NULL
+        );
+
         CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
         CREATE INDEX IF NOT EXISTS idx_conversations_updated ON conversations(updated_at DESC);
         CREATE INDEX IF NOT EXISTS idx_conversations_type_status ON conversations(conv_type, status);
@@ -412,6 +459,9 @@ def _create_schema(conn: ConnectionWrapper):
         CREATE INDEX IF NOT EXISTS idx_conversation_tags_tag ON conversation_tags(tag_id);
         CREATE INDEX IF NOT EXISTS idx_report_tags_report ON report_tags(report_id);
         CREATE INDEX IF NOT EXISTS idx_report_tags_tag ON report_tags(tag_id);
+        CREATE INDEX IF NOT EXISTS idx_uploaded_files_conversation ON uploaded_files(conversation_id);
+        CREATE INDEX IF NOT EXISTS idx_uploaded_files_hash ON uploaded_files(sha256_hash);
+        CREATE INDEX IF NOT EXISTS idx_uploaded_files_user ON uploaded_files(user_id);
     """)
 
 
@@ -486,6 +536,42 @@ class Tag:
     type: str = ""  # product | theme | source | type_demande
     label: str = ""
     count: int = 0  # Number of conversations/reports with this tag
+
+
+@dataclass
+class UploadedFile:
+    """A file uploaded to a conversation."""
+    id: Optional[int] = None
+    conversation_id: Optional[str] = None
+    user_id: Optional[str] = None
+    original_filename: str = ""
+    stored_filename: str = ""
+    storage_path: str = ""
+    file_size: int = 0
+    mime_type: Optional[str] = None
+    sha256_hash: str = ""
+    is_text: bool = False
+    av_scanned: bool = False
+    av_clean: Optional[bool] = None
+    created_at: datetime = field(default_factory=datetime.now)
+
+    def to_dict(self) -> dict:
+        """Convert to JSON-serializable dict."""
+        return {
+            "id": self.id,
+            "conversation_id": self.conversation_id,
+            "user_id": self.user_id,
+            "original_filename": self.original_filename,
+            "stored_filename": self.stored_filename,
+            "storage_path": self.storage_path,
+            "file_size": self.file_size,
+            "mime_type": self.mime_type,
+            "sha256_hash": self.sha256_hash,
+            "is_text": self.is_text,
+            "av_scanned": self.av_scanned,
+            "av_clean": self.av_clean,
+            "created_at": self.created_at.isoformat(),
+        }
 
 
 @dataclass
@@ -1564,6 +1650,153 @@ class ConversationStore:
                 results.append((report, tags))
 
             return results
+
+    # -------------------------------------------------------------------------
+    # Uploaded Files
+    # -------------------------------------------------------------------------
+
+    def add_uploaded_file(
+        self,
+        conversation_id: Optional[str],
+        user_id: Optional[str],
+        original_filename: str,
+        stored_filename: str,
+        storage_path: str,
+        file_size: int,
+        sha256_hash: str,
+        mime_type: Optional[str] = None,
+        is_text: bool = False,
+        av_scanned: bool = False,
+        av_clean: Optional[bool] = None,
+    ) -> Optional[UploadedFile]:
+        """Add a new uploaded file record."""
+        uploaded_file = UploadedFile(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            original_filename=original_filename,
+            stored_filename=stored_filename,
+            storage_path=storage_path,
+            file_size=file_size,
+            mime_type=mime_type,
+            sha256_hash=sha256_hash,
+            is_text=is_text,
+            av_scanned=av_scanned,
+            av_clean=av_clean,
+        )
+
+        with get_db() as conn:
+            uploaded_file.id = conn.insert_and_get_id(
+                """INSERT INTO uploaded_files
+                   (conversation_id, user_id, original_filename, stored_filename,
+                    storage_path, file_size, mime_type, sha256_hash, is_text,
+                    av_scanned, av_clean, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (conversation_id, user_id, original_filename, stored_filename,
+                 storage_path, file_size, mime_type, sha256_hash, is_text,
+                 av_scanned, av_clean, uploaded_file.created_at.isoformat())
+            )
+
+        return uploaded_file
+
+    def get_uploaded_file(self, file_id: int) -> Optional[UploadedFile]:
+        """Get an uploaded file by ID."""
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT * FROM uploaded_files WHERE id = ?", (file_id,)
+            ).fetchone()
+
+            if not row:
+                return None
+
+            return UploadedFile(
+                id=row["id"],
+                conversation_id=row["conversation_id"],
+                user_id=row["user_id"],
+                original_filename=row["original_filename"],
+                stored_filename=row["stored_filename"],
+                storage_path=row["storage_path"],
+                file_size=row["file_size"],
+                mime_type=row["mime_type"],
+                sha256_hash=row["sha256_hash"],
+                is_text=bool(row["is_text"]),
+                av_scanned=bool(row["av_scanned"]),
+                av_clean=bool(row["av_clean"]) if row["av_clean"] is not None else None,
+                created_at=datetime.fromisoformat(row["created_at"]),
+            )
+
+    def get_uploaded_file_by_hash(self, sha256_hash: str) -> Optional[UploadedFile]:
+        """Get an uploaded file by its SHA256 hash (for deduplication)."""
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT * FROM uploaded_files WHERE sha256_hash = ? LIMIT 1", (sha256_hash,)
+            ).fetchone()
+
+            if not row:
+                return None
+
+            return UploadedFile(
+                id=row["id"],
+                conversation_id=row["conversation_id"],
+                user_id=row["user_id"],
+                original_filename=row["original_filename"],
+                stored_filename=row["stored_filename"],
+                storage_path=row["storage_path"],
+                file_size=row["file_size"],
+                mime_type=row["mime_type"],
+                sha256_hash=row["sha256_hash"],
+                is_text=bool(row["is_text"]),
+                av_scanned=bool(row["av_scanned"]),
+                av_clean=bool(row["av_clean"]) if row["av_clean"] is not None else None,
+                created_at=datetime.fromisoformat(row["created_at"]),
+            )
+
+    def get_conversation_files(self, conversation_id: str) -> list[UploadedFile]:
+        """Get all uploaded files for a conversation."""
+        with get_db() as conn:
+            rows = conn.execute(
+                """SELECT * FROM uploaded_files
+                   WHERE conversation_id = ?
+                   ORDER BY created_at""",
+                (conversation_id,)
+            ).fetchall()
+
+            return [
+                UploadedFile(
+                    id=row["id"],
+                    conversation_id=row["conversation_id"],
+                    user_id=row["user_id"],
+                    original_filename=row["original_filename"],
+                    stored_filename=row["stored_filename"],
+                    storage_path=row["storage_path"],
+                    file_size=row["file_size"],
+                    mime_type=row["mime_type"],
+                    sha256_hash=row["sha256_hash"],
+                    is_text=bool(row["is_text"]),
+                    av_scanned=bool(row["av_scanned"]),
+                    av_clean=bool(row["av_clean"]) if row["av_clean"] is not None else None,
+                    created_at=datetime.fromisoformat(row["created_at"]),
+                )
+                for row in rows
+            ]
+
+    def update_uploaded_file_av_status(
+        self, file_id: int, av_scanned: bool, av_clean: Optional[bool]
+    ) -> bool:
+        """Update the AV scan status of an uploaded file."""
+        with get_db() as conn:
+            cursor = conn.execute(
+                "UPDATE uploaded_files SET av_scanned = ?, av_clean = ? WHERE id = ?",
+                (av_scanned, av_clean, file_id)
+            )
+            return cursor.rowcount > 0
+
+    def delete_uploaded_file(self, file_id: int) -> bool:
+        """Delete an uploaded file record."""
+        with get_db() as conn:
+            cursor = conn.execute(
+                "DELETE FROM uploaded_files WHERE id = ?", (file_id,)
+            )
+            return cursor.rowcount > 0
 
 
 # =============================================================================

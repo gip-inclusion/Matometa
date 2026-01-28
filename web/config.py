@@ -62,6 +62,14 @@ SCRIPTS_DIR = DATA_DIR / "scripts"
 # Used for local storage fallback when S3 is not configured
 INTERACTIVE_DIR = DATA_DIR / "interactive"
 
+# Uploads directory for user-uploaded files in chat
+UPLOADS_DIR = DATA_DIR / "uploads"
+
+# File upload limits
+MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", 200 * 1024 * 1024))  # 200 MB default
+# Text file size threshold for including content directly in conversation
+TEXT_FILE_INLINE_LIMIT = int(os.getenv("TEXT_FILE_INLINE_LIMIT", 50 * 1024))  # 50 KB default
+
 # S3-compatible object storage for interactive files
 # If configured, files are stored in S3 instead of local filesystem
 # Works with AWS S3, Scaleway Object Storage, MinIO, etc.

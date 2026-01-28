@@ -14,6 +14,15 @@ from ..storage import store
 from ..agents import get_agent
 from .. import config
 from ..config import ADMIN_USERS
+from ..uploads import (
+    upload_file as do_upload_file,
+    copy_file_for_modification,
+    get_file_content,
+    format_file_for_context,
+    FileTooLargeError,
+    BlockedFileTypeError,
+    AVScanFailedError,
+)
 from lib.tool_taxonomy import classify_tool
 from lib.api_signals import parse_api_signals
 
@@ -794,4 +803,145 @@ def set_conversation_tags(conv_id: str):
     tags = store.get_conversation_tags(conv_id)
     return jsonify({
         "tags": [{"name": t.name, "type": t.type, "label": t.label} for t in tags]
+    })
+
+
+# =============================================================================
+# File Upload Endpoints
+# =============================================================================
+
+@bp.route("/<conv_id>/files", methods=["POST"])
+def upload_file(conv_id: str):
+    """Upload a file to a conversation.
+
+    Accepts multipart/form-data with 'file' field.
+    Returns file metadata and optional text content for small text files.
+    """
+    conv = store.get_conversation(conv_id, include_messages=False)
+    if not conv:
+        return jsonify({"error": "Conversation not found"}), 404
+
+    # Check ownership
+    user_email = getattr(g, "user_email", None)
+    if conv.user_id and conv.user_id != user_email:
+        return jsonify({"error": "Permission denied"}), 403
+
+    # Check conversation type - don't allow uploads on report conversations
+    # (Reports are read-only archived content)
+    if conv.conv_type == "report":
+        return jsonify({"error": "Cannot upload files to report conversations"}), 400
+
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "No file selected"}), 400
+
+    try:
+        uploaded_file, text_content = do_upload_file(
+            file_obj=file,
+            filename=file.filename,
+            conversation_id=conv_id,
+            user_id=user_email,
+            check_duplicate=True,
+        )
+
+        response = {
+            "file": uploaded_file.to_dict(),
+            "text_content": text_content,
+            "context_message": format_file_for_context(uploaded_file, text_content),
+        }
+        return jsonify(response), 201
+
+    except FileTooLargeError as e:
+        return jsonify({"error": f"File too large: {e}"}), 413
+    except BlockedFileTypeError as e:
+        return jsonify({"error": f"File type not allowed: {e}"}), 415
+    except AVScanFailedError as e:
+        return jsonify({"error": f"File failed security scan: {e}"}), 422
+    except Exception as e:
+        logger.error(f"File upload failed: {e}")
+        return jsonify({"error": "Upload failed"}), 500
+
+
+@bp.route("/<conv_id>/files", methods=["GET"])
+def list_files(conv_id: str):
+    """List all files uploaded to a conversation."""
+    conv = store.get_conversation(conv_id, include_messages=False)
+    if not conv:
+        return jsonify({"error": "Conversation not found"}), 404
+
+    files = store.get_conversation_files(conv_id)
+    return jsonify({
+        "files": [f.to_dict() for f in files]
+    })
+
+
+@bp.route("/<conv_id>/files/<int:file_id>", methods=["GET"])
+def get_file(conv_id: str, file_id: int):
+    """Get metadata for a specific uploaded file."""
+    uploaded_file = store.get_uploaded_file(file_id)
+    if not uploaded_file:
+        return jsonify({"error": "File not found"}), 404
+
+    if uploaded_file.conversation_id != conv_id:
+        return jsonify({"error": "File not in this conversation"}), 404
+
+    return jsonify({"file": uploaded_file.to_dict()})
+
+
+@bp.route("/<conv_id>/files/<int:file_id>/content", methods=["GET"])
+def get_file_content_endpoint(conv_id: str, file_id: int):
+    """Download the content of an uploaded file."""
+    uploaded_file = store.get_uploaded_file(file_id)
+    if not uploaded_file:
+        return jsonify({"error": "File not found"}), 404
+
+    if uploaded_file.conversation_id != conv_id:
+        return jsonify({"error": "File not in this conversation"}), 404
+
+    content = get_file_content(uploaded_file)
+    if content is None:
+        return jsonify({"error": "File content not available"}), 404
+
+    return Response(
+        content,
+        mimetype=uploaded_file.mime_type or "application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{uploaded_file.original_filename}"'
+        }
+    )
+
+
+@bp.route("/<conv_id>/files/<int:file_id>/copy", methods=["POST"])
+def copy_file(conv_id: str, file_id: int):
+    """Create a writable copy of an uploaded file for modification.
+
+    Used when the user asks the agent to modify a file.
+    The original remains read-only.
+    """
+    uploaded_file = store.get_uploaded_file(file_id)
+    if not uploaded_file:
+        return jsonify({"error": "File not found"}), 404
+
+    if uploaded_file.conversation_id != conv_id:
+        return jsonify({"error": "File not in this conversation"}), 404
+
+    # Check ownership
+    user_email = getattr(g, "user_email", None)
+    conv = store.get_conversation(conv_id, include_messages=False)
+    if conv and conv.user_id and conv.user_id != user_email:
+        return jsonify({"error": "Permission denied"}), 403
+
+    data = request.get_json() or {}
+    new_filename = data.get("filename")
+
+    copy_path = copy_file_for_modification(uploaded_file, new_filename=new_filename)
+    if copy_path is None:
+        return jsonify({"error": "Failed to create copy"}), 500
+
+    return jsonify({
+        "copy_path": str(copy_path),
+        "original_file": uploaded_file.to_dict(),
     })

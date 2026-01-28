@@ -374,13 +374,22 @@
           <i class="ri-close-line"></i>
         </button>
       </div>
-      <div class="chat-bar">
-        <textarea
-          class="chat-input"
-          id="chatInput"
-          placeholder="Posez une question sur vos données Matomo ou Metabase…"
-          rows="1"
-        ></textarea>
+      <div class="chat-bar"{% if not can_upload %} data-upload-disabled{% endif %}>
+        {% if can_upload %}
+        <input type="file" id="chatFileInput" class="chat-file-input" multiple style="display: none;">
+        <button type="button" class="chat-upload-btn" id="chatUploadBtn" title="Joindre un fichier">
+          <i class="ri-attachment-2"></i>
+        </button>
+        {% endif %}
+        <div class="chat-input-wrapper">
+          <div class="chat-pending-files" id="chatPendingFiles"></div>
+          <textarea
+            class="chat-input"
+            id="chatInput"
+            placeholder="Posez une question sur vos données Matomo ou Metabase…"
+            rows="1"
+          ></textarea>
+        </div>
         <button type="button" class="chat-send-btn" id="chatSendBtn" title="Envoyer">
           <i class="ri-send-plane-fill"></i>
         </button>
