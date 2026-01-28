@@ -660,15 +660,18 @@ function removePendingFile(index) {
  */
 function updatePendingFilesUI() {
   const container = document.getElementById('chatPendingFiles');
+  const input = document.getElementById('chatInput');
   if (!container) return;
 
   if (pendingFiles.length === 0) {
     container.innerHTML = '';
     container.style.display = 'none';
+    if (input) input.classList.remove('has-pending-files');
     return;
   }
 
   container.style.display = 'flex';
+  if (input) input.classList.add('has-pending-files');
   container.innerHTML = pendingFiles.map((file, index) => `
     <div class="pending-file" data-index="${index}">
       <i class="ri-file-line"></i>
@@ -1207,7 +1210,7 @@ function appendEvent(type, data) {
   block.className = `event-block event-${type}`;
 
   if (type === 'user') {
-    block.innerHTML = escapeHtml(data.content);
+    block.innerHTML = formatUserContent(data.content);
   } else if (type === 'assistant') {
     // Store raw markdown for report creation
     block.dataset.rawContent = data.content;
@@ -1944,6 +1947,73 @@ function findScrollAnchor(chatOutput) {
   }
   // Fallback to first event block
   return chatOutput.querySelector('.event-block');
+}
+
+/**
+ * Format user message content, converting file context blocks to pills
+ */
+function formatUserContent(content) {
+  // Pattern to match file context blocks:
+  // [Uploaded file: filename]
+  // - Size: ...
+  // - Type: ...
+  // - Path: ...
+  // - Content (...): (optional, with code block)
+  // - Note: ... (optional)
+  const fileBlockPattern = /\[Uploaded file: ([^\]]+)\]\n(?:- [^\n]+\n)+(?:```[\s\S]*?```\n?)?/g;
+
+  let result = content;
+  const matches = content.match(fileBlockPattern);
+
+  if (matches) {
+    for (const match of matches) {
+      // Extract filename from the match
+      const filenameMatch = match.match(/\[Uploaded file: ([^\]]+)\]/);
+      const filename = filenameMatch ? filenameMatch[1] : 'Fichier';
+
+      // Extract file size
+      const sizeMatch = match.match(/- Size: ([\d,]+) bytes/);
+      const size = sizeMatch ? formatFileSize(parseInt(sizeMatch[1].replace(/,/g, ''))) : '';
+
+      // Extract file type
+      const typeMatch = match.match(/- Type: ([^\n]+)/);
+      const mimeType = typeMatch ? typeMatch[1] : '';
+
+      // Determine icon based on mime type
+      let icon = 'ri-file-line';
+      if (mimeType.startsWith('image/')) icon = 'ri-image-line';
+      else if (mimeType.startsWith('text/') || mimeType.includes('json') || mimeType.includes('xml')) icon = 'ri-file-text-line';
+      else if (mimeType.includes('pdf')) icon = 'ri-file-pdf-line';
+      else if (mimeType.includes('spreadsheet') || mimeType.includes('excel') || mimeType.includes('csv')) icon = 'ri-file-excel-line';
+      else if (mimeType.includes('word') || mimeType.includes('document')) icon = 'ri-file-word-line';
+
+      // Create pill HTML
+      const pill = `<span class="file-context-pill" title="${escapeHtml(mimeType)}"><i class="${icon}"></i> ${escapeHtml(filename)}${size ? ` <span class="file-context-size">(${size})</span>` : ''}</span>`;
+
+      result = result.replace(match, pill);
+    }
+  }
+
+  // Handle remaining content (the actual user message after ---)
+  // Split by --- separator if present
+  const parts = result.split(/\n---\n/);
+  if (parts.length > 1) {
+    // Pills are in first part, user message in second
+    const pills = parts[0];
+    const userText = parts.slice(1).join('\n---\n').trim();
+    if (userText) {
+      return `<div class="file-context-pills">${pills}</div><div class="user-text">${escapeHtml(userText)}</div>`;
+    } else {
+      return `<div class="file-context-pills">${pills}</div>`;
+    }
+  }
+
+  // If no file blocks found, just escape and return
+  if (!matches) {
+    return escapeHtml(content);
+  }
+
+  return result;
 }
 
 /**

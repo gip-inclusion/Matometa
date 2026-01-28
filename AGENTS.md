@@ -242,6 +242,9 @@ Use the `Skill` tool to invoke these skills before querying:
 |---------|---------|
 | `PyYAML` | YAML parsing |
 | `Markdown` | Markdown rendering |
+| `openpyxl` | Excel .xlsx reading (used by pandas) |
+| `mammoth` | Word .docx → markdown |
+| `pdfplumber` | PDF text/table extraction |
 
 **Database:**
 | Package | Purpose |
@@ -253,6 +256,26 @@ Use the `Skill` tool to invoke these skills before querying:
 | Import | Purpose |
 |--------|---------|
 | `lib.query` | Unified query interface for Matomo/Metabase |
+| `lib.readers` | File format readers (Excel, Word, PDF, ZIP) |
+
+Example reading uploaded files:
+```python
+from lib.readers import read_excel, read_word, read_pdf, list_zip
+
+# Excel → markdown tables
+print(read_excel('/path/to/file.xlsx'))
+print(read_excel('/path/to/file.xlsx', sheet='Sheet1'))  # specific sheet
+
+# Word → markdown
+print(read_word('/path/to/file.docx'))
+
+# PDF → text with page markers
+print(read_pdf('/path/to/file.pdf'))
+print(read_pdf('/path/to/file.pdf', pages='1-5'))  # specific pages
+
+# ZIP → list contents
+print(list_zip('/path/to/file.zip'))
+```
 
 Example using pandas with Metabase:
 ```python

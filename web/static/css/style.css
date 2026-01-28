@@ -394,10 +394,10 @@ body.has-sidebar {
   background: #c82333;
 }
 
-/* File upload button */
+/* File upload button - same size as send button */
 .chat-upload-btn {
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -405,7 +405,7 @@ body.has-sidebar {
   border: 2px solid #dee2e6;
   border-radius: 50%;
   color: #495057;
-  font-size: 1.125rem;
+  font-size: 1.25rem;
   cursor: pointer;
   transition: all 0.2s;
   flex-shrink: 0;
@@ -447,7 +447,7 @@ body.has-sidebar {
   margin-bottom: -0.5rem;
 }
 
-.chat-pending-files + .chat-input {
+.chat-input.has-pending-files {
   border-top-left-radius: 0;
   border-top-right-radius: 0;
 }
@@ -636,6 +636,40 @@ body.has-sidebar {
   margin-bottom: 0.375rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+}
+
+/* File context pills in user messages */
+.file-context-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 0.5rem;
+}
+
+.file-context-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: white;
+  border: 1px solid var(--bs-gray-400);
+  border-radius: 1rem;
+  font-size: 0.8125rem;
+  color: var(--bs-gray-700);
+}
+
+.file-context-pill i {
+  font-size: 0.875rem;
+  color: var(--bs-primary);
+}
+
+.file-context-size {
+  color: var(--bs-gray-500);
+  font-size: 0.75rem;
+}
+
+.event-user .user-text {
+  white-space: pre-wrap;
 }
 
 /* Assistant messages - clean, no box */

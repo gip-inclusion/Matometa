@@ -47,3 +47,8 @@ numpy>=1.26.0
 scipy>=1.11.0
 pandas>=2.0.0
 scikit-learn>=1.4.0
+
+# File format support
+openpyxl>=3.1.0      # Excel .xlsx
+mammoth>=1.6.0       # Word .docx → markdown
+pdfplumber>=0.10.0   # PDF text extraction
