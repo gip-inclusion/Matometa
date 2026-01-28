@@ -65,6 +65,9 @@ INTERACTIVE_DIR = DATA_DIR / "interactive"
 # Uploads directory for user-uploaded files in chat
 UPLOADS_DIR = DATA_DIR / "uploads"
 
+# Modified files directory (writable copies of uploaded files for agent modifications)
+MODIFIED_DIR = DATA_DIR / "modified"
+
 # File upload limits
 MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", 200 * 1024 * 1024))  # 200 MB default
 # Text file size threshold for including content directly in conversation

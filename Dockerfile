@@ -3,14 +3,20 @@
 
 FROM python:3.11-slim
 
-# Install Node.js for Claude Code CLI
+# Install Node.js for Claude Code CLI and ClamAV for file scanning
 RUN apt-get update && apt-get install -y \
     curl \
     git \
     procps \
+    clamav \
+    clamav-daemon \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
+
+# Update ClamAV virus definitions (run as root before switching user)
+# Use freshclam with no-daemon mode; allow failure if network unavailable during build
+RUN freshclam --no-dns || echo "Warning: Could not update ClamAV definitions during build"
 
 # Install Claude Code CLI globally
 RUN npm install -g @anthropic-ai/claude-code
@@ -28,8 +34,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY --chown=matometa:matometa . .
 
-# Create data directory for SQLite
-RUN mkdir -p /app/data && chown matometa:matometa /app/data
+# Create data directories for SQLite, uploads, and modified files
+RUN mkdir -p /app/data /app/data/uploads /app/data/modified \
+    && chown -R matometa:matometa /app/data
 
 # Switch to non-root user
 USER matometa

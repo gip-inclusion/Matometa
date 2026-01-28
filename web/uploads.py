@@ -387,7 +387,7 @@ def copy_file_for_modification(
 
     Args:
         uploaded_file: The file record to copy
-        destination_dir: Where to put the copy (defaults to /tmp)
+        destination_dir: Where to put the copy (defaults to /data/modified for persistence)
         new_filename: Optional new name for the copy
 
     Returns:
@@ -398,9 +398,9 @@ def copy_file_for_modification(
         logger.error(f"Could not read file {uploaded_file.stored_filename} for copying")
         return None
 
-    # Default destination
+    # Default destination: /data/modified for persistence across container restarts
     if destination_dir is None:
-        destination_dir = Path("/tmp/matometa_modified")
+        destination_dir = config.MODIFIED_DIR
 
     destination_dir.mkdir(parents=True, exist_ok=True)
 
