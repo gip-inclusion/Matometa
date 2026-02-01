@@ -62,6 +62,10 @@ SCRIPTS_DIR = DATA_DIR / "scripts"
 # Used for local storage fallback when S3 is not configured
 INTERACTIVE_DIR = DATA_DIR / "interactive"
 
+# Common shared assets (CSS/JS frameworks used by interactive apps)
+# Always relative to BASE_DIR (framework code, not per-environment data)
+COMMON_DIR = BASE_DIR / "data" / "common"
+
 # Uploads directory for user-uploaded files in chat
 UPLOADS_DIR = DATA_DIR / "uploads"
 

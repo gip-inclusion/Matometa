@@ -59,6 +59,19 @@ app.register_blueprint(auth_bp)
 
 
 # =============================================================================
+# Static files: /common (shared CSS/JS frameworks from data/common/)
+# =============================================================================
+
+
+@app.route("/common/<path:filename>")
+def serve_common(filename):
+    """Serve shared assets from data/common directory."""
+    if not config.COMMON_DIR.exists():
+        abort(404)
+    return send_from_directory(config.COMMON_DIR, filename)
+
+
+# =============================================================================
 # Static files: /interactive (served from S3 or local data/interactive/)
 # =============================================================================
 
