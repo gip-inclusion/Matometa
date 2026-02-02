@@ -48,6 +48,16 @@
           </a>
         </li>
 
+        {% if pinned_conversation %}
+        <li class="nav-item">
+          <a href="/explorations/{{ pinned_conversation.id }}" class="nav-link {% if current_conv and current_conv.id == pinned_conversation.id %}active{% endif %}"
+             hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+            <i class="ri-lightbulb-line" aria-hidden="true"></i>
+            <span>{{ pinned_label }}</span>
+          </a>
+        </li>
+        {% endif %}
+
         <li class="nav-item">
           <a href="/rapports" class="nav-link {% if section == 'rapports' %}active{% endif %}"
              hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
@@ -125,6 +135,13 @@
               <i class="ri-add-line me-2"></i>Nouvelle conversation
             </a>
           </li>
+          {% if pinned_conversation %}
+          <li class="nav-item">
+            <a href="/explorations/{{ pinned_conversation.id }}" class="nav-link {% if current_conv and current_conv.id == pinned_conversation.id %}active{% endif %}">
+              <i class="ri-lightbulb-line me-2"></i>{{ pinned_label }}
+            </a>
+          </li>
+          {% endif %}
           <li class="nav-item">
             <a href="/rapports" class="nav-link {% if section == 'rapports' %}active{% endif %}">
               <i class="ri-file-text-line me-2"></i>Rapports et applis
