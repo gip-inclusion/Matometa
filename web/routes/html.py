@@ -6,7 +6,7 @@ from collections import OrderedDict
 
 from flask import Blueprint, render_template, request, g, redirect, abort
 
-from ..config import FEATURE_KNOWLEDGE_CHAT, ADMIN_USERS, PINNED_CONVERSATION_ID, PINNED_CONVERSATION_LABEL
+from ..config import FEATURE_KNOWLEDGE_CHAT, ADMIN_USERS
 from ..storage import store
 from ..helpers import validate_knowledge_path, list_knowledge_files, list_staged_files
 from .conversations import get_agent_instance
@@ -157,20 +157,15 @@ def get_sidebar_data():
                 conv.icon = "ri-chat-3-fill"
                 break
 
-    # Pinned conversation (e.g., "Bonnes pratiques")
-    pinned_conversation = None
-    if PINNED_CONVERSATION_ID:
-        pinned_conversation = store.get_conversation(
-            PINNED_CONVERSATION_ID, include_messages=False
-        )
+    # Pinned conversations (global, visible to all users)
+    pinned_conversations = store.list_pinned_conversations()
 
     return {
         "conversations": conversations,
         "running_ids": running_ids,
         "is_admin": user_email in ADMIN_USERS,
         "user_email": user_email,
-        "pinned_conversation": pinned_conversation,
-        "pinned_label": PINNED_CONVERSATION_LABEL,
+        "pinned_conversations": pinned_conversations,
     }
 
 

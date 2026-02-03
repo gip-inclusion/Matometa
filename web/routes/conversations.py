@@ -337,6 +337,37 @@ def delete_conversation(conv_id: str):
     return jsonify({"error": "Failed to delete"}), 500
 
 
+@bp.route("/<conv_id>/pin", methods=["POST"])
+def pin_conversation(conv_id: str):
+    """Pin a conversation to the sidebar. Admin only."""
+    user_email = getattr(g, "user_email", None)
+    if user_email not in ADMIN_USERS:
+        return jsonify({"error": "Permission denied"}), 403
+
+    conv = store.get_conversation(conv_id, include_messages=False)
+    if not conv:
+        return jsonify({"error": "Conversation not found"}), 404
+
+    data = request.get_json() or {}
+    label = data.get("label", "").strip() or conv.title or "Sans titre"
+
+    if store.pin_conversation(conv_id, label):
+        return jsonify({"ok": True, "label": label}), 200
+    return jsonify({"error": "Failed to pin"}), 500
+
+
+@bp.route("/<conv_id>/pin", methods=["DELETE"])
+def unpin_conversation(conv_id: str):
+    """Unpin a conversation from the sidebar. Admin only."""
+    user_email = getattr(g, "user_email", None)
+    if user_email not in ADMIN_USERS:
+        return jsonify({"error": "Permission denied"}), 403
+
+    if store.unpin_conversation(conv_id):
+        return jsonify({"ok": True}), 200
+    return jsonify({"error": "Failed to unpin"}), 500
+
+
 @bp.route("/<conv_id>", methods=["PATCH"])
 def update_conversation(conv_id: str):
     """Update conversation (title, etc.)."""

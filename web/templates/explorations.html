@@ -38,6 +38,13 @@
               <button type="button" class="conv-action-btn d-none" id="autoTitleBtn"><i class="ri-magic-line"></i> Générer titre</button>
               {% endif %}
               <button type="button" class="conv-action-btn" id="forkConvBtn"><i class="ri-git-branch-line"></i> Dupliquer</button>
+              {% if is_admin %}
+                {% if current_conv.pinned_at %}
+              <button type="button" class="conv-action-btn" id="unpinConvBtn"><i class="ri-unpin-line"></i> Désépingler</button>
+                {% else %}
+              <button type="button" class="conv-action-btn" id="pinConvBtn"><i class="ri-pushpin-line"></i> Épingler</button>
+                {% endif %}
+              {% endif %}
             {% elif is_new %}
               Nouvelle conversation
             {% else %}
@@ -564,6 +571,30 @@
       localStorage.setItem('publicWarningDismissed', 'true');
     }
   }
+
+  // Pin/unpin conversation (admin only)
+  document.addEventListener('click', async (e) => {
+    const pinBtn = e.target.closest('#pinConvBtn');
+    const unpinBtn = e.target.closest('#unpinConvBtn');
+    if (!pinBtn && !unpinBtn) return;
+
+    const convId = currentConversationId;
+    if (!convId) return;
+
+    if (pinBtn) {
+      const label = prompt('Label pour la sidebar :', document.querySelector('.conv-title-display h1')?.textContent?.trim() || '');
+      if (label === null) return;
+      const res = await fetch(`/api/conversations/${convId}/pin`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({label: label})
+      });
+      if (res.ok) window.location.reload();
+    } else if (unpinBtn) {
+      const res = await fetch(`/api/conversations/${convId}/pin`, {method: 'DELETE'});
+      if (res.ok) window.location.reload();
+    }
+  });
 
   document.addEventListener('DOMContentLoaded', async () => {
     // Hide public warning if previously dismissed (HTMX case handled in chat.js)

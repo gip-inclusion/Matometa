@@ -95,7 +95,3 @@ ADDITIONAL_DIRS = ["/tmp"]
 
 # Feature flags
 FEATURE_KNOWLEDGE_CHAT = False  # Chat from Connaissance tab disabled (requires GitHub PAT)
-
-# Pinned conversation in sidebar (e.g., "Bonnes pratiques" guide)
-PINNED_CONVERSATION_ID = os.getenv("PINNED_CONVERSATION_ID", "")
-PINNED_CONVERSATION_LABEL = os.getenv("PINNED_CONVERSATION_LABEL", "Bonnes pratiques")
