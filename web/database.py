@@ -15,14 +15,14 @@ from . import config
 USE_POSTGRES = config.DATABASE_URL is not None and config.DATABASE_URL.startswith(("postgres://", "postgresql://"))
 
 # Schema version - increment when adding migrations
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 if USE_POSTGRES:
     import psycopg2
     from psycopg2.extras import RealDictCursor
 
 # Valid column names for dynamic updates (security: prevents SQL injection)
-VALID_CONVERSATION_COLUMNS = frozenset({"title", "session_id", "user_id", "status", "pr_url", "updated_at"})
+VALID_CONVERSATION_COLUMNS = frozenset({"title", "session_id", "user_id", "status", "pr_url", "updated_at", "pinned_at", "pinned_label"})
 VALID_REPORT_COLUMNS = frozenset({"title", "website", "category", "tags", "original_query", "content", "updated_at"})
 
 
@@ -267,18 +267,18 @@ def init_db():
     with get_db() as conn:
         current_version = _get_schema_version(conn)
 
-        if current_version < 12:
+        if current_version < SCHEMA_VERSION:
             # Fresh install or pre-versioned database
             if current_version == 0:
                 _create_schema(conn)
                 _seed_tags(conn)
-            elif current_version < 11:
-                # Migrate from v10 (old token columns) to v11 (usage_ prefix)
-                _migrate_to_v11(conn)
-                _migrate_to_v12(conn)
             else:
-                # Migrate from v11 to v12 (add uploaded_files table)
-                _migrate_to_v12(conn)
+                if current_version < 11:
+                    _migrate_to_v11(conn)
+                if current_version < 12:
+                    _migrate_to_v12(conn)
+                if current_version < 13:
+                    _migrate_to_v13(conn)
 
             _set_schema_version(conn, SCHEMA_VERSION)
 
@@ -359,6 +359,15 @@ def _migrate_to_v12(conn: ConnectionWrapper):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_uploaded_files_user ON uploaded_files(user_id)")
 
 
+def _migrate_to_v13(conn: ConnectionWrapper):
+    """Migrate to v13: add pinned_at and pinned_label columns to conversations."""
+    columns = _get_table_columns(conn, "conversations")
+    if "pinned_at" not in columns:
+        conn.execute("ALTER TABLE conversations ADD COLUMN pinned_at TEXT")
+    if "pinned_label" not in columns:
+        conn.execute("ALTER TABLE conversations ADD COLUMN pinned_label TEXT")
+
+
 def _create_schema(conn: ConnectionWrapper):
     """Create the complete database schema."""
     # Use SERIAL for PostgreSQL, INTEGER PRIMARY KEY AUTOINCREMENT for SQLite
@@ -385,6 +394,8 @@ def _create_schema(conn: ConnectionWrapper):
             usage_cache_read_tokens INTEGER DEFAULT 0,
             usage_backend TEXT,
             usage_extra TEXT,
+            pinned_at TEXT,
+            pinned_label TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
@@ -629,6 +640,8 @@ class Conversation:
     usage_cache_read_tokens: int = 0
     usage_backend: Optional[str] = None  # 'cli', 'sdk', ...
     usage_extra: Optional[dict] = None  # web_search_requests, service_tier, ...
+    pinned_at: Optional[datetime] = None  # NULL = not pinned; timestamp = pinned
+    pinned_label: Optional[str] = None  # custom label shown in sidebar when pinned
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
 
@@ -654,6 +667,8 @@ class Conversation:
             "usage_cache_read_tokens": self.usage_cache_read_tokens,
             "usage_backend": self.usage_backend,
             "usage_extra": self.usage_extra,
+            "pinned_at": self.pinned_at.isoformat() if self.pinned_at else None,
+            "pinned_label": self.pinned_label,
             "messages": [
                 {
                     "id": m.id,
@@ -796,6 +811,8 @@ class ConversationStore:
                 usage_cache_read_tokens=row["usage_cache_read_tokens"] if "usage_cache_read_tokens" in row.keys() else 0,
                 usage_backend=row["usage_backend"] if "usage_backend" in row.keys() else None,
                 usage_extra=usage_extra,
+                pinned_at=datetime.fromisoformat(row["pinned_at"]) if "pinned_at" in row.keys() and row["pinned_at"] else None,
+                pinned_label=row["pinned_label"] if "pinned_label" in row.keys() else None,
                 created_at=datetime.fromisoformat(row["created_at"]),
                 updated_at=datetime.fromisoformat(row["updated_at"]),
             )
@@ -900,6 +917,46 @@ class ConversationStore:
                     status=row["status"] or "active",
                     messages=[],
                     report=Report(id=row["report_id"], title=row["report_title"] or "") if row["report_id"] else None,
+                    created_at=datetime.fromisoformat(row["created_at"]),
+                    updated_at=datetime.fromisoformat(row["updated_at"]),
+                )
+                for row in rows
+            ]
+
+    def pin_conversation(self, conv_id: str, label: str) -> bool:
+        """Pin a conversation (visible to all users in the sidebar)."""
+        with get_db() as conn:
+            cursor = conn.execute(
+                "UPDATE conversations SET pinned_at = ?, pinned_label = ? WHERE id = ?",
+                (datetime.now().isoformat(), label, conv_id)
+            )
+            return cursor.rowcount > 0
+
+    def unpin_conversation(self, conv_id: str) -> bool:
+        """Unpin a conversation."""
+        with get_db() as conn:
+            cursor = conn.execute(
+                "UPDATE conversations SET pinned_at = NULL, pinned_label = NULL WHERE id = ?",
+                (conv_id,)
+            )
+            return cursor.rowcount > 0
+
+    def list_pinned_conversations(self) -> list[Conversation]:
+        """List all pinned conversations, ordered by pinned_at."""
+        with get_db() as conn:
+            rows = conn.execute(
+                """SELECT * FROM conversations
+                   WHERE pinned_at IS NOT NULL
+                   ORDER BY pinned_at""",
+            ).fetchall()
+
+            return [
+                Conversation(
+                    id=row["id"],
+                    user_id=row["user_id"],
+                    title=row["title"],
+                    pinned_at=datetime.fromisoformat(row["pinned_at"]) if row["pinned_at"] else None,
+                    pinned_label=row["pinned_label"],
                     created_at=datetime.fromisoformat(row["created_at"]),
                     updated_at=datetime.fromisoformat(row["updated_at"]),
                 )

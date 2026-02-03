@@ -157,11 +157,15 @@ def get_sidebar_data():
                 conv.icon = "ri-chat-3-fill"
                 break
 
+    # Pinned conversations (global, visible to all users)
+    pinned_conversations = store.list_pinned_conversations()
+
     return {
         "conversations": conversations,
         "running_ids": running_ids,
         "is_admin": user_email in ADMIN_USERS,
         "user_email": user_email,
+        "pinned_conversations": pinned_conversations,
     }
 
 
