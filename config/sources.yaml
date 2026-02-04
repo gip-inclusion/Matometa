@@ -43,6 +43,12 @@ metabase:
     knowledge_path: knowledge/dora/
     dashboards: {}
 
+  rdvi:
+    url: https://rdv-service-public-metabase.osc-secnum-fr1.scalingo.io
+    api_key: ${env.METABASE_RDVI_API_KEY}
+    knowledge_path: knowledge/rdvi/
+    dashboards: {}
+
 matomo:
   _default: inclusion
 
