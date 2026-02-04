@@ -258,16 +258,8 @@ def _render_rapports_page(report_id: int | None = None):
         # Group by date
         grouped_items = _group_items_by_date(items)
 
-    # Build tag list from the actual displayed items (so only tags with items show)
-    all_tags: dict[str, list] = {}
-    if not current_report:
-        seen_tags = set()
-        for item in items:
-            if item["type"] == "report":
-                for tag in item["report"].tag_objects:
-                    if tag.name not in seen_tags:
-                        seen_tags.add(tag.name)
-                        all_tags.setdefault(tag.type, []).append(tag)
+    # Show all tags used by non-archived reports (stable across filter changes)
+    all_tags = store.get_used_report_tags_by_type() if not current_report else {}
 
     return render_template(
         "rapports.html",
