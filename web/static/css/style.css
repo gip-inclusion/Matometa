@@ -1346,6 +1346,8 @@ body.has-sidebar {
   color: #6c757d;
   cursor: pointer;
   font-size: inherit;
+  text-decoration: none;
+  vertical-align: baseline;
 }
 
 .conv-action-btn:hover {

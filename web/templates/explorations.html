@@ -13,7 +13,6 @@
           <i class="ri-arrow-left-line ri-xl"></i>
         </a>
         {% endif %}
-        <i class="ri-compass-discover-line ri-2x text-primary conv-header-icon"></i>
         <div class="conv-title-wrapper">
           <p class="conv-meta-row text-muted mb-0 small">
             {% if current_conv %}
@@ -52,7 +51,7 @@
             {% endif %}
           </p>
           <div class="conv-title-display" id="convTitleDisplay">
-            <h1 class="mb-0">{% if current_conv %}{{ current_conv.title or 'Sans titre' }}{% elif is_new %}Posez vos questions sur les données{% else %}Explorations{% endif %}</h1>
+            <h1 class="mb-0"><i class="ri-compass-discover-line ri-2x text-primary me-2" style="vertical-align: middle;"></i>{% if current_conv %}{{ current_conv.title or 'Sans titre' }}{% elif is_new %}Posez vos questions sur les données{% else %}Explorations{% endif %}</h1>
           </div>
           {% if current_conv and not is_shared %}
           <div class="conv-title-edit d-none" id="convTitleEdit">

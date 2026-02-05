@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from collections import OrderedDict
 from pathlib import Path
 
-from flask import Blueprint, redirect, render_template, request, url_for
+from flask import Blueprint, redirect, render_template, request, url_for, Response, abort
 
 from ..storage import store
 from .html import get_sidebar_data, format_relative_date
@@ -186,6 +186,15 @@ def rapports():
 def rapport_detail(report_id: int):
     """View a specific report."""
     return _render_rapports_page(report_id=report_id)
+
+
+@bp.route("/rapports/<int:report_id>.txt")
+def rapport_txt(report_id: int):
+    """Return raw markdown content of a report as text/plain."""
+    report = store.get_report(report_id)
+    if not report:
+        abort(404)
+    return Response(report.content, mimetype="text/plain; charset=utf-8")
 
 
 def _render_rapports_page(report_id: int | None = None):
