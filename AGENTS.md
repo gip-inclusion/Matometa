@@ -241,6 +241,23 @@ Use the `Skill` tool to invoke these skills before querying:
 | `numpy` | Numerical computing, arrays |
 | `scipy` | Scientific computing, statistics |
 | `scikit-learn` | Machine learning, clustering, regression |
+| `hmmlearn` | Hidden Markov Models for sequence analysis |
+
+**Using hmmlearn for sequence analysis:**
+```python
+from hmmlearn import hmm
+import numpy as np
+
+# Example: Fit a Gaussian HMM to user journey sequences
+model = hmm.GaussianHMM(n_components=3, covariance_type="full", n_iter=100)
+model.fit(sequences)  # sequences shape: (n_samples, n_features)
+
+# Predict hidden states
+hidden_states = model.predict(sequences)
+
+# Get state transition matrix
+print(model.transmat_)  # Probability of transitioning between states
+```
 
 **API clients (use these, not curl):**
 | Package | Purpose |
