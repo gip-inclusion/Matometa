@@ -159,8 +159,8 @@ Shows what happened to users who received invitations:
 
 ### Monthly funnel (2025)
 
-| Month | Invitations | Clicked | RDVs | Not revoked | Seen | Noshow |
-|-------|-------------|---------|------|-------------|------|--------|
+| Month | Invitations | Clicked | Participations | Not revoked | Seen | Noshow |
+|-------|-------------|---------|----------------|-------------|------|--------|
 | 2025-01 | 32,646 | 13,590 | 22,184 | 20,329 | 16,972 | 2,929 |
 | 2025-02 | 27,304 | 11,937 | 20,299 | 18,717 | 15,709 | 2,825 |
 | 2025-03 | 32,119 | 13,143 | 22,761 | 21,241 | 17,891 | 3,347 |
@@ -251,6 +251,164 @@ The upload (bulk user import) is the highest-volume interaction and spans both:
 
 1. **Matomo tracks the agent's UI steps**: category selection (`rdvi_upload_select-category_*`), file selection (`rdvi_upload_select-file_*`), user data review (`rdvi_upload_users-data_*`), invitation sending (`rdvi_upload_users-invit_*`)
 2. **Metabase tracks the results**: `rdvi.user_list_uploads` (upload records), `rdvi.user_list_upload_user_rows` (parsed rows), `rdvi.user_list_upload_user_save_attempts` (save results), `rdvi.user_list_upload_invitation_attempts` (invitation results)
+
+---
+
+## Data Model
+
+### Entity Relationships
+
+```mermaid
+erDiagram
+    departments ||--o{ organisations : contains
+    departments ||--o{ orientation_types : defines
+
+    organisations ||--o{ agent_roles : has
+    organisations ||--o{ users_organisations : has
+    organisations ||--o{ rdvs : hosts
+    organisations ||--o{ motifs : defines
+    organisations ||--o{ lieux : has
+    organisations ||--o{ orientations : makes
+    organisations ||--o{ archives : has
+
+    agents ||--o{ agent_roles : has
+    agents ||--o{ agents_rdvs : staffs
+    agents ||--o{ referent_assignations : assigned
+
+    users ||--o{ users_organisations : "managed by"
+    users ||--o{ follow_ups : has
+    users ||--o{ participations : has
+    users ||--o{ invitations : receives
+    users ||--o{ orientations : has
+    users ||--o{ archives : has
+
+    motif_categories ||--o{ motifs : groups
+    motif_categories ||--o{ follow_ups : categorizes
+
+    follow_ups ||--o{ invitations : triggers
+    follow_ups ||--o{ participations : tracks
+
+    rdvs ||--o{ participations : has
+    rdvs ||--o{ agents_rdvs : staffed_by
+    rdvs }o--|| motifs : "has reason"
+    rdvs }o--o| lieux : "at location"
+
+    participations ||--o{ notifications : triggers
+
+    orientation_types ||--o{ orientations : classifies
+```
+
+### Key Entities
+
+| Table | Key Columns | Notes |
+|-------|-------------|-------|
+| **departments** | `id` (internal), `number` (INSEE code), `name`, `parcours_enabled` | `id` ≠ INSEE code |
+| **organisations** | `department_id`, `name`, `organisation_type`, `archived_at` | Types: `conseil_departemental`, `delegataire_rsa`, `france_travail`, `siae`, `autre` |
+| **agents** | `email` (real), `last_sign_in_at`, `super_admin` | Work FOR organisations via `agent_roles` |
+| **agent_roles** | `agent_id`, `organisation_id`, `access_level` | `basic` or `admin` |
+| **users** | `affiliation_number` (CAF), `role`, `nir` (encrypted), `france_travail_id`, `created_through`, `deleted_at` | Managed BY organisations via `users_organisations` |
+| **users_organisations** | `user_id`, `organisation_id`, `created_at` | User can belong to multiple orgs |
+| **archives** | `user_id`, `organisation_id`, `archiving_reason` | Per-org exit record |
+
+### The Funnel
+
+| Table | Key Columns | Notes |
+|-------|-------------|-------|
+| **motif_categories** | `short_name`, `motif_category_type` | Types: `rsa_orientation`, `rsa_accompagnement`, `siae`, `autre` |
+| **motifs** | `organisation_id`, `motif_category_id`, `name`, `collectif`, `location_type` | Org-specific appointment reasons |
+| **follow_ups** | `user_id`, `motif_category_id`, `status`, `closed_at` | State machine per user per category |
+| **invitations** | `user_id`, `follow_up_id`, `format`, `trigger`, `clicked`, `delivery_status`, `expires_at` | "Please book" messages |
+| **lieux** | `organisation_id`, `name`, `address` | Physical locations |
+| **rdvs** | `organisation_id`, `motif_id`, `lieu_id`, `starts_at`, `created_by`, `users_count` | Appointment slots |
+| **participations** | `user_id`, `rdv_id`, `follow_up_id`, `status`, `convocable` | **This is what official stats count as "rdvs"** |
+| **notifications** | `participation_id`, `event`, `format`, `delivery_status` | "Your RDV is confirmed" messages |
+| **orientations** | `user_id`, `organisation_id`, `orientation_type_id`, `starts_at`, `ends_at` | Official track assignment |
+
+### Follow-Up State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> not_invited
+    not_invited --> invitation_pending : send invitation
+    not_invited --> rdv_pending : agent books directly
+
+    invitation_pending --> invitation_expired : expires
+    invitation_pending --> rdv_pending : user books
+
+    invitation_expired --> rdv_pending : agent books
+
+    rdv_pending --> rdv_needs_status_update : rdv passes
+    rdv_pending --> rdv_revoked : cancelled
+
+    rdv_needs_status_update --> rdv_seen
+    rdv_needs_status_update --> rdv_noshow
+    rdv_needs_status_update --> rdv_excused
+
+    rdv_seen --> closed
+    rdv_noshow --> rdv_pending : rebook
+    rdv_excused --> rdv_pending : rebook
+    rdv_revoked --> rdv_pending : rebook
+```
+
+### Invitation vs Notification
+
+| Invitation | Notification |
+|------------|--------------|
+| "Please book an appointment" | "Your appointment is confirmed" |
+| Sent before RDV exists | Sent after RDV is created |
+| Has `clicked` tracking | Has `delivery_status` only |
+| Linked to `follow_up` | Linked to `participation` |
+
+### Counting: Participations ≠ RDVs
+
+**Official stats page counts participations, not rdvs:**
+
+| Metric | Actually counts |
+|--------|-----------------|
+| "rendez-vous pris" | `COUNT(participations)` |
+| "usagers gérés" | `COUNT(users)` by month |
+
+1 RDV can have N participations (group appointments). To match official stats:
+
+```sql
+SELECT COUNT(*) FROM rdvi.participations;  -- Matches "rendez-vous pris"
+SELECT COUNT(*) FROM rdvi.rdvs;            -- Lower (~2.5x less)
+```
+
+### Query Patterns
+
+**User's organisations:**
+```sql
+SELECT u.id, o.name, o.organisation_type, d.number
+FROM rdvi.users u
+JOIN rdvi.users_organisations uo ON uo.user_id = u.id
+JOIN rdvi.organisations o ON o.id = uo.organisation_id
+JOIN rdvi.departments d ON d.id = o.department_id
+WHERE u.id = ?;
+```
+
+**User's appointment history:**
+```sql
+SELECT r.starts_at, m.name as motif, p.status, o.name as org
+FROM rdvi.participations p
+JOIN rdvi.rdvs r ON r.id = p.rdv_id
+JOIN rdvi.motifs m ON m.id = r.motif_id
+JOIN rdvi.organisations o ON o.id = r.organisation_id
+WHERE p.user_id = ?
+ORDER BY r.starts_at;
+```
+
+**Organisation's monthly activity:**
+```sql
+SELECT DATE_TRUNC('month', p.created_at) as month,
+       COUNT(*) as participations,
+       COUNT(*) FILTER (WHERE p.status = 'seen') as seen,
+       COUNT(*) FILTER (WHERE p.status = 'noshow') as noshow
+FROM rdvi.participations p
+JOIN rdvi.rdvs r ON r.id = p.rdv_id
+WHERE r.organisation_id = ?
+GROUP BY 1 ORDER BY 1;
+```
 
 ---
 
