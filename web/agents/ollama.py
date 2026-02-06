@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import date
 from typing import AsyncIterator, Optional
@@ -64,7 +65,57 @@ class OllamaBackend(AgentBackend):
                 yield AgentMessage(type="system", content="Cancelled", raw={"cancelled": True})
                 return
 
-            assistant_text = await self._chat_once(messages)
+            assistant_text = ""
+            did_stream = False
+
+            if config.OLLAMA_STREAM:
+                buffer = ""
+                should_stream: Optional[bool] = None
+                chunk_size = config.OLLAMA_STREAM_CHUNK_SIZE
+
+                async for chunk in self._stream_chat(messages, cancel_event):
+                    assistant_text += chunk
+
+                    if should_stream is None:
+                        should_stream = _should_stream_text(assistant_text)
+                        if should_stream is None:
+                            continue
+
+                        if should_stream:
+                            buffer = assistant_text
+                            if _should_flush_buffer(buffer, chunk_size):
+                                did_stream = True
+                                yield AgentMessage(
+                                    type="assistant",
+                                    content=buffer,
+                                    raw={"append": True},
+                                )
+                                buffer = ""
+                            continue
+
+                    if should_stream:
+                        buffer += chunk
+                        if _should_flush_buffer(buffer, chunk_size):
+                            did_stream = True
+                            yield AgentMessage(
+                                type="assistant",
+                                content=buffer,
+                                raw={"append": True},
+                            )
+                            buffer = ""
+
+                if cancel_event.is_set():
+                    yield AgentMessage(type="system", content="Cancelled", raw={"cancelled": True})
+                    return
+                if should_stream and buffer:
+                    did_stream = True
+                    yield AgentMessage(
+                        type="assistant",
+                        content=buffer,
+                        raw={"append": True},
+                    )
+            else:
+                assistant_text = await self._chat_once(messages)
 
             tool_call = parse_tool_call(assistant_text)
             if tool_call:
@@ -91,10 +142,7 @@ class OllamaBackend(AgentBackend):
                 })
                 continue
 
-            if config.OLLAMA_STREAM:
-                for chunk in _chunk_text(assistant_text, config.OLLAMA_STREAM_CHUNK_SIZE):
-                    yield AgentMessage(type="assistant", content=chunk)
-            else:
+            if not did_stream:
                 yield AgentMessage(type="assistant", content=assistant_text)
             return
 
@@ -130,6 +178,52 @@ class OllamaBackend(AgentBackend):
         message = data.get("message") or {}
         content = message.get("content", "")
         return content.strip()
+
+    async def _stream_chat(
+        self,
+        messages: list[dict],
+        cancel_event: asyncio.Event,
+    ) -> AsyncIterator[str]:
+        base_url = config.OLLAMA_BASE_URL.rstrip("/")
+        url = f"{base_url}/api/chat"
+
+        options = {
+            "temperature": config.OLLAMA_TEMPERATURE,
+        }
+        if config.OLLAMA_NUM_CTX > 0:
+            options["num_ctx"] = config.OLLAMA_NUM_CTX
+
+        payload = {
+            "model": config.OLLAMA_MODEL,
+            "messages": messages,
+            "stream": True,
+            "options": options,
+        }
+
+        timeout = config.OLLAMA_REQUEST_TIMEOUT
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            async with client.stream("POST", url, json=payload) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if cancel_event.is_set():
+                        return
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+
+                    if "error" in data:
+                        raise RuntimeError(data["error"])
+
+                    message = data.get("message") or {}
+                    content = message.get("content")
+                    if content:
+                        yield content
+
+                    if data.get("done"):
+                        return
 
     def _build_messages(self, message: str, history: list[dict]) -> list[dict]:
         system_prompt = self._load_system_prompt()
@@ -186,3 +280,21 @@ def _chunk_text(text: str, size: int) -> list[str]:
     if size <= 0:
         return [text]
     return [text[i:i + size] for i in range(0, len(text), size)]
+
+
+def _should_stream_text(text: str) -> Optional[bool]:
+    stripped = text.lstrip()
+    if not stripped:
+        return None
+    first = stripped[0]
+    if first in ("{", "`"):
+        return False
+    return True
+
+
+def _should_flush_buffer(buffer: str, chunk_size: int) -> bool:
+    if not buffer:
+        return False
+    if chunk_size <= 0:
+        return True
+    return len(buffer) >= chunk_size

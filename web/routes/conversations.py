@@ -534,7 +534,11 @@ User request: """
                     # Store to database FIRST (survives client disconnect)
                     if event.type == "assistant":
                         assistant_text_parts.append(str(event.content))
-                        full_text = "\n".join(assistant_text_parts)
+                        append_mode = bool(getattr(event, "raw", {}).get("append"))
+                        if append_mode:
+                            full_text = "".join(assistant_text_parts)
+                        else:
+                            full_text = "\n".join(assistant_text_parts)
                         if assistant_msg_id is None:
                             msg = store.add_message(conv_id, "assistant", full_text)
                             assistant_msg_id = msg.id if msg else None

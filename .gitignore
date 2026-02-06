@@ -1,5 +1,6 @@
 .DS_Store
 .env
+.env.ollama.local
 .claude/*
 !.claude/skills
 !.claude/settings.json
@@ -17,3 +18,4 @@ claude-credentials/
 AGENTS.local.md
 knowledge/metabase/cards.db
 auth/allowed_emails.txt
+docker-compose.local.yml
