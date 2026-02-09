@@ -1,10 +1,12 @@
 """Reports API routes."""
 
 import json
+import urllib.error
 
 from flask import Blueprint, g, jsonify, request
 
 from ..storage import store
+from .. import notion
 
 bp = Blueprint("reports", __name__, url_prefix="/api/reports")
 
@@ -136,6 +138,42 @@ def create_report():
             "view": f"/rapports/{report.id}",
         }
     }), 201
+
+
+@bp.route("/<int:report_id>/publish-notion", methods=["POST"])
+def publish_to_notion(report_id: int):
+    """Publish a report to Notion. Returns the Notion page URL."""
+    if not notion.is_configured():
+        return jsonify({"error": "Notion not configured"}), 503
+
+    report = store.get_report(report_id)
+    if not report:
+        return jsonify({"error": "Report not found"}), 404
+
+    if report.notion_url:
+        return jsonify({"url": report.notion_url})
+
+    try:
+        _page_id, url = notion.publish_report(
+            title=report.title,
+            content=report.content,
+            website=report.website,
+            original_query=report.original_query,
+        )
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8")[:200]
+        return jsonify({"error": f"Notion API error {e.code}: {body}"}), 502
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    # Store the URL
+    from ..database import get_db
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE reports SET notion_url = ? WHERE id = ?", (url, report_id)
+        )
+
+    return jsonify({"url": url})
 
 
 @bp.route("/<int:report_id>/tags", methods=["GET"])

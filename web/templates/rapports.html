@@ -19,6 +19,11 @@
               {% if current_report %}Rapport{% if current_report.website %} · {{ current_report.website }}{% endif %}{% if current_report.category %} · {{ current_report.category }}{% endif %}
               <button type="button" class="conv-action-btn" id="continueExplorationBtn" data-report-id="{{ current_report.id }}" data-report-title="{{ current_report.title }}"><i class="ri-chat-follow-up-line"></i> Poursuivre l'exploration</button>
               <a href="/rapports/{{ current_report.id }}.txt" class="conv-action-btn" target="_blank"><i class="ri-file-download-line"></i> Version exportable</a>
+              {% if current_report.notion_url %}
+              <a href="{{ current_report.notion_url }}" class="conv-action-btn" target="_blank" id="notionBtn"><i class="ri-notion-fill"></i> Lien Notion</a>
+              {% else %}
+              <button type="button" class="conv-action-btn" id="notionBtn" data-report-id="{{ current_report.id }}"><i class="ri-notion-fill"></i> Exporter dans Notion</button>
+              {% endif %}
               {% else %}Analyses et rapports sauvegardés{% endif %}
             </p>
             <h1 class="mb-0"><i class="ri-file-text-line ri-2x text-primary me-2" style="vertical-align: middle;"></i>{% if current_report %}{{ current_report.title }}{% else %}Rapports{% endif %}</h1>
@@ -423,6 +428,40 @@ function renderReportContent() {
 document.addEventListener('DOMContentLoaded', renderReportContent);
 document.body.addEventListener('htmx:afterSettle', renderReportContent);
 renderReportContent();
+
+// "Exporter dans Notion" button (event delegation — survives HTMX swaps)
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('#notionBtn');
+  if (!btn || btn.tagName === 'A' || btn.disabled) return;
+
+  const reportId = btn.dataset.reportId;
+  if (!reportId) return;
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Export en cours…';
+
+  try {
+    const resp = await fetch(`/api/reports/${reportId}/publish-notion`, { method: 'POST' });
+    const data = await resp.json();
+    if (resp.ok && data.url) {
+      const link = document.createElement('a');
+      link.href = data.url;
+      link.className = 'conv-action-btn';
+      link.target = '_blank';
+      link.id = 'notionBtn';
+      link.innerHTML = '<i class="ri-notion-fill"></i> Lien Notion';
+      btn.replaceWith(link);
+    } else {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="ri-notion-fill"></i> Exporter dans Notion';
+      alert('Erreur : ' + (data.error || 'Export échoué'));
+    }
+  } catch (err) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ri-notion-fill"></i> Exporter dans Notion';
+    alert('Erreur réseau : ' + err.message);
+  }
+});
 
 // "Poursuivre l'exploration" button (event delegation — survives HTMX swaps)
 document.addEventListener('click', (e) => {

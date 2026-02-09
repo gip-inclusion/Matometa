@@ -15,7 +15,7 @@ from . import config
 USE_POSTGRES = config.DATABASE_URL is not None and config.DATABASE_URL.startswith(("postgres://", "postgresql://"))
 
 # Schema version - increment when adding migrations
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 if USE_POSTGRES:
     import psycopg2
@@ -279,6 +279,8 @@ def init_db():
                     _migrate_to_v12(conn)
                 if current_version < 13:
                     _migrate_to_v13(conn)
+                if current_version < 14:
+                    _migrate_to_v14(conn)
 
             _set_schema_version(conn, SCHEMA_VERSION)
 
@@ -368,6 +370,13 @@ def _migrate_to_v13(conn: ConnectionWrapper):
         conn.execute("ALTER TABLE conversations ADD COLUMN pinned_label TEXT")
 
 
+def _migrate_to_v14(conn: ConnectionWrapper):
+    """Migrate to v14: add notion_url column to reports."""
+    columns = _get_table_columns(conn, "reports")
+    if "notion_url" not in columns:
+        conn.execute("ALTER TABLE reports ADD COLUMN notion_url TEXT")
+
+
 def _create_schema(conn: ConnectionWrapper):
     """Create the complete database schema."""
     # Use SERIAL for PostgreSQL, INTEGER PRIMARY KEY AUTOINCREMENT for SQLite
@@ -423,6 +432,7 @@ def _create_schema(conn: ConnectionWrapper):
             user_id TEXT,
             version INTEGER DEFAULT 1,
             archived INTEGER DEFAULT 0,
+            notion_url TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             conversation_id TEXT,
@@ -611,6 +621,7 @@ class Report:
     source_conversation_id: Optional[str] = None  # where it came from
     user_id: Optional[str] = None
     archived: bool = False
+    notion_url: Optional[str] = None
     version: int = 1
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
@@ -1275,6 +1286,7 @@ class ConversationStore:
                 source_conversation_id=row["source_conversation_id"] if "source_conversation_id" in row.keys() else None,
                 user_id=row["user_id"] if "user_id" in row.keys() else None,
                 archived=bool(row["archived"]) if "archived" in row.keys() else False,
+                notion_url=row["notion_url"] if "notion_url" in row.keys() else None,
                 version=row["version"],
                 created_at=datetime.fromisoformat(row["created_at"]),
                 updated_at=datetime.fromisoformat(row["updated_at"]),
