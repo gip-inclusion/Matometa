@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import uuid
 from datetime import date
 from typing import AsyncIterator, Optional
 
@@ -16,6 +17,8 @@ from .ollama_tools import execute_tool, parse_tool_call, tool_protocol
 
 logger = logging.getLogger(__name__)
 
+_TOOL_RESULT_PREFIX = "TOOL_RESULT"
+
 
 class OllamaBackend(AgentBackend):
     """Agent backend using a self-hosted Ollama HTTP API."""
@@ -23,7 +26,6 @@ class OllamaBackend(AgentBackend):
     def __init__(self) -> None:
         self._running: set[str] = set()
         self._cancel_events: dict[str, asyncio.Event] = {}
-        self._system_prompt: Optional[str] = None
         self._client = httpx.AsyncClient(timeout=config.OLLAMA_REQUEST_TIMEOUT)
         self._last_usage: Optional[dict] = None
 
@@ -39,9 +41,37 @@ class OllamaBackend(AgentBackend):
         self._cancel_events[conversation_id] = cancel_event
         self._running.add(conversation_id)
 
+        # Emit init event (parity with SDK SystemMessage)
+        ollama_session = session_id or conversation_id
+        yield AgentMessage(
+            type="system",
+            content="init",
+            raw={
+                "subtype": "init",
+                "session_id": ollama_session,
+                "data": {"session_id": ollama_session},
+            },
+        )
+
         try:
             async for event in self._run_chat(message, history, cancel_event):
                 yield event
+        except httpx.ConnectError:
+            await self._reset_client()
+            logger.error("Ollama connection failed, client reset")
+            yield AgentMessage(
+                type="error",
+                content="Cannot connect to Ollama server",
+                raw={"error": "connection_failed"},
+            )
+        except httpx.ReadTimeout:
+            await self._reset_client()
+            logger.error("Ollama read timeout, client reset")
+            yield AgentMessage(
+                type="error",
+                content="Ollama request timed out",
+                raw={"error": "timeout"},
+            )
         except Exception as exc:
             logger.error(f"Ollama backend error: {exc}")
             yield AgentMessage(
@@ -122,9 +152,12 @@ class OllamaBackend(AgentBackend):
             tool_call = parse_tool_call(assistant_text)
             if tool_call:
                 tool_name, tool_input = tool_call
+                tool_use_id = f"ollama_{uuid.uuid4().hex[:12]}"
+
                 yield AgentMessage(
                     type="tool_use",
                     content={"tool": tool_name, "input": tool_input},
+                    raw={"block_type": "tool_use", "id": tool_use_id},
                 )
 
                 output = await asyncio.to_thread(execute_tool, tool_name, tool_input)
@@ -135,23 +168,27 @@ class OllamaBackend(AgentBackend):
                         "tool": tool_name,
                         "output": output,
                     },
+                    raw={"block_type": "tool_result", "tool_use_id": tool_use_id},
                 )
 
                 messages.append({"role": "assistant", "content": assistant_text})
                 messages.append({
                     "role": "user",
-                    "content": f"TOOL_RESULT {tool_name}:\n{output}",
+                    "content": f"{_TOOL_RESULT_PREFIX} [{tool_use_id}] {tool_name}:\n{output}",
                 })
                 continue
 
             if not did_stream:
                 yield AgentMessage(type="assistant", content=assistant_text)
+            # Emit final result event with usage (parity with SDK ResultMessage)
+            raw: dict = {"result": True}
             if self._last_usage:
-                yield AgentMessage(
-                    type="system",
-                    content="usage",
-                    raw={"usage": self._last_usage},
-                )
+                raw["usage"] = self._last_usage
+            yield AgentMessage(
+                type="system",
+                content="Completed: done",
+                raw=raw,
+            )
             return
 
         yield AgentMessage(
@@ -169,13 +206,14 @@ class OllamaBackend(AgentBackend):
             "options": self._build_options(),
         }
 
-        response = await self._client.post(url, json=payload)
+        client = await self._ensure_client()
+        response = await client.post(url, json=payload)
         response.raise_for_status()
         data = response.json()
 
         self._last_usage = {
-            "prompt_tokens": data.get("prompt_eval_count", 0),
-            "completion_tokens": data.get("eval_count", 0),
+            "input_tokens": data.get("prompt_eval_count", 0),
+            "output_tokens": data.get("eval_count", 0),
         }
 
         message = data.get("message") or {}
@@ -195,7 +233,8 @@ class OllamaBackend(AgentBackend):
             "options": self._build_options(),
         }
 
-        async with self._client.stream("POST", url, json=payload) as response:
+        client = await self._ensure_client()
+        async with client.stream("POST", url, json=payload) as response:
             response.raise_for_status()
             async for line in response.aiter_lines():
                 if cancel_event.is_set():
@@ -205,6 +244,7 @@ class OllamaBackend(AgentBackend):
                 try:
                     data = json.loads(line)
                 except json.JSONDecodeError:
+                    logger.warning("Malformed JSON in Ollama stream: %s", line[:200])
                     continue
 
                 if "error" in data:
@@ -217,10 +257,24 @@ class OllamaBackend(AgentBackend):
 
                 if data.get("done"):
                     self._last_usage = {
-                        "prompt_tokens": data.get("prompt_eval_count", 0),
-                        "completion_tokens": data.get("eval_count", 0),
+                        "input_tokens": data.get("prompt_eval_count", 0),
+                        "output_tokens": data.get("eval_count", 0),
                     }
                     return
+
+    async def _ensure_client(self) -> httpx.AsyncClient:
+        """Return the shared client, recreating it if closed."""
+        if self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=config.OLLAMA_REQUEST_TIMEOUT)
+        return self._client
+
+    async def _reset_client(self) -> None:
+        """Close and recreate the client after a connection failure."""
+        try:
+            await self._client.aclose()
+        except Exception:
+            pass
+        self._client = httpx.AsyncClient(timeout=config.OLLAMA_REQUEST_TIMEOUT)
 
     def _build_options(self) -> dict:
         options: dict = {"temperature": config.OLLAMA_TEMPERATURE}
@@ -238,16 +292,12 @@ class OllamaBackend(AgentBackend):
         return messages
 
     def _load_system_prompt(self) -> str:
-        if self._system_prompt is not None:
-            return self._system_prompt
-
         agents_md_path = config.BASE_DIR / "AGENTS.md"
         agents_content = agents_md_path.read_text() if agents_md_path.exists() else ""
         today = date.today().strftime("%A %d %B %Y")
         header = f"Aujourd'hui, nous sommes le {today}."
         protocol = tool_protocol()
-        self._system_prompt = f"{header}\n\n{agents_content}\n\n{protocol}"
-        return self._system_prompt
+        return f"{header}\n\n{agents_content}\n\n{protocol}"
 
     async def cancel(self, conversation_id: str) -> bool:
         """Cancel a running conversation."""
@@ -286,8 +336,17 @@ def _chunk_text(text: str, size: int) -> list[str]:
 
 
 def _should_stream_text(text: str) -> Optional[bool]:
+    """Decide whether to stream text incrementally.
+
+    Returns None while undecided (whitespace only), False for JSON/code-fence
+    (buffer the whole thing), True for prose (stream incrementally).
+    Caps the undecided window at 32 chars to avoid buffering forever.
+    """
     stripped = text.lstrip()
     if not stripped:
+        # Still only whitespace — cap the undecided window
+        if len(text) > 32:
+            return True
         return None
     first = stripped[0]
     if first in ("{", "`"):

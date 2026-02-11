@@ -35,6 +35,23 @@ _edit_file = _tools_mod._edit_file
 _grep_files = _tools_mod._grep_files
 parse_tool_call = _tools_mod.parse_tool_call
 
+# Load ollama.py helper functions (avoid httpx import issues by loading directly)
+_spec3 = importlib.util.spec_from_file_location("web.agents.ollama", "web/agents/ollama.py")
+_ollama_mod = importlib.util.module_from_spec(_spec3)
+# Stub httpx and base module to avoid import errors
+_httpx_stub = types.ModuleType("httpx")
+_httpx_stub.AsyncClient = type("AsyncClient", (), {"__init__": lambda *a, **kw: None})
+_httpx_stub.ConnectError = Exception
+_httpx_stub.ReadTimeout = Exception
+sys.modules.setdefault("httpx", _httpx_stub)
+_base_stub = types.ModuleType("web.agents.base")
+_base_stub.AgentBackend = type("AgentBackend", (), {})
+_base_stub.AgentMessage = type("AgentMessage", (), {})
+sys.modules["web.agents.base"] = _base_stub
+_spec3.loader.exec_module(_ollama_mod)
+
+_should_stream_text = _ollama_mod._should_stream_text
+
 
 # ── parse_tool_call ──────────────────────────────────────────────
 
@@ -175,3 +192,33 @@ class TestGrepFiles:
         f.write_text("findme_unique_token\n")
         result = _grep_files({"pattern": "findme_unique_token", "path": str(tmp_path)})
         assert "findme_unique_token" in result
+
+
+# ── _should_stream_text ─────────────────────────────────────────
+
+class TestShouldStreamText:
+
+    def test_json_prefix_returns_false(self):
+        assert _should_stream_text('{"tool": "Read"') is False
+
+    def test_code_fence_returns_false(self):
+        assert _should_stream_text("```json") is False
+
+    def test_prose_returns_true(self):
+        assert _should_stream_text("Bonjour, voici") is True
+
+    def test_empty_returns_none(self):
+        assert _should_stream_text("") is None
+
+    def test_short_whitespace_returns_none(self):
+        assert _should_stream_text("   ") is None
+
+    def test_long_whitespace_caps_at_32(self):
+        """Whitespace-only text longer than 32 chars should stop deferring."""
+        assert _should_stream_text(" " * 33) is True
+
+    def test_leading_whitespace_then_json(self):
+        assert _should_stream_text("  {") is False
+
+    def test_leading_whitespace_then_prose(self):
+        assert _should_stream_text("  Hello") is True
