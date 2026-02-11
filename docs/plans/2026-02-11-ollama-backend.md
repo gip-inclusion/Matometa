@@ -99,625 +99,267 @@ The native `ollama` library is the best fit for v1 because:
 server-agnostic. If we later add an `openai`-library variant, 90% of the code
 (everything except the `client.chat()` call and response parsing) is reusable.
 
-## Design Decisions
+## Implementation Status (`ollama_implementation` branch)
+
+The `ollama_implementation` branch has a working prototype that **diverges from
+this plan in key ways**. This section documents what was actually built, how it
+differs, and what to do next.
+
+### What was built
+
+| Component | Plan | Actual |
+|-----------|------|--------|
+| **HTTP client** | `ollama` Python library (`AsyncClient`) | Raw `httpx` against `/api/chat` |
+| **Tool calling** | Native `tools=` param → structured `tool_calls` in response | Text-based JSON protocol: model outputs `{"tool": "Read", "input": {...}}` |
+| **Tool set** | Domain-specific functions (`matomo_get_visits`, `metabase_execute_sql`, etc.) auto-converted to schemas | Generic tools (Read, Write, Edit, Glob, Grep, Bash, Skill) — same toolset as Claude backends |
+| **Tool parsing** | Ollama parses tool calls from structured response | `json.loads()` on raw model output text |
+| **Agent loop** | `while tool_calls: execute → append → repeat` | Same loop structure, but detects tools by parsing text, not structured response |
+| **LLM helper** | Not in plan | `web/llm.py` — backend-agnostic module for short prompts (titles, tags). Replaces hardcoded Anthropic calls in conversations.py |
+| **Streaming** | Via `ollama` async generator | Via `httpx` streaming + `aiter_lines()` with smart buffering (suppresses streaming for JSON/code blocks) |
+| **Config** | 3 env vars (`OLLAMA_MODEL`, `OLLAMA_HOST`, `OLLAMA_NUM_CTX`) | 10+ env vars (model, base URL, timeout, stream chunk size, max history, max tool steps, temperature, num_ctx, separate title/tag models) |
+| **Thinking mode** | `think=True` param via ollama library | Not implemented |
+
+### Key files on the branch
+
+```
+web/agents/ollama.py       # 240 lines — OllamaBackend class, httpx streaming
+web/agents/ollama_tools.py # 260 lines — text-based tool protocol + executors
+web/llm.py                 # 144 lines — backend-agnostic generate_text()
+web/config.py              # Expanded with OLLAMA_* settings
+web/agents/__init__.py     # Updated get_agent() factory
+web/routes/conversations.py # Refactored to use llm.generate_text()
+tests/test_llm_ollama.py   # httpx mock test for llm.py
+tests/test_ollama_tools.py # parse_tool_call unit test
+```
+
+### Analysis: text-based tools vs native tool calling
+
+The actual implementation chose a **text-based tool protocol** instead of
+Ollama's native `tools=` parameter. This is a deliberate tradeoff:
+
+**Advantages of text-based approach (what was built):**
+- No `ollama` library dependency — pure httpx, works against any HTTP chat API
+- Same generic toolset as Claude backends (Read/Write/Bash/etc.) — the model
+  operates more like Claude Code, navigating files and running commands
+- Simpler dependency tree (httpx is already a transitive dep)
+- Naturally portable to vLLM, llama.cpp, or any `/api/chat`-compatible server
+
+**Advantages of native tool calling (what was planned):**
+- Structured tool_calls — no risk of JSON parse failures on model output
+- Domain-specific tools (matomo_get_visits) give the model clearer semantics
+- Ollama handles tool schema generation from function signatures
+- Works with models that support structured output but struggle with free-form
+  JSON generation
+- `think=True` for reasoning models is easy to add
+
+**Verdict:** The text-based approach is a reasonable v1 — it works and it's
+portable. But tool calling reliability will suffer with smaller models (< 14B)
+that can't reliably emit valid JSON. The native tool calling path should be
+the v2 upgrade, especially once we want to use domain-specific tools.
+
+### Analysis: `web/llm.py` (not in plan — good addition)
+
+The branch adds `web/llm.py`, a backend-agnostic helper for short text
+generation (titles, tags). This is a genuine improvement:
+- Replaces 3 separate hardcoded Anthropic SDK calls in `conversations.py`
+- Routes through the configured backend (ollama, sdk, or cli)
+- Supports per-task model overrides (`OLLAMA_TITLE_MODEL`, `OLLAMA_TAG_MODEL`)
+- The `conversations.py` diff deletes ~90 lines of duplicated code
+
+This wasn't in the plan but should be kept. It belongs in the implementation.
+
+### What's missing vs the plan
+
+1. **No `ollama` library usage** — the plan centered on `ollama>=0.6.1` for
+   native async tool calling. The implementation uses raw httpx instead.
+2. **No domain-specific tools** — no `matomo_get_visits()`, no
+   `metabase_execute_sql()`. The model uses generic Bash/Read/Skill tools.
+3. **No thinking mode** — `think=True` for Qwen3/DeepSeek-R1 not implemented.
+4. **No token counting** — `eval_count`/`prompt_eval_count` from Ollama
+   responses are not captured.
+5. **Minimal tests** — 2 unit tests. No integration tests for the agent loop
+   or streaming.
+
+---
+
+## Design Decisions (updated to reflect implementation)
 
 ### 1. Agent loop: Self-managed
 
-Unlike Claude SDK (which runs its own agent loop) or ADK (which has `Runner`),
-Ollama is a raw chat completion API. **We must implement the agent loop ourselves.**
+Same as planned. The agent loop is a `while` loop that sends messages, checks
+for tool calls in the response, executes them, appends results, and repeats.
+
+The implementation caps at `OLLAMA_TOOL_MAX_STEPS` (default: 6) rounds. The
+plan proposed 20 — the implementation's lower default is more conservative,
+which is appropriate for a text-based tool protocol where runaway loops are
+more likely.
+
+### 2. Tool approach: Generic toolset via text protocol
+
+**Diverged from plan.** Instead of domain-specific function tools with
+auto-schema, the implementation uses a text-based protocol where the system
+prompt tells the model to emit JSON objects for tool calls:
 
 ```
-while True:
-    response = await ollama.chat(model, messages, tools, stream=True)
-    if response has tool_calls:
-        execute tools
-        append tool results to messages
-        continue
-    else:
-        break  # model is done
+{"tool": "Read", "input": {"file_path": "knowledge/sites/emplois.md"}}
+{"tool": "Bash", "input": {"command": "python3 scripts/query_matomo.py ..."}}
+{"tool": "Skill", "input": {"skill": "matomo_query"}}
 ```
 
-This is straightforward and gives us full control over tool execution, timeouts,
-and cancellation.
+This gives the model the same capabilities as Claude backends but through
+string-based tool dispatch. Parsing relies on `json.loads()` of the full
+response text — fragile but functional.
 
-### 2. Tool approach: Hybrid (same as ADK design)
+### 3. Session management: Message history (as planned)
 
-- **Direct function tools** from MatomoAPI/MetabaseAPI (Ollama auto-converts
-  Python functions with docstrings to JSON schemas)
-- **Code execution tool** for advanced scripts (subprocess-based Python exec)
-- **File reading tools** for knowledge base access
+Implemented as designed. Full message history replay, truncated at
+`OLLAMA_MAX_HISTORY_CHARS` (50,000 chars). No session ID. Stateless on the
+Ollama side.
 
-We reuse the same `web/agents/ollama_tools.py` module structure from the ADK
-design, adapted for Ollama's function format.
+### 4. Model configuration (expanded)
 
-### 3. Session management: Message history (no native sessions)
+More extensive than planned:
 
-Ollama has no built-in session/conversation resumption. Instead:
-- We pass the full message history as `messages` to each `chat()` call
-- The existing database already stores all messages per conversation
-- The `session_id` parameter in `send_message()` is ignored (not applicable)
-- History truncation is applied to avoid exceeding context windows
+```
+OLLAMA_BASE_URL          (http://ollama:11434)
+OLLAMA_MODEL             (qwen3-coder-next)
+OLLAMA_TITLE_MODEL       (defaults to OLLAMA_MODEL)
+OLLAMA_TAG_MODEL         (defaults to OLLAMA_MODEL)
+OLLAMA_REQUEST_TIMEOUT   (120s)
+OLLAMA_STREAM            (true)
+OLLAMA_STREAM_CHUNK_SIZE (200 chars)
+OLLAMA_MAX_HISTORY_CHARS (50000)
+OLLAMA_TOOL_MAX_STEPS    (6)
+OLLAMA_TEMPERATURE       (0.2)
+OLLAMA_NUM_CTX           (0 = model default)
+```
 
-This is simpler than the CLI/SDK session management and has the advantage of
-being fully stateless on the Ollama side.
+The separate title/tag model vars (`OLLAMA_TITLE_MODEL`, `OLLAMA_TAG_MODEL`)
+are a nice touch — they allow using a smaller/faster model for housekeeping
+tasks while running a larger model for agent conversations.
 
-### 4. Model configuration
+### 5. System prompt: AGENTS.md + tool protocol
 
-- `OLLAMA_MODEL` env var (default: `qwen3:32b`)
-- `OLLAMA_HOST` env var (default: `http://localhost:11434`) — already the
-  standard Ollama env var
-- `OLLAMA_NUM_CTX` env var (default: `32768`) — context window size
-- No UI changes needed
+As planned, AGENTS.md is the base. The implementation prepends a date and
+appends the tool protocol instructions (in French, matching the project
+language). No separate preamble about domain tools — the generic tool protocol
+replaces it.
 
-### 5. System prompt adaptation
+### 6. Streaming: Smart buffering
 
-AGENTS.md works as the system message. However, the tool-calling section needs
-adaptation since tools are called differently:
-- Claude: `Skill(matomo_query)` → runs a skill subprocess
-- Ollama: `matomo_get_visits(site_id=117, ...)` → direct function call
+The implementation adds intelligent stream buffering that wasn't in the plan:
+- Detects if the response starts with `{` or `` ` `` (JSON or code fence)
+- If so, suppresses streaming (buffers the full response) — avoids streaming
+  a raw JSON tool call to the frontend character by character
+- If it's regular text, streams in `OLLAMA_STREAM_CHUNK_SIZE` chunks
+- This is a practical improvement that handles the text-based tool protocol
+  cleanly
 
-We prepend a short adapter preamble to the system prompt explaining the available
-tools and how to use them, while keeping the domain knowledge from AGENTS.md.
+### 7. Thinking mode: Not implemented
 
-### 6. Streaming behavior
-
-Ollama streams text tokens incrementally. During tool call resolution:
-1. The model generates a `tool_calls` response (may not stream incrementally)
-2. We execute the tools and yield `tool_use` + `tool_result` events
-3. We call `chat()` again with the results appended
-4. The model streams its next response
-
-This matches the existing frontend expectations: `assistant` → `tool_use` →
-`tool_result` → `assistant` → ...
-
-### 7. Thinking/reasoning support
-
-Models like Qwen3 and DeepSeek-R1 support "thinking" mode. When `think=True`:
-- The model returns `message.thinking` content (chain-of-thought)
-- We can optionally emit this as a `system` event for debugging
-- The `think` parameter is configurable via `OLLAMA_THINK` env var
+Deferred. Could be added later by passing `think=True` in the Ollama payload
+and parsing `message.thinking` from the response.
 
 ---
 
-## Implementation Steps
+## Next Steps (informed by `ollama_implementation` branch)
 
-### Step 1: Add ollama dependency
+The branch has a working prototype. Here's what to do next, in priority order:
 
-**File:** `requirements.txt`
+### Step 1: Merge the branch as-is (v1 = text-based tools)
 
-Add:
-```
-# Ollama (local LLM backend)
-ollama>=0.6.1
-```
+The current implementation works. Merge it to get the Ollama backend live.
+Key files to review:
+- `web/agents/ollama.py` — main backend (httpx-based, text tool protocol)
+- `web/agents/ollama_tools.py` — tool protocol + sandboxed executors
+- `web/llm.py` — backend-agnostic short-prompt helper
+- `web/config.py` — OLLAMA_* settings
+- `web/routes/conversations.py` — refactored to use `llm.generate_text()`
 
-### Step 2: Add Ollama environment variables
+### Step 2: Add native tool calling mode (v2)
 
-**File:** `.env.example`
+Add Ollama's native `tools=` parameter as an opt-in mode alongside the
+text-based protocol. This improves reliability with models that support
+structured tool calling (Qwen3, Llama 3.3, Mistral).
 
-```bash
-# Ollama backend settings
-# OLLAMA_HOST=http://localhost:11434  # Ollama server URL (standard Ollama env var)
-# OLLAMA_MODEL=qwen3:32b             # Model to use for agent
-# OLLAMA_NUM_CTX=32768               # Context window size
-# OLLAMA_THINK=false                  # Enable thinking/reasoning mode
-# OLLAMA_MAX_TOOL_ROUNDS=20          # Max tool call rounds before stopping
-```
+Two approaches, not mutually exclusive:
 
-**File:** `docker-compose.yml`
-
-Add to environment section:
-```yaml
-- OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
-- OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3:32b}
-- OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-32768}
-```
-
-### Step 3: Create Ollama tool registry
-
-**File:** `web/agents/ollama_tools.py` (new file)
-
-Adapts the hybrid tool approach from the ADK design for Ollama's function
-calling format. The `ollama` library auto-converts Python functions with type
-annotations and Google-style docstrings into JSON tool schemas.
-
+**Option A: `ollama` library with native tools**
 ```python
-"""Tool registry for Ollama backend.
-
-Ollama auto-converts Python functions with type annotations and
-Google-style docstrings into JSON tool schemas. We expose the
-same MatomoAPI/MetabaseAPI methods as the ADK design, plus
-code execution and file reading tools.
-"""
-
-import subprocess
-import tempfile
-from pathlib import Path
-from typing import Optional
-
-from lib.query import (
-    execute_matomo_query,
-    execute_metabase_query,
-    CallerType,
+import ollama
+response = await ollama.AsyncClient().chat(
+    model=model, messages=messages, tools=get_all_tools(), stream=True
 )
-
-
-# ============ MATOMO TOOLS ============
-
-def matomo_get_visits(
-    site_id: int,
-    period: str,
-    date: str,
-    segment: Optional[str] = None,
-) -> str:
-    """Get visit summary for a Matomo site.
-
-    Args:
-        site_id: Matomo site ID (e.g. 117 for Emplois)
-        period: Time period - day, week, month, or range
-        date: Date string (YYYY-MM-DD) or range (YYYY-MM-DD,YYYY-MM-DD)
-        segment: Optional Matomo segment filter
-
-    Returns:
-        JSON string with visit metrics (nb_visits, nb_uniq_visitors, etc.)
-    """
-    params = {"idSite": site_id, "period": period, "date": date}
-    if segment:
-        params["segment"] = segment
-    result = execute_matomo_query(
-        instance="inclusion",
-        caller=CallerType.AGENT,
-        method="VisitsSummary.get",
-        params=params,
-    )
-    if result.success:
-        return str(result.data)
-    return f"Error: {result.error}"
-
-# ... (similar wrappers for other Matomo methods)
-
-
-# ============ METABASE TOOLS ============
-
-def metabase_execute_sql(
-    sql: str,
-    instance: str = "stats",
-    database_id: int = 2,
-) -> str:
-    """Execute a SQL query on Metabase.
-
-    Args:
-        sql: The SQL query to execute
-        instance: Metabase instance name (stats, datalake, dora)
-        database_id: Database ID within the instance
-
-    Returns:
-        Query results as formatted string with columns and rows
-    """
-    result = execute_metabase_query(
-        instance=instance,
-        caller=CallerType.AGENT,
-        sql=sql,
-        database_id=database_id,
-    )
-    if result.success:
-        return str(result.data)
-    return f"Error: {result.error}"
-
-# ... (similar wrappers for other Metabase methods)
-
-
-# ============ CODE EXECUTION ============
-
-def execute_python(code: str, timeout: int = 60) -> str:
-    """Execute Python code for advanced queries.
-
-    Use for multi-step analysis, data transformation, or queries
-    that combine multiple API calls with custom logic.
-
-    The code has access to the full Matometa environment:
-        from lib.query import execute_matomo_query, execute_metabase_query
-
-    Args:
-        code: Python source code to execute
-        timeout: Maximum execution time in seconds
-
-    Returns:
-        Script output (stdout + stderr)
-    """
-    # ... (subprocess execution, same as ADK design)
-
-
-# ============ FILE TOOLS ============
-
-def read_knowledge_file(path: str) -> str:
-    """Read a file from the knowledge base.
-
-    Args:
-        path: Path relative to project root (e.g. knowledge/sites/emplois.md)
-
-    Returns:
-        File contents as string
-    """
-    # ... (safe file reading)
-
-
-def list_knowledge_files(directory: str = "knowledge") -> str:
-    """List files in the knowledge base.
-
-    Args:
-        directory: Directory relative to project root
-
-    Returns:
-        List of file paths
-    """
-    # ...
-
-
-# ============ REGISTRY ============
-
-def get_all_tools() -> list:
-    """Get all tool functions for Ollama.
-
-    Returns a list of Python functions that ollama will auto-convert
-    to tool schemas via introspection.
-    """
-    return [
-        matomo_get_visits,
-        # matomo_get_pages,
-        # matomo_get_events,
-        # matomo_get_dimensions,
-        # matomo_get_referrers,
-        # matomo_raw_request,
-        metabase_execute_sql,
-        # metabase_execute_card,
-        # metabase_search_cards,
-        execute_python,
-        read_knowledge_file,
-        list_knowledge_files,
-    ]
+# tools= accepts Python functions; ollama auto-generates JSON schemas
 ```
 
-### Step 4: Create Ollama backend implementation
-
-**File:** `web/agents/ollama.py` (new file)
-
+**Option B: Raw httpx with `tools` in payload**
 ```python
-"""Ollama backend - uses ollama Python library with local/remote Ollama server."""
-
-import asyncio
-import json
-import logging
-import os
-from typing import AsyncIterator, Optional
-
-import ollama as ollama_lib
-from ollama import AsyncClient, ChatResponse
-
-from .. import config
-from .base import AgentBackend, AgentMessage
-from .ollama_tools import get_all_tools
-
-logger = logging.getLogger(__name__)
-
-# Configurable limits
-MAX_TOOL_ROUNDS = int(os.getenv("OLLAMA_MAX_TOOL_ROUNDS", "20"))
-MAX_HISTORY_CHARS = 50000
-
-# System prompt preamble for Ollama-specific tool guidance
-OLLAMA_PREAMBLE = """You are an AI agent with access to tools. When you need data,
-call the appropriate tool function. You can make multiple tool calls in sequence.
-
-Available tools are provided in the function definitions. Key tools:
-- matomo_get_visits: Get visit statistics from Matomo analytics
-- metabase_execute_sql: Run SQL queries on Metabase databases
-- execute_python: Run Python scripts for complex analysis
-- read_knowledge_file: Read documentation and knowledge base files
-- list_knowledge_files: List available knowledge files
-
-Always read relevant knowledge files before querying data sources.
-"""
-
-
-class OllamaBackend(AgentBackend):
-    """Agent backend using Ollama with open-source models.
-
-    Implements a self-managed agent loop:
-    1. Send message with tools to Ollama
-    2. If response contains tool_calls, execute them
-    3. Append tool results to messages, repeat from 1
-    4. When no more tool_calls, yield final response
-    """
-
-    def __init__(self):
-        self._running: set[str] = set()
-        self._cancelled: set[str] = set()
-        self._model = os.getenv("OLLAMA_MODEL", "qwen3:32b")
-        self._think = os.getenv("OLLAMA_THINK", "false").lower() == "true"
-        self._num_ctx = int(os.getenv("OLLAMA_NUM_CTX", "32768"))
-
-    async def send_message(
-        self,
-        conversation_id: str,
-        message: str,
-        history: list[dict],
-        session_id: Optional[str] = None,
-    ) -> AsyncIterator[AgentMessage]:
-        """Send message via Ollama and yield streaming responses."""
-        self._running.add(conversation_id)
-        self._cancelled.discard(conversation_id)
-
-        try:
-            # Build system prompt
-            system_prompt = self._build_system_prompt()
-
-            # Build message history
-            messages = self._build_messages(system_prompt, message, history)
-
-            # Get tools
-            tools = get_all_tools()
-            available_functions = {f.__name__: f for f in tools}
-
-            # Yield system init event
-            yield AgentMessage(
-                type="system",
-                content="init",
-                raw={"subtype": "init", "model": self._model},
-            )
-
-            # Agent loop
-            for round_num in range(MAX_TOOL_ROUNDS):
-                if conversation_id in self._cancelled:
-                    yield AgentMessage(type="system", content="Cancelled")
-                    return
-
-                # Call Ollama with streaming
-                client = AsyncClient()
-
-                # Accumulate streamed response
-                content_parts = []
-                thinking_parts = []
-                tool_calls = []
-
-                async for chunk in await client.chat(
-                    model=self._model,
-                    messages=messages,
-                    tools=tools,
-                    stream=True,
-                    think=self._think,
-                    options={"num_ctx": self._num_ctx},
-                ):
-                    if conversation_id in self._cancelled:
-                        yield AgentMessage(type="system", content="Cancelled")
-                        return
-
-                    # Stream thinking content (optional debug)
-                    if hasattr(chunk.message, 'thinking') and chunk.message.thinking:
-                        thinking_parts.append(chunk.message.thinking)
-
-                    # Stream text content
-                    if chunk.message.content:
-                        content_parts.append(chunk.message.content)
-                        yield AgentMessage(
-                            type="assistant",
-                            content=chunk.message.content,
-                            raw={"streaming": True, "round": round_num},
-                        )
-
-                    # Collect tool calls
-                    if chunk.message.tool_calls:
-                        tool_calls.extend(chunk.message.tool_calls)
-
-                # Build assistant message for history
-                full_content = "".join(content_parts)
-                assistant_msg = {
-                    "role": "assistant",
-                    "content": full_content,
-                }
-                if tool_calls:
-                    assistant_msg["tool_calls"] = [
-                        {
-                            "function": {
-                                "name": tc.function.name,
-                                "arguments": tc.function.arguments,
-                            }
-                        }
-                        for tc in tool_calls
-                    ]
-                if thinking_parts:
-                    assistant_msg["thinking"] = "".join(thinking_parts)
-                messages.append(assistant_msg)
-
-                # If no tool calls, we're done
-                if not tool_calls:
-                    break
-
-                # Execute tool calls
-                for tc in tool_calls:
-                    func_name = tc.function.name
-                    func_args = tc.function.arguments
-
-                    # Yield tool_use event
-                    yield AgentMessage(
-                        type="tool_use",
-                        content={"tool": func_name, "input": func_args},
-                        raw={"round": round_num},
-                    )
-
-                    # Execute
-                    func = available_functions.get(func_name)
-                    if func:
-                        try:
-                            result = func(**func_args)
-                        except Exception as e:
-                            result = f"Error: {type(e).__name__}: {e}"
-                    else:
-                        result = f"Error: Unknown tool '{func_name}'"
-
-                    # Yield tool_result event
-                    yield AgentMessage(
-                        type="tool_result",
-                        content={"tool": func_name, "output": str(result)},
-                        raw={"round": round_num},
-                    )
-
-                    # Append to messages for next round
-                    messages.append({
-                        "role": "tool",
-                        "tool_name": func_name,
-                        "content": str(result),
-                    })
-
-                # Clear tool_calls for next round
-                tool_calls = []
-
-            else:
-                # Hit max rounds
-                yield AgentMessage(
-                    type="system",
-                    content=f"Reached maximum tool rounds ({MAX_TOOL_ROUNDS})",
-                )
-
-            # Final system event with usage info
-            yield AgentMessage(
-                type="system",
-                content="Completed: done",
-                raw={
-                    "result": True,
-                    "model": self._model,
-                    "rounds": round_num + 1,
-                },
-            )
-
-        except Exception as e:
-            logger.error(f"Ollama error: {e}", exc_info=True)
-            yield AgentMessage(
-                type="error",
-                content=str(e),
-                raw={"error": str(e), "type": type(e).__name__},
-            )
-
-        finally:
-            self._running.discard(conversation_id)
-            self._cancelled.discard(conversation_id)
-
-    def _build_system_prompt(self) -> str:
-        """Build system prompt from AGENTS.md with Ollama preamble."""
-        agents_md_path = config.BASE_DIR / "AGENTS.md"
-        agents_content = ""
-        if agents_md_path.exists():
-            agents_content = agents_md_path.read_text()
-
-        from datetime import date
-        today = date.today().strftime("%A %d %B %Y")
-
-        return (
-            f"Aujourd'hui, nous sommes le {today}.\n\n"
-            f"{OLLAMA_PREAMBLE}\n\n"
-            f"{agents_content}"
-        )
-
-    def _build_messages(
-        self,
-        system_prompt: str,
-        message: str,
-        history: list[dict],
-    ) -> list[dict]:
-        """Build Ollama message list from conversation history."""
-        messages = [{"role": "system", "content": system_prompt}]
-
-        # Include history (truncated to fit context window)
-        total_chars = 0
-        for msg in history:
-            content = msg.get("content", "")
-            if total_chars + len(content) > MAX_HISTORY_CHARS:
-                break
-            role = msg.get("role", "user")
-            if role in ("user", "assistant"):
-                messages.append({"role": role, "content": content})
-                total_chars += len(content)
-
-        # Current message
-        messages.append({"role": "user", "content": message})
-        return messages
-
-    async def cancel(self, conversation_id: str) -> bool:
-        """Cancel a running conversation."""
-        if conversation_id in self._running:
-            self._cancelled.add(conversation_id)
-            return True
-        return False
-
-    def is_running(self, conversation_id: str) -> bool:
-        """Check if a conversation is currently running."""
-        return conversation_id in self._running
+payload = {
+    "model": model,
+    "messages": messages,
+    "tools": [{"type": "function", "function": {...schema...}}],
+    "stream": True,
+}
+# Works with any /api/chat-compatible server
 ```
 
-### Step 5: Register Ollama backend in factory
+Either way, the domain-specific tools from the original plan
+(`matomo_get_visits`, `metabase_execute_sql`, etc.) become the tool registry.
+The agent loop checks `response.message.tool_calls` instead of parsing text.
 
-**File:** `web/agents/__init__.py`
+Controlled by env var: `OLLAMA_TOOL_MODE=native` (vs default `text`).
 
-```python
-from .cli import CLIBackend
-from .sdk import SDKBackend
+### Step 3: Add thinking/reasoning support
 
-__all__ = ["AgentBackend", "AgentMessage", "CLIBackend", "SDKBackend", "get_agent"]
+For Qwen3 and DeepSeek-R1: pass `think=True` in the Ollama payload, capture
+`message.thinking` content, and optionally stream it to the UI as a collapsible
+reasoning trace. Controlled by `OLLAMA_THINK=true`.
 
+### Step 4: Add token counting
 
-def get_agent() -> AgentBackend:
-    """Get the configured agent backend."""
-    from .. import config
+Ollama responses include `eval_count` (output tokens) and `prompt_eval_count`
+(input tokens). Capture these from the final streaming chunk (`done: true`)
+and emit them in the system completion event for usage tracking.
 
-    if config.AGENT_BACKEND == "sdk":
-        return SDKBackend()
-    elif config.AGENT_BACKEND == "ollama":
-        from .ollama import OllamaBackend
-        return OllamaBackend()
-    else:
-        return CLIBackend()
-```
+### Step 5: Integration tests
 
-### Step 6: Add Ollama config constants
-
-**File:** `web/config.py`
-
-Add:
-```python
-# Ollama settings
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:32b")
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-OLLAMA_AVAILABLE = True  # Always available (no API key needed)
-```
+Expand test coverage beyond the 2 unit tests:
+- Mock the full agent loop (multi-round tool calling)
+- Test streaming with smart buffering
+- Test history truncation edge cases
+- Test cancellation mid-stream
 
 ---
 
-## Event Mapping
+## Event Mapping (as implemented)
 
-Ollama responses map to `AgentMessage` types as follows:
-
-| Ollama Response | AgentMessage Type | Notes |
-|-----------------|-------------------|-------|
-| `chunk.message.content` | `assistant` | Streamed token-by-token |
-| `chunk.message.tool_calls` | `tool_use` | Emitted after stream completes |
-| Tool execution result | `tool_result` | We execute and emit |
-| `chunk.message.thinking` | `system` (optional) | Chain-of-thought from Qwen3/DeepSeek |
-| Agent init | `system` | Emitted at start with model info |
-| Agent complete | `system` | Emitted at end with round count |
+| Source | AgentMessage Type | Notes |
+|--------|-------------------|-------|
+| Streamed text (non-JSON) | `assistant` with `raw.append=True` | Chunked via `OLLAMA_STREAM_CHUNK_SIZE` |
+| Full non-streamed response | `assistant` | When streaming disabled or response is JSON/code |
+| Parsed JSON tool call | `tool_use` | `{"tool": name, "input": args}` |
+| Tool execution result | `tool_result` | `{"tool": name, "output": text}` |
+| Cancellation | `system` | `{"cancelled": True}` |
+| Max steps exceeded | `error` | `{"tool_steps": N}` |
 | Exception | `error` | Caught and emitted |
 
 ---
 
 ## Key Differences from CLI/SDK Backends
 
-| Aspect | CLI/SDK | Ollama |
-|--------|---------|--------|
+| Aspect | CLI/SDK | Ollama (current) |
+|--------|---------|------------------|
 | Agent loop | Managed by Claude | Self-managed `while` loop |
-| Tool execution | Claude runs tools internally | We execute Python functions directly |
+| Tool dispatch | Claude runs tools internally | Text-based JSON protocol parsed by us |
+| Tool set | Skills/MCP tools | Read/Write/Edit/Glob/Grep/Bash/Skill |
 | Session resumption | Via `--resume` / `options.resume` | Via message history replay |
-| Streaming | Token-level via JSON events | Token-level via async generator |
-| System prompt | AGENTS.md as-is | AGENTS.md + tool preamble |
-| Token usage | Reported by Claude API | Not reported by Ollama (future: via response metadata) |
+| Streaming | Token-level via JSON events | httpx `aiter_lines()` with smart buffering |
+| System prompt | AGENTS.md as-is | AGENTS.md + tool protocol instructions |
+| Short prompts | Hardcoded Anthropic SDK calls | `llm.generate_text()` (backend-agnostic) |
+| Token usage | Reported by Claude API | Not captured yet |
 | Cost | Per-token API pricing | Infrastructure cost only |
+| Cancellation | Kill CLI process / SDK cancel | `asyncio.Event` flag checked each iteration |
 
 ---
 
@@ -731,144 +373,96 @@ Based on community benchmarks for tool calling reliability:
 | **deepseek-r1:32b** | 32B | 24-32 GB (q4) | Excellent | Strong reasoning, good with SQL |
 | **llama3.3:70b** | 70B | 48+ GB (q4) | Very good | Meta's latest, broad capabilities |
 | **qwen3:14b** | 14B | 12-16 GB (q4) | Good | Viable on consumer GPUs |
-| **mistral:7b** | 7B | 8 GB | Basic | May struggle with complex tool chains |
+| **mistral:7b** | 7B | 8 GB | Basic | May struggle with text-based tool protocol |
 
-**Important**: Models under 14B parameters tend to hallucinate tool calls or
-forget parameters in complex multi-step scenarios. For production use, 32B+
-is recommended.
+**Important**: The text-based tool protocol (model emits JSON) is more
+demanding than native tool calling. Models under 14B often fail to emit valid
+JSON consistently. For production with text-based tools, 32B+ is recommended.
+With native tool calling (v2), smaller models may perform better.
 
----
-
-## Files to Create/Modify
-
-| File | Action |
-|------|--------|
-| `requirements.txt` | Add `ollama>=0.6.1` |
-| `.env.example` | Add `OLLAMA_HOST`, `OLLAMA_MODEL`, `OLLAMA_NUM_CTX`, `OLLAMA_THINK` |
-| `docker-compose.yml` | Add Ollama env vars to environment section |
-| `web/agents/ollama.py` | **Create** — main Ollama backend class |
-| `web/agents/ollama_tools.py` | **Create** — tool registry (shared structure with ADK) |
-| `web/agents/__init__.py` | Register Ollama backend in `get_agent()` |
-| `web/config.py` | Add `OLLAMA_MODEL`, `OLLAMA_HOST`, `OLLAMA_AVAILABLE` |
+The branch defaults to `qwen3-coder-next` — verify this model exists in the
+Ollama registry or update the default.
 
 ---
 
-## Verification Plan
+## Risks and Mitigations (updated for implementation)
 
-### 1. Prerequisites
+### Tool calling reliability (elevated for text-based protocol)
 
-```bash
-# Install Ollama
-curl -fsSL https://ollama.com/install.sh | sh
+**Risk**: The text-based tool protocol relies on the model outputting
+syntactically valid JSON. Smaller models may emit malformed JSON, hallucinate
+tool names, mix prose with JSON, or enter tool-calling loops.
 
-# Pull a model with tool calling support
-ollama pull qwen3:32b
-# or for testing on smaller hardware:
-ollama pull qwen3:14b
-```
+**Mitigations (in place)**:
+- `OLLAMA_TOOL_MAX_STEPS` cap (default: 6 — conservative)
+- Smart stream buffering: detects JSON-starting responses and suppresses
+  streaming to avoid partial JSON in the UI
+- `_strip_code_fence()` handles models that wrap JSON in ```code blocks```
+- Allowlisted tool names — unknown tools return an error message, not a crash
 
-### 2. Local test without Docker
+**Future mitigation**: Native tool calling (v2) eliminates JSON parsing risk
+entirely. The model returns structured `tool_calls` objects.
 
-```bash
-# Set up
-export AGENT_BACKEND=ollama
-export OLLAMA_MODEL=qwen3:32b
+### Bash tool security
 
-# Run web server
-.venv/bin/python -m web.app
+**Risk**: The Bash tool executor runs shell commands from model output. Even
+with allowlist filtering, a sufficiently creative model could craft a command
+that matches the glob pattern but does something unintended.
 
-# Test in browser
-# Query: "Combien de visites sur Emplois en decembre 2024?"
-```
+**Mitigations (in place)**:
+- `_bash_allowed()` checks commands against `ALLOWED_TOOLS` glob patterns
+- Container-level sandboxing is the real security boundary
+- Commands run with `subprocess.run(timeout=300)` — bounded execution
 
-### 3. Verify streaming
-
-- Open browser dev tools → Network → EventSource
-- Check events flow: `system` → `assistant` → `tool_use` → `tool_result` → `assistant`
-- Verify text streams incrementally (not all at once)
-
-### 4. Verify tool calls
-
-- Check `matomo_get_visits` is called with correct args
-- Check `execute_python` works for advanced queries
-- Check `read_knowledge_file` can read knowledge base
-
-### 5. Docker test
-
-```bash
-# Ollama runs on host, Matometa in container
-AGENT_BACKEND=ollama docker compose up
-```
-
-### 6. Multi-round test
-
-Ask a question that requires multiple tool calls:
-> "Compare le trafic d'Emplois et du Marche en janvier 2025. Lis d'abord les
-> fiches de connaissance des deux sites."
-
-Expected: model reads knowledge files, then queries Matomo for both sites,
-then writes a comparison.
-
----
-
-## Risks and Mitigations
-
-### Tool calling reliability
-
-**Risk**: Smaller models may hallucinate tool names, forget required parameters,
-or enter infinite tool-calling loops.
-
-**Mitigations**:
-- Default to 32B+ model
-- `MAX_TOOL_ROUNDS` cap (default: 20)
-- Clear function docstrings with explicit parameter documentation
-- Tool preamble in system prompt listing available tools
+**Note**: The `_bash_allowed` implementation uses `fnmatch.fnmatch` on the full
+command string. This is coarse — a pattern like `Bash(python:*)` matches any
+command starting with `python`, which is very broad. This is acceptable because
+the container is the trust boundary, but worth noting.
 
 ### Context window limits
 
 **Risk**: Long conversations + system prompt + tool results may exceed context.
 
-**Mitigations**:
-- `MAX_HISTORY_CHARS` truncation (default: 50,000)
-- Configurable `OLLAMA_NUM_CTX` (default: 32,768)
-- Tool results truncated if too long
+**Mitigations (in place)**:
+- `OLLAMA_MAX_HISTORY_CHARS` truncation (default: 50,000)
+- Configurable `OLLAMA_NUM_CTX` (default: 0 = model default)
+- `_truncate()` caps tool output at 12,000 chars
 
-### Streaming + tool calls buffering
+### File system access scope
 
-**Risk**: Some Ollama versions buffer responses during tool call resolution
-rather than streaming incrementally.
+**Risk**: Read/Write/Edit tools could access files outside the project.
 
-**Mitigation**: Acceptable for now — text streams normally between tool rounds.
-The user sees tool_use/tool_result events during the buffered phase, keeping
-the UI responsive.
+**Mitigations (in place)**:
+- `_is_within()` checks paths against allowed roots (BASE_DIR, DATA_DIR, /tmp)
+- `_resolve_path()` resolves symlinks before checking
+- Write access is more restricted than Read (no ADDITIONAL_DIRS)
 
 ### No token usage reporting
 
-**Risk**: `accumulate_usage()` in the streaming handler expects usage data.
+**Risk**: Usage tracking expects token counts from the backend.
 
-**Mitigation**: Ollama doesn't report token counts in the same way. We emit
-the `system` completion event without usage data. The streaming handler already
-handles missing usage gracefully (checks `if event.raw.get("usage")`).
+**Mitigation**: The implementation doesn't capture token counts. The streaming
+handler in `conversations.py` already handles missing usage gracefully. Token
+counting from Ollama responses (`eval_count`, `prompt_eval_count`) is a planned
+future enhancement.
 
 ---
 
 ## Future Enhancements
 
-1. **OpenAI-compatible variant** (highest value): Add a sibling backend class
-   (`OpenAICompatBackend`) that uses the `openai` Python library with a
-   configurable `base_url`. This would work with **any** OpenAI-compatible
-   server — vLLM, llama.cpp, LocalAI, LM Studio, SGLang, or even commercial
-   APIs. The agent loop, tool registry, and event mapping would be shared with
-   the Ollama backend; only the client call and response parsing would differ.
-   This is the natural second step once the Ollama backend is validated.
-2. **Token counting**: Ollama responses include `eval_count` and
-   `prompt_eval_count` — map these to `input_tokens`/`output_tokens` for the
-   usage tracking system.
-3. **Model health check**: Add `/api/health` endpoint that checks server
-   connectivity and model availability before accepting conversations.
-4. **Shared tool registry**: Extract common tool definitions into a shared
-   module used by both ADK and Ollama backends.
-5. **Parallel tool calls**: Execute multiple tool calls concurrently when the
-   model requests them in the same response (via `asyncio.gather`).
-6. **vLLM production deployment guide**: Document Docker Compose setup with
-   vLLM as the inference server for teams needing higher throughput.
+1. **Native tool calling mode** (highest priority): Add `tools=` parameter
+   support with domain-specific Python functions. Either via `ollama` library
+   or raw JSON schemas in httpx payload. Controlled by `OLLAMA_TOOL_MODE`.
+2. **OpenAI-compatible variant**: Since the current implementation already uses
+   raw httpx against `/api/chat`, adapting it to `/v1/chat/completions` is
+   straightforward. This would enable vLLM, llama.cpp, LocalAI, etc. with no
+   code changes beyond URL and payload format.
+3. **Token counting**: Capture `eval_count` and `prompt_eval_count` from
+   Ollama's `done: true` chunk for usage tracking.
+4. **Thinking mode**: `think=True` for Qwen3/DeepSeek-R1 reasoning traces.
+5. **Model health check**: `/api/health` endpoint to verify Ollama connectivity
+   and model availability before accepting conversations.
+6. **Parallel tool calls**: Execute multiple tool calls concurrently via
+   `asyncio.gather` when the model requests several in one turn.
+7. **vLLM production deployment guide**: Docker Compose setup with vLLM for
+   teams needing higher throughput than single-GPU Ollama.
