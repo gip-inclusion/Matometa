@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Backfill script to auto-tag existing conversations using the CLI backend.
+Backfill script to auto-tag existing conversations using the configured LLM backend.
 
 Usage:
     python scripts/backfill_conversation_tags.py [--dry-run] [--limit N]
@@ -9,7 +9,6 @@ Run with --dry-run to see what would be tagged without making changes.
 """
 
 import argparse
-import subprocess
 import sys
 import os
 import time
@@ -19,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from web.database import init_db, store, get_db
 from web import config
+from web import llm
 
 # Tag taxonomy (must match database _seed_tags)
 TAG_TAXONOMY = """
@@ -136,68 +136,17 @@ Réponds UNIQUEMENT avec les noms des tags séparés par des virgules, rien d'au
 Exemple: emplois, candidats, trafic, analyse"""
 
 
-def generate_tags_cli(message: str) -> list[str]:
-    """Generate tags using CLI backend."""
-    prompt = _build_prompt(message)
-
-    try:
-        result = subprocess.run(
-            [config.CLAUDE_CLI, "--print", "-p", prompt],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            cwd=str(config.BASE_DIR),
-        )
-
-        if result.returncode != 0:
-            print(f"    CLI error: {result.stderr[:200]}")
-            return []
-
-        return _parse_tags(result.stdout.strip())
-
-    except subprocess.TimeoutExpired:
-        print("    Timeout")
-        return []
-    except Exception as e:
-        print(f"    Error: {e}")
-        return []
-
-
-def generate_tags_sdk(message: str) -> list[str]:
-    """Generate tags using SDK backend."""
-    try:
-        from anthropic import Anthropic
-    except ImportError:
-        print("    Error: anthropic package not installed")
-        return []
-
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("    Error: ANTHROPIC_API_KEY not set")
-        return []
-
-    prompt = _build_prompt(message)
-
-    try:
-        client = Anthropic(api_key=api_key)
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=100,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return _parse_tags(response.content[0].text.strip())
-
-    except Exception as e:
-        print(f"    Error: {e}")
-        return []
-
-
 def generate_tags_for_message(message: str) -> list[str]:
-    """Generate tags using the configured backend."""
-    if config.AGENT_BACKEND == "sdk":
-        return generate_tags_sdk(message)
-    else:
-        return generate_tags_cli(message)
+    """Generate tags using the configured LLM backend."""
+    prompt = _build_prompt(message)
+    model = config.OLLAMA_TAG_MODEL if config.LLM_BACKEND == "ollama" else config.CLAUDE_MODEL
+
+    try:
+        response = llm.generate_text(prompt, model=model, max_tokens=100)
+        return _parse_tags(response)
+    except Exception as exc:
+        print(f"    Error: {exc}")
+        return []
 
 
 def backfill_tags(dry_run: bool = False, limit: int = 100, delay: float = 1.0):
@@ -205,7 +154,7 @@ def backfill_tags(dry_run: bool = False, limit: int = 100, delay: float = 1.0):
     init_db()
 
     print(f"{'DRY RUN - ' if dry_run else ''}Backfilling conversation tags...")
-    print(f"Backend: {config.AGENT_BACKEND}, Limit: {limit}, Delay: {delay}s")
+    print(f"Backend: {config.LLM_BACKEND}, Limit: {limit}, Delay: {delay}s")
     print()
 
     conversations = get_untagged_conversations(limit=limit)

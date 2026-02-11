@@ -16,12 +16,12 @@ def status():
     """
     backend = config.AGENT_BACKEND
 
-    # SDK backend doesn't need interactive auth
-    if backend != "cli":
+    # Non-CLI backends do not require interactive auth
+    if not config.USES_CLAUDE_CLI:
         return jsonify({
             "backend": backend,
             "auth_required": False,
-            "authenticated": True,  # SDK uses API key, always "authenticated"
+            "authenticated": True,
         })
 
     # CLI backend - check credentials

@@ -4,15 +4,13 @@ import asyncio
 import json
 import logging
 import queue
-import re
 import threading
-import os
-
 from flask import Blueprint, Response, jsonify, request, g
 
 from ..storage import store
 from ..agents import get_agent
 from .. import config
+from .. import llm
 from ..config import ADMIN_USERS
 from ..uploads import (
     upload_file as do_upload_file,
@@ -71,32 +69,19 @@ def get_agent_instance():
 
 
 def generate_conversation_title(user_message: str, conv_id: str) -> None:
-    """Generate a smart title for a conversation using Claude (async, in background)."""
-    try:
-        from anthropic import Anthropic
-    except ImportError:
-        return
-
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        return
-
+    """Generate a smart title for a conversation (async, in background)."""
     def _generate():
         try:
-            client = Anthropic(api_key=api_key)
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=50,
-                messages=[{
-                    "role": "user",
-                    "content": f"Ecris un resume concis EN FRANCAIS (max 10 mots, sans guillemets) de cette demande:\n\n{user_message[:500]}"
-                }]
+            model = config.OLLAMA_TITLE_MODEL if config.LLM_BACKEND == "ollama" else config.CLAUDE_MODEL
+            prompt = (
+                "Ecris un resume concis EN FRANCAIS (max 10 mots, sans guillemets) "
+                f"de cette demande:\n\n{user_message[:500]}"
             )
-            title = response.content[0].text.strip()[:100]
+            title = llm.generate_text(prompt, model=model, max_tokens=50).strip()[:100]
             if title:
                 store.update_conversation(conv_id, title=title)
-        except Exception as e:
-            logger.warning(f"Failed to generate title: {e}")
+        except Exception as exc:
+            logger.warning(f"Failed to generate title: {exc}")
 
     threading.Thread(target=_generate, daemon=True).start()
 
@@ -104,8 +89,8 @@ def generate_conversation_title(user_message: str, conv_id: str) -> None:
 def generate_conversation_tags(user_message: str, conv_id: str) -> None:
     """Auto-tag a conversation (async, in background).
 
-    Uses the configured AGENT_BACKEND (cli or sdk) to analyze the first user
-    message and assign relevant tags from the predefined taxonomy.
+    Uses the configured LLM backend to analyze the first user message and
+    assign relevant tags from the predefined taxonomy.
     Runs in a background thread.
     """
     import subprocess
@@ -194,64 +179,19 @@ Exemple: emplois, candidats, trafic, analyse"""
                 tag_names.append(tag)
         return tag_names
 
-    def _generate_cli():
-        """Generate tags using CLI backend."""
+    def _generate():
+        """Generate tags using the configured LLM backend."""
         try:
-            result = subprocess.run(
-                [config.CLAUDE_CLI, "--print", "-p", prompt],
-                capture_output=True,
-                text=True,
-                timeout=60,
-                cwd=str(config.BASE_DIR),
-            )
-
-            if result.returncode != 0:
-                logger.warning(f"Failed to generate tags: {result.stderr}")
-                return
-
-            tag_names = _parse_tags(result.stdout.strip())
+            model = config.OLLAMA_TAG_MODEL if config.LLM_BACKEND == "ollama" else config.CLAUDE_MODEL
+            response = llm.generate_text(prompt, model=model, max_tokens=100)
+            tag_names = _parse_tags(response)
             if tag_names:
                 store.set_conversation_tags(conv_id, tag_names)
                 logger.info(f"Auto-tagged conversation {conv_id}: {tag_names}")
+        except Exception as exc:
+            logger.warning(f"Failed to generate tags: {exc}")
 
-        except subprocess.TimeoutExpired:
-            logger.warning(f"Timeout generating tags for {conv_id}")
-        except Exception as e:
-            logger.warning(f"Failed to generate tags: {e}")
-
-    def _generate_sdk():
-        """Generate tags using SDK backend."""
-        try:
-            from anthropic import Anthropic
-        except ImportError:
-            logger.warning("anthropic package not installed, cannot use SDK backend")
-            return
-
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            logger.warning("ANTHROPIC_API_KEY not set, cannot use SDK backend")
-            return
-
-        try:
-            client = Anthropic(api_key=api_key)
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=100,
-                messages=[{"role": "user", "content": prompt}]
-            )
-            tag_names = _parse_tags(response.content[0].text.strip())
-            if tag_names:
-                store.set_conversation_tags(conv_id, tag_names)
-                logger.info(f"Auto-tagged conversation {conv_id}: {tag_names}")
-
-        except Exception as e:
-            logger.warning(f"Failed to generate tags: {e}")
-
-    # Choose backend based on config
-    if config.AGENT_BACKEND == "sdk":
-        threading.Thread(target=_generate_sdk, daemon=True).start()
-    else:
-        threading.Thread(target=_generate_cli, daemon=True).start()
+    threading.Thread(target=_generate, daemon=True).start()
 
 
 @bp.route("", methods=["POST"])
@@ -416,28 +356,19 @@ def generate_title(conv_id: str):
     context = "\n\n".join(context_parts)
 
     try:
-        from anthropic import Anthropic
-
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            return jsonify({"error": "ANTHROPIC_API_KEY not set"}), 500
-
-        client = Anthropic(api_key=api_key)
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=50,
-            messages=[{
-                "role": "user",
-                "content": f"Ecris un titre court et direct (6-10 mots) sur le theme de cette conversation. En francais uniquement. Pas de guillemets.\n\n{context}"
-            }]
+        model = config.OLLAMA_TITLE_MODEL if config.LLM_BACKEND == "ollama" else config.CLAUDE_MODEL
+        prompt = (
+            "Ecris un titre court et direct (6-10 mots) sur le theme de cette conversation. "
+            "En francais uniquement. Pas de guillemets.\n\n"
+            f"{context}"
         )
-        title = response.content[0].text.strip().strip('"\'')[:100]
+        title = llm.generate_text(prompt, model=model, max_tokens=50).strip().strip('"\'')[:100]
         store.update_conversation(conv_id, title=title)
         return jsonify({"title": title})
 
-    except Exception as e:
-        logger.error(f"Failed to generate title: {e}")
-        return jsonify({"error": str(e)}), 500
+    except Exception as exc:
+        logger.error(f"Failed to generate title: {exc}")
+        return jsonify({"error": str(exc)}), 500
 
 
 @bp.route("/<conv_id>/fork", methods=["POST"])
@@ -643,7 +574,11 @@ User request: """
                     # Store to database FIRST (survives client disconnect)
                     if event.type == "assistant":
                         assistant_text_parts.append(str(event.content))
-                        full_text = "\n".join(assistant_text_parts)
+                        append_mode = bool(getattr(event, "raw", {}).get("append"))
+                        if append_mode:
+                            full_text = "".join(assistant_text_parts)
+                        else:
+                            full_text = "\n".join(assistant_text_parts)
                         if assistant_msg_id is None:
                             msg = store.add_message(conv_id, "assistant", full_text)
                             assistant_msg_id = msg.id if msg else None

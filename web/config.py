@@ -10,11 +10,17 @@ BASE_DIR = Path(__file__).parent.parent.resolve()
 # Default: ./data (relative to BASE_DIR)
 DATA_DIR = Path(os.getenv("DATA_DIR", BASE_DIR / "data")).resolve()
 
-# Agent backend: "cli" or "sdk"
-AGENT_BACKEND = os.getenv("AGENT_BACKEND", "cli")
+# Agent backend: "ollama", "cli" or "sdk"
+AGENT_BACKEND = os.getenv("AGENT_BACKEND", "ollama").lower()
+
+# LLM backend for short prompts (titles, tags). Defaults to AGENT_BACKEND.
+LLM_BACKEND = os.getenv("LLM_BACKEND", "").strip().lower() or AGENT_BACKEND
 
 # Claude CLI path (uses system default if not set)
 CLAUDE_CLI = os.getenv("CLAUDE_CLI", "claude")
+
+# Claude model (used by SDK and CLI helper)
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")
 
 # Allowed tools for the agent (CLI backend only - SDK ignores this)
 # Bash patterns use glob wildcards (* matches anything)
@@ -29,6 +35,22 @@ ALLOWED_TOOLS = os.getenv("ALLOWED_TOOLS",
     "Bash(python:*),Bash(python3:*),"
     "Bash(.venv/bin/python:*)"
 )
+
+# Ollama settings
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3-coder-next")
+OLLAMA_TITLE_MODEL = os.getenv("OLLAMA_TITLE_MODEL", OLLAMA_MODEL)
+OLLAMA_TAG_MODEL = os.getenv("OLLAMA_TAG_MODEL", OLLAMA_MODEL)
+OLLAMA_REQUEST_TIMEOUT = float(os.getenv("OLLAMA_REQUEST_TIMEOUT", "120"))
+OLLAMA_STREAM = os.getenv("OLLAMA_STREAM", "true").lower() == "true"
+OLLAMA_STREAM_CHUNK_SIZE = int(os.getenv("OLLAMA_STREAM_CHUNK_SIZE", "200"))
+OLLAMA_MAX_HISTORY_CHARS = int(os.getenv("OLLAMA_MAX_HISTORY_CHARS", "50000"))
+OLLAMA_TOOL_MAX_STEPS = int(os.getenv("OLLAMA_TOOL_MAX_STEPS", "6"))
+OLLAMA_TEMPERATURE = float(os.getenv("OLLAMA_TEMPERATURE", "0.2"))
+OLLAMA_NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "0"))
+
+# Backend capability helpers
+USES_CLAUDE_CLI = AGENT_BACKEND == "cli" or LLM_BACKEND == "cli"
 
 # Web server settings
 HOST = os.getenv("WEB_HOST", "127.0.0.1")

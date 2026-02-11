@@ -157,16 +157,18 @@ portable. But tool calling reliability will suffer with smaller models (< 14B)
 that can't reliably emit valid JSON. The native tool calling path should be
 the v2 upgrade, especially once we want to use domain-specific tools.
 
-### Analysis: `web/llm.py` (not in plan — good addition)
+### Analysis: `web/llm.py` (not in plan — correct addition)
 
 The branch adds `web/llm.py`, a backend-agnostic helper for short text
-generation (titles, tags). This is a genuine improvement:
-- Replaces 3 separate hardcoded Anthropic SDK calls in `conversations.py`
-- Routes through the configured backend (ollama, sdk, or cli)
-- Supports per-task model overrides (`OLLAMA_TITLE_MODEL`, `OLLAMA_TAG_MODEL`)
-- The `conversations.py` diff deletes ~90 lines of duplicated code
-
-This wasn't in the plan but should be kept. It belongs in the implementation.
+generation (titles, tags). This is the right fix:
+- The hardcoded Anthropic SDK calls in `conversations.py` on main assume an
+  API key is always available. With `AGENT_BACKEND=ollama`, there may be no
+  Anthropic key at all — titles and tags would silently fail.
+- `llm.py` routes through the configured backend: if you set ollama, it uses
+  ollama. If you set sdk, it uses Anthropic. No fallback, no silent switching.
+- `OLLAMA_TITLE_MODEL` / `OLLAMA_TAG_MODEL` let you point housekeeping at a
+  smaller model while running a larger model for agent conversations.
+- Deletes ~90 lines of duplicated backend-specific code in `conversations.py`.
 
 ### What's missing vs the plan
 
