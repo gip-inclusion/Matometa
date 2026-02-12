@@ -26,6 +26,8 @@ let actionsMap = new Map(); // actionIndex -> {toolUse, toolResult, category, ic
 let pendingToolUses = []; // Queue for tool_use waiting for their results (supports parallel calls)
 let lastAssistantBlock = null; // Track last assistant block for footnotes
 let currentTurnActions = []; // Actions in current turn (for footnotes)
+let streamingBlock = null; // Current block being streamed into
+let streamingText = ''; // Accumulated markdown during streaming
 let actionsFilterMode = localStorage.getItem('actionsFilterMode') || 'data';
 
 // TOC (table of contents) state
@@ -427,6 +429,8 @@ function resetActionsState() {
   pendingToolUses = [];
   lastAssistantBlock = null;
   currentTurnActions = [];
+  streamingBlock = null;
+  streamingText = '';
 
   // Reset TOC state
   resetTocState();
@@ -1361,6 +1365,14 @@ function appendEvent(type, data) {
     return;
   }
 
+  // Non-assistant event ends the streaming accumulation
+  if (type !== 'assistant' && streamingBlock) {
+    renderMermaid(streamingBlock);
+    renderOptions(streamingBlock);
+    streamingBlock = null;
+    streamingText = '';
+  }
+
   // Tool events: add to sidebar instead of main chat
   if (type === 'tool_use') {
     // Queue tool_use - supports parallel tool calls
@@ -1394,12 +1406,28 @@ function appendEvent(type, data) {
     addFootnotesToLastAssistant();
   }
 
+  // Streaming: accumulate assistant chunks into one block
+  if (type === 'assistant' && streamingBlock) {
+    streamingText += data.content;
+    streamingBlock.dataset.rawContent = streamingText;
+    streamingBlock.innerHTML = formatAssistantContent(streamingText);
+    lastAssistantBlock = streamingBlock;
+    // Scroll if needed
+    if (isAtBottom()) {
+      chatOutput.scrollTop = chatOutput.scrollHeight;
+    }
+    return;
+  }
+
   const block = document.createElement('div');
   block.className = `event-block event-${type}`;
 
   if (type === 'user') {
     block.innerHTML = formatUserContent(data.content);
   } else if (type === 'assistant') {
+    // Start streaming accumulation
+    streamingText = data.content;
+    streamingBlock = block;
     // Store raw markdown for report creation
     block.dataset.rawContent = data.content;
     // Check if this is a report (has YAML front-matter)
@@ -2092,6 +2120,14 @@ function setStreamingState(streaming) {
   if (sendBtn) sendBtn.style.display = streaming ? 'none' : 'flex';
   if (cancelBtn) cancelBtn.style.display = streaming ? 'flex' : 'none';
   if (input) input.disabled = streaming;
+
+  // Finalize streaming block when streaming ends
+  if (!streaming && streamingBlock) {
+    renderMermaid(streamingBlock);
+    renderOptions(streamingBlock);
+    streamingBlock = null;
+    streamingText = '';
+  }
 }
 
 /**
