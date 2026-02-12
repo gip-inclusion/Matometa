@@ -552,5 +552,6 @@ Apps are served at `/interactive/{folder-name}/`. No build step required.
 The Flask app serves files directly from `data/interactive/`.
 
 **Always use relative URLs** (starting with `/`) when linking to apps or files.
-The `PUBLIC_URL` environment variable provides the absolute base URL when needed
-(e.g., for sharing links outside the app), but relative URLs are the default.
+The `BASE_URL` environment variable (e.g., `BASE_URL=https://matometa.ljt.cc/`)
+provides the absolute base URL when needed (e.g., for sharing links outside the
+app), but relative URLs are the default.

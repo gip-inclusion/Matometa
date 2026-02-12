@@ -35,9 +35,9 @@ HOST = os.getenv("WEB_HOST", "127.0.0.1")
 PORT = int(os.getenv("WEB_PORT", "5000"))
 DEBUG = os.getenv("WEB_DEBUG", "true").lower() == "true"
 
-# Public URL for generating links (used by agent for shareable URLs)
-# Defaults to local dev URL if not set
-PUBLIC_URL = os.getenv("PUBLIC_URL", f"http://{HOST}:{PORT}").rstrip("/")
+# Base URL for generating absolute links (e.g. BASE_URL=https://matometa.ljt.cc/)
+# Only needed when sharing links outside the app; prefer relative URLs otherwise.
+BASE_URL = os.getenv("BASE_URL", "").rstrip("/")
 
 # Default user for local development (when oauth-proxy not present)
 DEFAULT_USER = os.getenv("DEFAULT_USER", "admin@localhost")
