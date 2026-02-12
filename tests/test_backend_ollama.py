@@ -1,114 +1,41 @@
 """
 Tests for the Ollama backend: ollama.py, ollama_tools.py, llm.py.
 
-Run with: pytest tests/test_ollama.py -v
+Run with: pytest tests/test_backend_ollama.py -v
 """
 
 import asyncio
-import importlib
-import importlib.util
 import json
-import sys
-import types
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Module loading: stub Flask/SDK so we can test in CI without them.
-# ---------------------------------------------------------------------------
-
-_web_stub = sys.modules.get("web") or types.ModuleType("web")
-_web_stub.__path__ = ["web"]
-_agents_stub = sys.modules.get("web.agents") or types.ModuleType("web.agents")
-_agents_stub.__path__ = ["web/agents"]
-sys.modules.setdefault("web", _web_stub)
-sys.modules.setdefault("web.agents", _agents_stub)
-
-if "web.config" not in sys.modules:
-    _spec = importlib.util.spec_from_file_location("web.config", "web/config.py")
-    _config_mod = importlib.util.module_from_spec(_spec)
-    sys.modules["web.config"] = _config_mod
-    _web_stub.config = _config_mod
-    _spec.loader.exec_module(_config_mod)
-config = sys.modules["web.config"]
-
-if "web.agents.ollama_tools" not in sys.modules:
-    _spec2 = importlib.util.spec_from_file_location(
-        "web.agents.ollama_tools", "web/agents/ollama_tools.py"
-    )
-    _tools_mod = importlib.util.module_from_spec(_spec2)
-    sys.modules["web.agents.ollama_tools"] = _tools_mod
-    _spec2.loader.exec_module(_tools_mod)
-else:
-    _tools_mod = sys.modules["web.agents.ollama_tools"]
-
-_httpx_stub = sys.modules.get("httpx") or types.ModuleType("httpx")
-_httpx_stub.AsyncClient = type(
-    "AsyncClient",
-    (),
-    {"__init__": lambda *a, **kw: None, "is_closed": property(lambda s: False)},
+from web import config
+from web.agents.ollama import OllamaBackend
+from web.agents.ollama import (
+    _trim_history,
+    _should_stream_text,
+    _should_flush_buffer,
+    _looks_like_tool_start,
 )
-_httpx_stub.ConnectError = type("ConnectError", (Exception,), {})
-_httpx_stub.ReadTimeout = type("ReadTimeout", (Exception,), {})
-_httpx_stub.Client = type("Client", (), {"__init__": lambda *a, **kw: None})
-_httpx_stub.HTTPError = type("HTTPError", (Exception,), {})
-sys.modules.setdefault("httpx", _httpx_stub)
-
-_base_stub = sys.modules.get("web.agents.base")
-if _base_stub is None:
-    # Module not yet imported — create a minimal stub
-    _base_stub = types.ModuleType("web.agents.base")
-    _base_stub.AgentBackend = type("AgentBackend", (), {})
-    _base_stub.AgentMessage = type(
-        "AgentMessage",
-        (),
-        {
-            "__init__": lambda self, **kw: self.__dict__.update(kw),
-            "__repr__": lambda self: f"AgentMessage({self.__dict__})",
-        },
-    )
-    sys.modules["web.agents.base"] = _base_stub
-
-if "web.agents.ollama" not in sys.modules:
-    _spec3 = importlib.util.spec_from_file_location(
-        "web.agents.ollama", "web/agents/ollama.py"
-    )
-    _ollama_mod = importlib.util.module_from_spec(_spec3)
-    sys.modules["web.agents.ollama"] = _ollama_mod
-    _spec3.loader.exec_module(_ollama_mod)
-else:
-    _ollama_mod = sys.modules["web.agents.ollama"]
-
-if "web.llm" not in sys.modules:
-    _spec4 = importlib.util.spec_from_file_location("web.llm", "web/llm.py")
-    _llm_mod = importlib.util.module_from_spec(_spec4)
-    sys.modules["web.llm"] = _llm_mod
-    _spec4.loader.exec_module(_llm_mod)
-else:
-    _llm_mod = sys.modules["web.llm"]
-
-# Convenient references
-_trim_history = _ollama_mod._trim_history
-_should_stream_text = _ollama_mod._should_stream_text
-_should_flush_buffer = _ollama_mod._should_flush_buffer
-_looks_like_tool_start = _ollama_mod._looks_like_tool_start
-_bash_allowed = _tools_mod._bash_allowed
-_read_file = _tools_mod._read_file
-_write_file = _tools_mod._write_file
-_edit_file = _tools_mod._edit_file
-_glob_files = _tools_mod._glob_files
-_grep_files = _tools_mod._grep_files
-_run_bash = _tools_mod._run_bash
-_read_skill = _tools_mod._read_skill
-_truncate = _tools_mod._truncate
-_resolve_path = _tools_mod._resolve_path
-_is_within = _tools_mod._is_within
-parse_tool_call = _tools_mod.parse_tool_call
-execute_tool = _tools_mod.execute_tool
-tool_protocol = _tools_mod.tool_protocol
-OllamaBackend = _ollama_mod.OllamaBackend
+from web.agents.ollama_tools import (
+    parse_tool_call,
+    execute_tool,
+    tool_protocol,
+    _bash_allowed,
+    _read_file,
+    _write_file,
+    _edit_file,
+    _glob_files,
+    _grep_files,
+    _run_bash,
+    _read_skill,
+    _truncate,
+    _resolve_path,
+    _is_within,
+)
+import web.llm as _llm_mod
 
 
 # ===================================================================
@@ -339,12 +266,12 @@ def test_truncate_short_text():
 
 
 def test_truncate_exact_limit():
-    text = "x" * _tools_mod.MAX_OUTPUT_CHARS
+    text = "x" * config.OLLAMA_MAX_OUTPUT_CHARS
     assert _truncate(text) == text
 
 
 def test_truncate_long_text():
-    text = "x" * (_tools_mod.MAX_OUTPUT_CHARS + 5000)
+    text = "x" * (config.OLLAMA_MAX_OUTPUT_CHARS + 5000)
     result = _truncate(text)
     assert len(result) < len(text)
     assert result.endswith("[truncated]")
@@ -453,7 +380,7 @@ def test_read_binary_fallback(tmp_path, monkeypatch):
 def test_read_large_file_truncated(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "BASE_DIR", tmp_path)
     f = tmp_path / "large.txt"
-    f.write_text("x" * (_tools_mod.MAX_OUTPUT_CHARS + 1000))
+    f.write_text("x" * (config.OLLAMA_MAX_OUTPUT_CHARS + 1000))
     result = _read_file({"file_path": str(f)})
     assert "[truncated]" in result
 
@@ -635,7 +562,7 @@ def test_bash_captures_stderr(monkeypatch):
 
 def test_bash_output_truncated(monkeypatch):
     monkeypatch.setattr(config, "ALLOWED_TOOLS", "Bash")
-    limit = _tools_mod.MAX_OUTPUT_CHARS
+    limit = config.OLLAMA_MAX_OUTPUT_CHARS
     result = _run_bash({"command": f"python3 -c \"print('x' * {limit + 5000})\""})
     assert "[truncated]" in result
 
@@ -896,25 +823,21 @@ class TestOllamaGenerateTimeout:
         )
 
     def test_timeout_zero_preserved(self, monkeypatch):
+        import httpx
         monkeypatch.setattr(config, "OLLAMA_REQUEST_TIMEOUT", 120)
         monkeypatch.setattr(config, "OLLAMA_BASE_URL", "http://fake:11434")
         captured = {}
-        _httpx_stub.Client = self._make_fake_client(captured)
-        try:
-            _llm_mod._ollama_generate("test", model="t", max_tokens=10, temperature=0.2, timeout=0, client=None)
-        finally:
-            _httpx_stub.Client = type("Client", (), {"__init__": lambda *a, **kw: None})
+        monkeypatch.setattr(httpx, "Client", self._make_fake_client(captured))
+        _llm_mod._ollama_generate("test", model="t", max_tokens=10, temperature=0.2, timeout=0, client=None)
         assert captured["timeout"] == 0
 
     def test_timeout_none_uses_default(self, monkeypatch):
+        import httpx
         monkeypatch.setattr(config, "OLLAMA_REQUEST_TIMEOUT", 99)
         monkeypatch.setattr(config, "OLLAMA_BASE_URL", "http://fake:11434")
         captured = {}
-        _httpx_stub.Client = self._make_fake_client(captured)
-        try:
-            _llm_mod._ollama_generate("test", model="t", max_tokens=10, temperature=0.2, timeout=None, client=None)
-        finally:
-            _httpx_stub.Client = type("Client", (), {"__init__": lambda *a, **kw: None})
+        monkeypatch.setattr(httpx, "Client", self._make_fake_client(captured))
+        _llm_mod._ollama_generate("test", model="t", max_tokens=10, temperature=0.2, timeout=None, client=None)
         assert captured["timeout"] == 99
 
 
