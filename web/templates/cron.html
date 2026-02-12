@@ -16,9 +16,9 @@
   </div>
 
   <div class="section-body">
-    <div class="container" style="padding: 1.5rem; height: 100%; overflow-y: auto;">
+    <div class="conversation-list-wrapper" style="padding: 1.5rem;">
       {% if tasks %}
-      <table class="table table-sm">
+      <table class="table table-sm" style="table-layout: auto;">
         <thead>
           <tr>
             <th>Application</th>
@@ -116,7 +116,7 @@
         <p class="small text-muted">Ajoutez un fichier <code>cron.py</code> dans un dossier d'application interactive pour commencer.</p>
       </div>
       {% endif %}
-    </div>
+    </div><!-- /.conversation-list-wrapper -->
   </div>
 
 <script>
