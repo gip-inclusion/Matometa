@@ -21,6 +21,16 @@ class CLIBackend(AgentBackend):
     def __init__(self):
         self._processes: dict[str, asyncio.subprocess.Process] = {}
 
+    def _build_env(self, conversation_id: str) -> dict:
+        """Build subprocess environment. Override in subclasses."""
+        env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+        env["MATOMETA_CONVERSATION_ID"] = conversation_id
+        return env
+
+    def _extra_cmd_args(self) -> list[str]:
+        """Extra CLI arguments appended before -p. Override in subclasses."""
+        return []
+
     def _build_prompt(self, message: str, history: list[dict]) -> str:
         """Build a prompt including conversation history."""
         if not history:
@@ -117,12 +127,11 @@ class CLIBackend(AgentBackend):
         if session_id:
             cmd.extend(["--resume", session_id])
 
+        cmd.extend(self._extra_cmd_args())
+
         logger.info(f"Starting claude CLI: {' '.join(cmd[:4])}... (prompt length: {len(prompt)}, session: {session_id or 'none'})")
 
-        # Build environment: inherit from parent but remove ANTHROPIC_API_KEY
-        # so CLI uses OAuth credentials instead
-        env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
-        env["MATOMETA_CONVERSATION_ID"] = conversation_id
+        env = self._build_env(conversation_id)
 
         # Spawn process
         process = await asyncio.create_subprocess_exec(

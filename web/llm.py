@@ -35,7 +35,7 @@ def generate_text(
     """Generate a short text completion using the configured backend."""
     backend = _get_llm_backend()
 
-    if backend == "ollama":
+    if backend in ("ollama", "cli-ollama"):
         return _ollama_generate(
             prompt,
             model=model or config.OLLAMA_MODEL,
