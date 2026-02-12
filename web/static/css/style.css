@@ -255,7 +255,8 @@ body.has-sidebar {
 }
 
 /* Explorations body fills grid cell */
-#section-explorations .section-body {
+#section-explorations .section-body,
+#section-cron .section-body {
   max-width: none;
   padding: 0;
   overflow: hidden;
