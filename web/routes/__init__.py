@@ -8,6 +8,7 @@ from .html import bp as html_bp
 from .rapports import bp as rapports_bp
 from .query import bp as query_bp
 from .auth import bp as auth_bp
+from .cron import bp as cron_bp
 
 __all__ = [
     "conversations_bp",
@@ -18,4 +19,5 @@ __all__ = [
     "rapports_bp",
     "query_bp",
     "auth_bp",
+    "cron_bp",
 ]

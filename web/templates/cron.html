@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title_suffix %} - Cron{% endblock %}
+
+{% block content %}
+<section class="section-content" id="section-cron">
+  <div class="section-header">
+    <div class="container">
+      <div class="d-flex align-items-center justify-content-between gap-3">
+        <div>
+          <p class="text-muted mb-1 small">Taches planifiees de rafraichissement des donnees</p>
+          <h1 class="mb-0"><i class="ri-time-line ri-2x text-primary me-2" style="vertical-align: middle;"></i>Cron</h1>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-body">
+    <div class="container" style="padding: 1.5rem; height: 100%; overflow-y: auto;">
+      {% if tasks %}
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>Application</th>
+            <th>Statut</th>
+            <th>Derniere execution</th>
+            <th>Duree</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for task in tasks %}
+          <tr id="cron-row-{{ task.slug }}">
+            <td>
+              <a href="/interactive/{{ task.slug }}/" target="_blank">{{ task.title }}</a>
+              <span class="text-muted small ms-1">{{ task.slug }}</span>
+            </td>
+            <td>
+              {% if not task.enabled %}
+              <span class="badge bg-secondary">desactive</span>
+              {% elif task.last_run %}
+                {% if task.last_run.status == 'success' %}
+                <span class="badge bg-success">OK</span>
+                {% elif task.last_run.status == 'timeout' %}
+                <span class="badge bg-warning text-dark">timeout</span>
+                {% else %}
+                <span class="badge bg-danger">echec</span>
+                {% endif %}
+              {% else %}
+              <span class="badge bg-light text-muted">jamais execute</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if task.last_run %}
+              <span title="{{ task.last_run.started_at }}">{{ task.last_run.formatted_date }}</span>
+              <span class="text-muted small">({{ task.last_run.trigger }})</span>
+              {% else %}
+              <span class="text-muted">-</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if task.last_run %}
+              {{ "%.1f"|format(task.last_run.duration_ms / 1000) }}s
+              {% else %}
+              -
+              {% endif %}
+            </td>
+            <td>
+              <div class="d-flex gap-1 flex-wrap">
+                <button class="btn btn-sm btn-outline-primary" onclick="runCron('{{ task.slug }}')" title="Executer maintenant" id="run-btn-{{ task.slug }}">
+                  <i class="ri-play-line"></i>
+                </button>
+
+                <button class="btn btn-sm {% if task.enabled %}btn-outline-warning{% else %}btn-outline-success{% endif %}"
+                        onclick="toggleCron('{{ task.slug }}', {{ 'false' if task.enabled else 'true' }})"
+                        title="{{ 'Desactiver' if task.enabled else 'Activer' }}"
+                        id="toggle-btn-{{ task.slug }}">
+                  <i class="{% if task.enabled %}ri-pause-line{% else %}ri-play-circle-line{% endif %}"></i>
+                </button>
+
+                <a href="/api/cron/{{ task.slug }}/script" target="_blank" class="btn btn-sm btn-outline-secondary" title="Voir le script">
+                  <i class="ri-code-line"></i>
+                </a>
+
+                <button class="btn btn-sm btn-outline-secondary" onclick="showLogs('{{ task.slug }}')" title="Historique">
+                  <i class="ri-history-line"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <!-- Log viewer modal -->
+      <div class="modal fade" id="logModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="logModalTitle">Historique</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body" id="logModalBody">
+              <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {% else %}
+      <div class="text-center py-5">
+        <i class="ri-time-line ri-4x text-muted mb-3" style="display: block;"></i>
+        <p class="text-muted mb-1">Aucune tache cron</p>
+        <p class="small text-muted">Ajoutez un fichier <code>cron.py</code> dans un dossier d'application interactive pour commencer.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function runCron(slug) {
+  const btn = document.getElementById('run-btn-' + slug);
+  const origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
+
+  try {
+    const resp = await fetch('/api/cron/' + slug + '/run', { method: 'POST' });
+    const data = await resp.json();
+
+    // Reload the page to refresh status
+    htmx.ajax('GET', '/cron', { target: '#main', select: '#main > *', swap: 'innerHTML' });
+  } catch (err) {
+    alert('Erreur: ' + err.message);
+    btn.disabled = false;
+    btn.innerHTML = origHtml;
+  }
+}
+
+async function toggleCron(slug, enabled) {
+  try {
+    await fetch('/api/cron/' + slug + '/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: enabled })
+    });
+    htmx.ajax('GET', '/cron', { target: '#main', select: '#main > *', swap: 'innerHTML' });
+  } catch (err) {
+    alert('Erreur: ' + err.message);
+  }
+}
+
+async function showLogs(slug) {
+  const modal = new bootstrap.Modal(document.getElementById('logModal'));
+  document.getElementById('logModalTitle').textContent = 'Historique — ' + slug;
+  document.getElementById('logModalBody').innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></div>';
+  modal.show();
+
+  try {
+    const resp = await fetch('/api/cron/' + slug + '/logs?limit=20');
+    const runs = await resp.json();
+
+    if (runs.length === 0) {
+      document.getElementById('logModalBody').innerHTML = '<p class="text-muted text-center">Aucun historique</p>';
+      return;
+    }
+
+    let html = '<div class="list-group list-group-flush">';
+    for (const run of runs) {
+      const statusBadge = run.status === 'success'
+        ? '<span class="badge bg-success">OK</span>'
+        : run.status === 'timeout'
+          ? '<span class="badge bg-warning text-dark">timeout</span>'
+          : '<span class="badge bg-danger">echec</span>';
+
+      const duration = (run.duration_ms / 1000).toFixed(1) + 's';
+      const date = new Date(run.started_at).toLocaleString('fr-FR');
+      const runId = 'log-output-' + run.id;
+
+      html += `
+        <div class="list-group-item">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              ${statusBadge}
+              <span class="ms-2">${date}</span>
+              <span class="text-muted small ms-1">(${run.trigger}, ${duration})</span>
+            </div>
+            <button class="btn btn-sm btn-link" onclick="document.getElementById('${runId}').classList.toggle('d-none')">
+              <i class="ri-arrow-down-s-line"></i> Sortie
+            </button>
+          </div>
+          <pre class="mt-2 mb-0 d-none small" id="${runId}" style="max-height: 300px; overflow: auto; white-space: pre-wrap; background: #f8f9fa; padding: 0.5rem; border-radius: 4px;">${run.output ? run.output.replace(/</g, '&lt;') : '(aucune sortie)'}</pre>
+        </div>`;
+    }
+    html += '</div>';
+    document.getElementById('logModalBody').innerHTML = html;
+  } catch (err) {
+    document.getElementById('logModalBody').innerHTML = '<p class="text-danger">Erreur: ' + err.message + '</p>';
+  }
+}
+</script>
+{% endblock %}

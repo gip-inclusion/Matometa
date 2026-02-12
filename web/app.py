@@ -14,6 +14,7 @@ from .routes import (
     rapports_bp,
     query_bp,
     auth_bp,
+    cron_bp,
 )
 
 # Configure logging (stdout only)
@@ -56,6 +57,7 @@ app.register_blueprint(knowledge_bp)
 app.register_blueprint(logs_bp)
 app.register_blueprint(query_bp)
 app.register_blueprint(auth_bp)
+app.register_blueprint(cron_bp)
 
 
 # =============================================================================
@@ -87,6 +89,10 @@ def serve_interactive(filename=""):
     """
     from flask import Response
     import mimetypes
+
+    # Block .py files from being served (cron scripts, etc.)
+    if filename.endswith(".py"):
+        abort(404)
 
     # Handle directory requests - try index.html
     if not filename or filename.endswith("/"):

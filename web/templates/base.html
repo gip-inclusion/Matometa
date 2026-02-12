@@ -75,6 +75,14 @@
         </li>
 
         <li class="nav-item">
+          <a href="/cron" class="nav-link {% if section == 'cron' %}active{% endif %}"
+             hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+            <i class="ri-time-line" aria-hidden="true"></i>
+            <span>Cron</span>
+          </a>
+        </li>
+
+        <li class="nav-item">
           <a href="/explorations" class="nav-link {% if section == 'explorations' and not current_conv and not is_new %}active{% endif %}"
              hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
             <i class="ri-group-line" aria-hidden="true"></i>
@@ -150,6 +158,11 @@
           <li class="nav-item">
             <a href="/connaissances" class="nav-link {% if section == 'connaissances' %}active{% endif %}">
               <i class="ri-book-open-line me-2"></i>Connaissances
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="/cron" class="nav-link {% if section == 'cron' %}active{% endif %}">
+              <i class="ri-time-line me-2"></i>Cron
             </a>
           </li>
           <li class="nav-item">

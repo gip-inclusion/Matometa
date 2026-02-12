@@ -541,6 +541,66 @@ Minimal starter:
 </html>
 ```
 
+## Scheduled Data Refresh (Cron)
+
+Apps can include a `cron.py` script to pre-fetch data on a daily schedule,
+avoiding live Matomo API calls on every page load.
+
+### Setup
+
+Add a `cron.py` to your app folder:
+
+```
+data/interactive/my-app/
+├── APP.md
+├── index.html
+├── cron.py      ← data refresh script
+└── data.json    ← written by cron.py
+```
+
+The script runs as a regular Python process with `PYTHONPATH` set to the
+project root. It can import `lib.query` to call Matomo/Metabase APIs.
+Its working directory is the app folder, so `open('data.json', 'w')` writes
+to the right place.
+
+### APP.md field
+
+Optionally add `cron: true` or `cron: false` to APP.md front-matter.
+Default is `true` when `cron.py` exists. This can be toggled from the UI.
+
+```yaml
+---
+title: My App
+cron: true
+---
+```
+
+### Running
+
+```bash
+python -m web.cron              # run all enabled cron tasks
+python -m web.cron --app slug   # run one specific app
+python -m web.cron --list       # list discovered cron tasks
+python -m web.cron --dry-run    # show what would run
+```
+
+On the current VM, set up a system crontab entry:
+```
+0 6 * * * cd /path/to/matometa && .venv/bin/python -m web.cron
+```
+
+### Constraints
+
+- 5-minute timeout per script
+- stdout/stderr captured and stored in the database (max 50KB)
+- Exit code 0 = success, non-zero = failure
+- `.py` files are **not served** via `/interactive/` (404)
+
+### UI
+
+Visit `/cron` to see all cron-eligible apps, their last run status,
+and to manually trigger runs or toggle enable/disable.
+
 ## Deployment
 
 Apps are served at `/interactive/{folder-name}/`. No build step required.

@@ -15,7 +15,7 @@ from . import config
 USE_POSTGRES = config.DATABASE_URL is not None and config.DATABASE_URL.startswith(("postgres://", "postgresql://"))
 
 # Schema version - increment when adding migrations
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 if USE_POSTGRES:
     import psycopg2
@@ -281,6 +281,8 @@ def init_db():
                     _migrate_to_v13(conn)
                 if current_version < 14:
                     _migrate_to_v14(conn)
+                if current_version < 15:
+                    _migrate_to_v15(conn)
 
             _set_schema_version(conn, SCHEMA_VERSION)
 
@@ -375,6 +377,25 @@ def _migrate_to_v14(conn: ConnectionWrapper):
     columns = _get_table_columns(conn, "reports")
     if "notion_url" not in columns:
         conn.execute("ALTER TABLE reports ADD COLUMN notion_url TEXT")
+
+
+def _migrate_to_v15(conn: ConnectionWrapper):
+    """Migrate to v15: add cron_runs table for scheduled task history."""
+    serial_pk = "SERIAL PRIMARY KEY" if conn.is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
+
+    conn.execute(f"""
+        CREATE TABLE IF NOT EXISTS cron_runs (
+            id {serial_pk},
+            app_slug TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            status TEXT NOT NULL,
+            output TEXT,
+            duration_ms INTEGER,
+            trigger TEXT NOT NULL DEFAULT 'scheduled'
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cron_runs_slug_started ON cron_runs(app_slug, started_at DESC)")
 
 
 def _create_schema(conn: ConnectionWrapper):
@@ -483,9 +504,21 @@ def _create_schema(conn: ConnectionWrapper):
         CREATE INDEX IF NOT EXISTS idx_conversation_tags_tag ON conversation_tags(tag_id);
         CREATE INDEX IF NOT EXISTS idx_report_tags_report ON report_tags(report_id);
         CREATE INDEX IF NOT EXISTS idx_report_tags_tag ON report_tags(tag_id);
+        CREATE TABLE IF NOT EXISTS cron_runs (
+            id {serial_pk},
+            app_slug TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            status TEXT NOT NULL,
+            output TEXT,
+            duration_ms INTEGER,
+            trigger TEXT NOT NULL DEFAULT 'scheduled'
+        );
+
         CREATE INDEX IF NOT EXISTS idx_uploaded_files_conversation ON uploaded_files(conversation_id);
         CREATE INDEX IF NOT EXISTS idx_uploaded_files_hash ON uploaded_files(sha256_hash);
         CREATE INDEX IF NOT EXISTS idx_uploaded_files_user ON uploaded_files(user_id);
+        CREATE INDEX IF NOT EXISTS idx_cron_runs_slug_started ON cron_runs(app_slug, started_at DESC);
     """)
 
 
