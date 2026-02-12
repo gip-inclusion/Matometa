@@ -1110,6 +1110,13 @@ function startStream() {
     setStreamingState(false);
     hideLoading();
     removeProgressIndicator();
+
+    // After reconnect, events may have been stored to DB but not sent via SSE.
+    // Reload from DB to catch any missed events.
+    if (retryCount > 0 && currentConversationId) {
+      await loadConversation(currentConversationId, { autoStream: false });
+    }
+
     markFinalAnswer();
   });
 
@@ -1141,7 +1148,7 @@ function startStream() {
       }
 
       // Conversation exists — reload from DB to catch missed events, then retry stream
-      await loadConversation(currentConversationId);
+      await loadConversation(currentConversationId, { autoStream: false });
       startStream();
       return;
     }
@@ -2275,7 +2282,7 @@ function scrollToBottom() {
 /**
  * Load an existing conversation by ID
  */
-async function loadConversation(convId) {
+async function loadConversation(convId, { autoStream = true } = {}) {
   // Close any existing EventSource before loading new conversation
   closeEventSource();
 
@@ -2336,6 +2343,10 @@ async function loadConversation(convId) {
 
       // Mark final answers
       markFinalAnswersInConversation();
+
+      // Reset streaming state after DB load — these are static events, not a live stream
+      streamingBlock = null;
+      streamingText = '';
     }
 
     // Update URL without reload (preserve hash if present)
@@ -2358,8 +2369,8 @@ async function loadConversation(convId) {
       window.scrollTo(0, document.body.scrollHeight);
     }, 100);
 
-    // If conversation is running, resume the stream
-    if (conv.is_running) {
+    // If conversation is running, resume the stream (unless caller handles it)
+    if (autoStream && conv.is_running) {
       console.log('Conversation is running, resuming stream...');
       startStream();
     }

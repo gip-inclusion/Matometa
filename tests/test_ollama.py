@@ -56,17 +56,20 @@ _httpx_stub.Client = type("Client", (), {"__init__": lambda *a, **kw: None})
 _httpx_stub.HTTPError = type("HTTPError", (Exception,), {})
 sys.modules.setdefault("httpx", _httpx_stub)
 
-_base_stub = sys.modules.get("web.agents.base") or types.ModuleType("web.agents.base")
-_base_stub.AgentBackend = type("AgentBackend", (), {})
-_base_stub.AgentMessage = type(
-    "AgentMessage",
-    (),
-    {
-        "__init__": lambda self, **kw: self.__dict__.update(kw),
-        "__repr__": lambda self: f"AgentMessage({self.__dict__})",
-    },
-)
-sys.modules.setdefault("web.agents.base", _base_stub)
+_base_stub = sys.modules.get("web.agents.base")
+if _base_stub is None:
+    # Module not yet imported — create a minimal stub
+    _base_stub = types.ModuleType("web.agents.base")
+    _base_stub.AgentBackend = type("AgentBackend", (), {})
+    _base_stub.AgentMessage = type(
+        "AgentMessage",
+        (),
+        {
+            "__init__": lambda self, **kw: self.__dict__.update(kw),
+            "__repr__": lambda self: f"AgentMessage({self.__dict__})",
+        },
+    )
+    sys.modules["web.agents.base"] = _base_stub
 
 if "web.agents.ollama" not in sys.modules:
     _spec3 = importlib.util.spec_from_file_location(
