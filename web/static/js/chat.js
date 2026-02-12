@@ -1140,7 +1140,8 @@ function startStream() {
         console.error('Failed to check conversation:', err);
       }
 
-      // Conversation exists, just retry the stream
+      // Conversation exists — reload from DB to catch missed events, then retry stream
+      await loadConversation(currentConversationId);
       startStream();
       return;
     }
