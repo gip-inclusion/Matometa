@@ -90,6 +90,7 @@ else:
 _trim_history = _ollama_mod._trim_history
 _should_stream_text = _ollama_mod._should_stream_text
 _should_flush_buffer = _ollama_mod._should_flush_buffer
+_looks_like_tool_start = _ollama_mod._looks_like_tool_start
 _bash_allowed = _tools_mod._bash_allowed
 _read_file = _tools_mod._read_file
 _write_file = _tools_mod._write_file
@@ -295,6 +296,34 @@ def test_should_stream_text(text, expected):
 )
 def test_should_flush_buffer(buffer, chunk_size, expected):
     assert _should_flush_buffer(buffer, chunk_size) is expected
+
+
+# ===================================================================
+# _looks_like_tool_start
+# ===================================================================
+
+
+@pytest.mark.parametrize(
+    "buffer,expected",
+    [
+        ("Je vais analyser le trafic", False),
+        ("Bonjour\n\n```json\n{\"tool\":", True),
+        ("Voici.\n```\n{\"tool\": \"Read\"}\n```", True),
+        ('Voici.\n{"tool": "Read", "input": {}}', True),
+        ('{"tool": "Read"}', False),  # no newline before { — this is the whole text
+        ("", False),
+    ],
+    ids=[
+        "pure_prose",
+        "prose_then_code_fence",
+        "code_fence_complete",
+        "prose_then_raw_json",
+        "bare_json_no_newline",
+        "empty",
+    ],
+)
+def test_looks_like_tool_start(buffer, expected):
+    assert _looks_like_tool_start(buffer) is expected
 
 
 # ===================================================================

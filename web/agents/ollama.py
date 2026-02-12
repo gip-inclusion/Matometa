@@ -129,6 +129,10 @@ class OllamaBackend(AgentBackend):
 
                     if should_stream:
                         buffer += chunk
+                        # Stop streaming if a tool-call pattern appears
+                        if _looks_like_tool_start(buffer):
+                            should_stream = False
+                            continue
                         if _should_flush_buffer(buffer, chunk_size):
                             did_stream = True
                             yield AgentMessage(
@@ -142,12 +146,14 @@ class OllamaBackend(AgentBackend):
                     yield AgentMessage(type="system", content="Cancelled", raw={"cancelled": True})
                     return
                 if should_stream and buffer:
-                    did_stream = True
-                    yield AgentMessage(
-                        type="assistant",
-                        content=buffer,
-                        raw={"append": True},
-                    )
+                    # Final flush — but not if it looks like a tool call
+                    if not _looks_like_tool_start(buffer):
+                        did_stream = True
+                        yield AgentMessage(
+                            type="assistant",
+                            content=buffer,
+                            raw={"append": True},
+                        )
             else:
                 assistant_text = await self._chat_once(messages)
 
@@ -357,6 +363,22 @@ def _should_stream_text(text: str) -> Optional[bool]:
     if first in ("{", "`"):
         return False
     return True
+
+
+def _looks_like_tool_start(buffer: str) -> bool:
+    """Detect a probable tool-call JSON forming in the streaming buffer.
+
+    Checks for code fences (```json) or a raw JSON object on its own line
+    that starts with {"tool". Called mid-stream to stop flushing prose once
+    the model begins emitting a tool call.
+    """
+    if "```" in buffer:
+        return True
+    # Raw JSON on its own line: \n{"tool...
+    idx = buffer.rfind("\n{")
+    if idx >= 0 and '"tool"' in buffer[idx:]:
+        return True
+    return False
 
 
 def _should_flush_buffer(buffer: str, chunk_size: int) -> bool:
