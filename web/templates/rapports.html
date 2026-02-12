@@ -37,11 +37,21 @@
   <div class="section-body">
     {% if current_report %}
     <div class="container" style="padding: 1.5rem; height: 100%; overflow-y: auto;">
-    <!-- Report detail view -->
+    <!-- Report detail view (server-side rendered) -->
     <div class="report-content" id="reportContent">
       <div class="event-block event-report">
-        <div class="report-header" id="reportHeader"></div>
-        <div class="report-body" id="reportBody"></div>
+        <div class="report-header" id="reportHeader">
+          <div class="report-title">
+            <i class="ri-file-text-line"></i> {{ report_front_matter.get('query_category', report_front_matter.get('query category', 'Rapport')) }}
+          </div>
+          {% if report_front_matter.get('date') %}
+          <div class="report-meta"><i class="ri-calendar-line"></i> {{ report_front_matter['date'] }}</div>
+          {% endif %}
+          {% if report_front_matter.get('website') %}
+          <div class="report-meta"><i class="ri-global-line"></i> {{ report_front_matter['website'] }}</div>
+          {% endif %}
+        </div>
+        <div class="report-body" id="reportBody">{{ report_html }}</div>
       </div>
       <div class="report-footer text-muted small mt-3">
         {% if current_report.source_conversation_id %}
@@ -51,7 +61,6 @@
         {% endif %}
         <i class="ri-time-line"></i> Mis a jour le {{ current_report.updated_at.strftime('%d/%m/%Y %H:%M') }}
       </div>
-      <script type="text/plain" id="reportRawContent">{{ current_report.content|replace('</script>', '<\\/script>')|safe }}</script>
     </div>
     </div><!-- /.container -->
     {% else %}
@@ -347,87 +356,27 @@ function filterByText(query) {
   }
 }
 
-function renderReportContent() {
-  const rawContent = document.getElementById('reportRawContent');
-  const reportHeader = document.getElementById('reportHeader');
-  const reportBody = document.getElementById('reportBody');
-
-  if (!rawContent || !reportHeader || !reportBody || typeof marked === 'undefined') return;
-  if (reportBody.dataset.rendered) return; // Already rendered
-
-  let content = rawContent.textContent;
-
-  // Parse YAML front-matter
-  const frontMatter = {};
-  const fmMatch = content.match(/^---\n([\s\S]*?)\n---\n/);
-  if (fmMatch) {
-    const fmText = fmMatch[1];
-    for (const line of fmText.split('\n')) {
-      const colonIdx = line.indexOf(':');
-      if (colonIdx > 0) {
-        const key = line.slice(0, colonIdx).trim().toLowerCase();
-        const value = line.slice(colonIdx + 1).trim();
-        frontMatter[key] = value;
-      }
-    }
-    content = content.replace(/^---\n[\s\S]*?\n---\n/, '');
+// Mermaid progressive enhancement (code blocks → diagrams)
+function renderMermaidDiagrams() {
+  if (typeof mermaid === 'undefined') return;
+  const blocks = document.querySelectorAll('#reportBody pre code.language-mermaid');
+  for (const block of blocks) {
+    if (block.dataset.mermaidRendered) continue;
+    block.dataset.mermaidRendered = 'true';
+    const code = block.textContent;
+    const container = document.createElement('div');
+    container.className = 'mermaid';
+    const preElement = block.parentElement;
+    try {
+      mermaid.render('mermaid-' + Date.now() + '-' + Math.random().toString(36).slice(2), code)
+        .then(({ svg }) => { container.innerHTML = svg; preElement.replaceWith(container); })
+        .catch(() => {});
+    } catch (err) {}
   }
-
-  // Build report header
-  let header = '<div class="report-title">';
-  header += '<i class="ri-file-text-line"></i> ';
-  header += frontMatter['query category'] || 'Rapport';
-  header += '</div>';
-
-  if (frontMatter.date) {
-    header += `<div class="report-meta"><i class="ri-calendar-line"></i> ${frontMatter.date}</div>`;
-  }
-  if (frontMatter.website) {
-    header += `<div class="report-meta"><i class="ri-global-line"></i> ${frontMatter.website}</div>`;
-  }
-
-  reportHeader.innerHTML = header;
-
-  // Configure marked for tables and GFM
-  marked.setOptions({ breaks: true, gfm: true });
-  reportBody.innerHTML = marked.parse(content);
-
-  // Add Bootstrap table classes
-  reportBody.querySelectorAll('table').forEach(table => {
-    table.classList.add('table', 'table-sm', 'table-striped');
-  });
-
-  // Render mermaid diagrams (same approach as chat.js renderMermaid)
-  if (typeof mermaid !== 'undefined') {
-    const mermaidBlocks = reportBody.querySelectorAll('pre code.language-mermaid');
-    for (const block of mermaidBlocks) {
-      const code = block.textContent;
-      const container = document.createElement('div');
-      container.className = 'mermaid';
-      const preElement = block.parentElement;
-      try {
-        mermaid.render('mermaid-' + Date.now() + '-' + Math.random().toString(36).slice(2), code)
-          .then(({ svg }) => {
-            container.innerHTML = svg;
-            preElement.replaceWith(container);
-          })
-          .catch(err => {
-            console.error('Mermaid render failed:', err);
-            // Keep original code block on error
-          });
-      } catch (err) {
-        console.error('Mermaid rendering failed:', err);
-      }
-    }
-  }
-
-  reportBody.dataset.rendered = 'true';
 }
-
-// Run on initial load and after HTMX settles
-document.addEventListener('DOMContentLoaded', renderReportContent);
-document.body.addEventListener('htmx:afterSettle', renderReportContent);
-renderReportContent();
+document.addEventListener('DOMContentLoaded', renderMermaidDiagrams);
+document.body.addEventListener('htmx:afterSettle', renderMermaidDiagrams);
+renderMermaidDiagrams();
 
 // "Exporter dans Notion" button (event delegation — survives HTMX swaps)
 document.addEventListener('click', async (e) => {

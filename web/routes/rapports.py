@@ -1,10 +1,13 @@
 """Rapports HTML routes."""
 
+import re
 from datetime import datetime, timedelta
 from collections import OrderedDict
 from pathlib import Path
 
+import markdown as md
 from flask import Blueprint, redirect, render_template, request, url_for, Response, abort
+from markupsafe import Markup
 
 from ..storage import store
 from .html import get_sidebar_data, format_relative_date
@@ -197,16 +200,40 @@ def rapport_txt(report_id: int):
     return Response(report.content, mimetype="text/plain; charset=utf-8")
 
 
+def _render_report_content(raw_content: str) -> tuple[dict, Markup]:
+    """Parse YAML front-matter and render markdown to HTML server-side."""
+    front_matter = {}
+    content = raw_content
+
+    fm_match = re.match(r'^---\n(.*?)\n---\n', content, re.DOTALL)
+    if fm_match:
+        for line in fm_match.group(1).split('\n'):
+            idx = line.find(':')
+            if idx > 0:
+                key = line[:idx].strip().lower()
+                value = line[idx + 1:].strip()
+                front_matter[key] = value
+        content = content[fm_match.end():]
+
+    html = md.markdown(content, extensions=["fenced_code", "tables", "toc"])
+    html = html.replace('<table>', '<table class="table table-sm table-striped">')
+
+    return front_matter, Markup(html)
+
+
 def _render_rapports_page(report_id: int | None = None):
     """Render the rapports page, optionally showing a specific report."""
     data = get_sidebar_data()
 
     current_report = None
     current_report_tags = []
+    report_front_matter = {}
+    report_html = None
     if report_id:
         current_report = store.get_report(report_id)
         if current_report:
             current_report_tags = store.get_report_tags(report_id)
+            report_front_matter, report_html = _render_report_content(current_report.content)
 
     # Filter params
     tag_params = request.args.getlist("tag")
@@ -275,6 +302,8 @@ def _render_rapports_page(report_id: int | None = None):
         section="rapports",
         current_report=current_report,
         current_report_tags=current_report_tags,
+        report_front_matter=report_front_matter,
+        report_html=report_html,
         items=items,
         grouped_items=grouped_items if not current_report else {},
         all_tags=all_tags,
