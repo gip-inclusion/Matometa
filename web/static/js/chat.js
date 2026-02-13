@@ -1103,7 +1103,7 @@ function startStream() {
   });
 
   // Handle completion
-  eventSource.addEventListener('done', async () => {
+  eventSource.addEventListener('done', async (e) => {
     eventSource.close();
     eventSource = null;
     eventSourceConversationId = null;
@@ -1111,9 +1111,14 @@ function startStream() {
     hideLoading();
     removeProgressIndicator();
 
-    // After reconnect, events may have been stored to DB but not sent via SSE.
-    // Reload from DB to catch any missed events.
-    if (retryCount > 0 && currentConversationId) {
+    // Check if server says to reload (e.g., after wait_stream reconnection)
+    let shouldReload = retryCount > 0;
+    try {
+      const data = JSON.parse(e.data || '{}');
+      if (data.reload) shouldReload = true;
+    } catch {}
+
+    if (shouldReload && currentConversationId) {
       await loadConversation(currentConversationId, { autoStream: false });
     }
 

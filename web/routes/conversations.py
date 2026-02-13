@@ -429,6 +429,7 @@ def send_message(conv_id: str):
 
     is_first_message = len(conv.messages) == 0
     store.add_message(conv_id, "user", content)
+    store.update_conversation(conv_id, needs_response=True)
 
     if is_first_message:
         generate_conversation_title(content, conv_id)
@@ -464,24 +465,14 @@ def stream_conversation(conv_id: str):
     agent = get_agent_instance()
     user_email = getattr(g, "user_email", None)
 
-    # Check if last user message was already responded to
+    # Find the last user message content
     last_user_msg = None
-    has_response = False
-    last_msg_type = None
     for msg in conv.messages:
         if msg.type == "user":
             last_user_msg = msg.content
-            has_response = False
-        elif msg.type == "assistant" and last_user_msg is not None:
-            has_response = True
-        last_msg_type = msg.type
 
-    # If last message is a tool_use, the agent was interrupted mid-work
-    if last_msg_type == "tool_use":
-        has_response = False
-
-    # If already responded and agent not running, nothing to stream
-    if has_response and not agent.is_running(conv_id):
+    # If no response needed and agent not running, nothing to stream
+    if not conv.needs_response and not agent.is_running(conv_id):
         def done_stream():
             yield f"event: done\n"
             yield f"data: {json.dumps({'conversation_id': conv_id})}\n\n"
@@ -500,7 +491,7 @@ def stream_conversation(conv_id: str):
                 time.sleep(1)
                 if not agent.is_running(conv_id):
                     yield f"event: done\n"
-                    yield f"data: {json.dumps({'conversation_id': conv_id})}\n\n"
+                    yield f"data: {json.dumps({'conversation_id': conv_id, 'reload': True})}\n\n"
                     return
                 yield ": keepalive\n\n"
             yield f"event: error\n"
@@ -666,6 +657,7 @@ User request: """
                 logger.error(f"collect_events error for {conv_id}: {e}", exc_info=True)
                 error_holder[0] = e
             finally:
+                store.update_conversation(conv_id, needs_response=False)
                 event_queue.put(("done", None))
 
         # Submit to persistent event loop (avoids "Future attached to different loop" errors)

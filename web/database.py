@@ -15,14 +15,14 @@ from . import config
 USE_POSTGRES = config.DATABASE_URL is not None and config.DATABASE_URL.startswith(("postgres://", "postgresql://"))
 
 # Schema version - increment when adding migrations
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 if USE_POSTGRES:
     import psycopg2
     from psycopg2.extras import RealDictCursor
 
 # Valid column names for dynamic updates (security: prevents SQL injection)
-VALID_CONVERSATION_COLUMNS = frozenset({"title", "session_id", "user_id", "status", "pr_url", "updated_at", "pinned_at", "pinned_label"})
+VALID_CONVERSATION_COLUMNS = frozenset({"title", "session_id", "user_id", "status", "pr_url", "updated_at", "pinned_at", "pinned_label", "needs_response"})
 VALID_REPORT_COLUMNS = frozenset({"title", "website", "category", "tags", "original_query", "content", "updated_at"})
 
 
@@ -283,6 +283,8 @@ def init_db():
                     _migrate_to_v14(conn)
                 if current_version < 15:
                     _migrate_to_v15(conn)
+                if current_version < 16:
+                    _migrate_to_v16(conn)
 
             _set_schema_version(conn, SCHEMA_VERSION)
 
@@ -401,6 +403,13 @@ def _migrate_to_v15(conn: ConnectionWrapper):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cron_runs_slug_started ON cron_runs(app_slug, started_at DESC)")
 
 
+def _migrate_to_v16(conn: ConnectionWrapper):
+    """Migrate to v16: add needs_response column for robust stream completion tracking."""
+    columns = _get_table_columns(conn, "conversations")
+    if "needs_response" not in columns:
+        conn.execute("ALTER TABLE conversations ADD COLUMN needs_response INTEGER DEFAULT 0")
+
+
 def _create_schema(conn: ConnectionWrapper):
     """Create the complete database schema."""
     # Use SERIAL for PostgreSQL, INTEGER PRIMARY KEY AUTOINCREMENT for SQLite
@@ -429,6 +438,7 @@ def _create_schema(conn: ConnectionWrapper):
             usage_extra TEXT,
             pinned_at TEXT,
             pinned_label TEXT,
+            needs_response INTEGER DEFAULT 0,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
@@ -689,6 +699,7 @@ class Conversation:
     usage_extra: Optional[dict] = None  # web_search_requests, service_tier, ...
     pinned_at: Optional[datetime] = None  # NULL = not pinned; timestamp = pinned
     pinned_label: Optional[str] = None  # custom label shown in sidebar when pinned
+    needs_response: bool = False  # True when user sent a message and agent hasn't finished
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
 
@@ -860,6 +871,7 @@ class ConversationStore:
                 usage_extra=usage_extra,
                 pinned_at=datetime.fromisoformat(row["pinned_at"]) if "pinned_at" in row.keys() and row["pinned_at"] else None,
                 pinned_label=row["pinned_label"] if "pinned_label" in row.keys() else None,
+                needs_response=bool(row["needs_response"]) if "needs_response" in row.keys() and row["needs_response"] else False,
                 created_at=datetime.fromisoformat(row["created_at"]),
                 updated_at=datetime.fromisoformat(row["updated_at"]),
             )
@@ -1071,7 +1083,7 @@ class ConversationStore:
 
     def update_conversation(self, conv_id: str, **kwargs) -> bool:
         """Update conversation fields."""
-        allowed = {"title", "session_id", "user_id", "status", "pr_url"}
+        allowed = {"title", "session_id", "user_id", "status", "pr_url", "needs_response"}
         updates = {k: v for k, v in kwargs.items() if k in allowed}
         if not updates:
             return False
