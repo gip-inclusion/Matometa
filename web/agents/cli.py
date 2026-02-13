@@ -195,6 +195,15 @@ class CLIBackend(AgentBackend):
 
         finally:
             self._processes.pop(conversation_id, None)
+            if process.returncode is None:
+                try:
+                    process.send_signal(signal.SIGTERM)
+                    await asyncio.wait_for(process.wait(), timeout=5.0)
+                except (asyncio.TimeoutError, ProcessLookupError):
+                    try:
+                        process.kill()
+                    except ProcessLookupError:
+                        pass
             logger.info(f"Cleaned up conversation {conversation_id}")
 
     def _parse_event(self, event: dict) -> Optional[AgentMessage]:

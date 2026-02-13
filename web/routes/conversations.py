@@ -467,12 +467,18 @@ def stream_conversation(conv_id: str):
     # Check if last user message was already responded to
     last_user_msg = None
     has_response = False
+    last_msg_type = None
     for msg in conv.messages:
         if msg.type == "user":
             last_user_msg = msg.content
             has_response = False
         elif msg.type == "assistant" and last_user_msg is not None:
             has_response = True
+        last_msg_type = msg.type
+
+    # If last message is a tool_use, the agent was interrupted mid-work
+    if last_msg_type == "tool_use":
+        has_response = False
 
     # If already responded and agent not running, nothing to stream
     if has_response and not agent.is_running(conv_id):
@@ -657,6 +663,7 @@ User request: """
                     event_queue.put(("event", event))
 
             except Exception as e:
+                logger.error(f"collect_events error for {conv_id}: {e}", exc_info=True)
                 error_holder[0] = e
             finally:
                 event_queue.put(("done", None))

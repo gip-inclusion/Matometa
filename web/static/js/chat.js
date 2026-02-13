@@ -1515,6 +1515,29 @@ function createAndAppendAction(toolUse, toolResult) {
     attachPillListeners(clonedPill, idx);
   }
 
+  // Add footnote to current assistant block immediately (progressive)
+  if (lastAssistantBlock) {
+    let footnotes = lastAssistantBlock.querySelector('.action-footnotes');
+    if (!footnotes) {
+      footnotes = document.createElement('div');
+      footnotes.className = 'action-footnotes';
+      lastAssistantBlock.appendChild(footnotes);
+    }
+
+    const action = actionsMap.get(idx);
+    const footnote = document.createElement('span');
+    footnote.className = 'action-footnote';
+    footnote.dataset.actionIndex = idx;
+    footnote.innerHTML = `<i class="${action.icon}"></i>`;
+    footnote.title = typeof action.label === 'object' ? action.label.main : action.label;
+
+    footnote.addEventListener('click', () => { scrollToPillAndExpand(idx); });
+    footnote.addEventListener('mouseenter', () => { highlightPill(idx, true); });
+    footnote.addEventListener('mouseleave', () => { highlightPill(idx, false); });
+
+    footnotes.appendChild(footnote);
+  }
+
 }
 
 /**
@@ -1662,6 +1685,12 @@ function formatPillContent(toolUse, toolResult) {
  */
 function addFootnotesToLastAssistant() {
   if (!lastAssistantBlock || currentTurnActions.length === 0) return;
+
+  // Skip if footnotes were already added progressively during streaming
+  if (lastAssistantBlock.querySelector('.action-footnotes')) {
+    currentTurnActions = [];
+    return;
+  }
 
   const footnotes = document.createElement('div');
   footnotes.className = 'action-footnotes';
