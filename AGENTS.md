@@ -55,6 +55,7 @@ result = execute_query(
 | `$DATA_DIR/scripts/` | One-off query scripts (produced by agent) |
 | `$DATA_DIR/interactive/` | User-downloadable files (CSV exports, dashboards) |
 | `$DATA_DIR/matometa.db` | SQLite database (conversations, reports) |
+| `$DATA_DIR/notion_research.db` | Research corpus (interviews, verbatims, observations) |
 
 **Sync commands:**
 ```bash
@@ -210,6 +211,7 @@ For API reference: `knowledge/matomo/README.md`.
 Use the `Skill` tool to invoke these skills before querying:
 - `matomo_query` — Matomo API patterns, timeout handling, Python client usage
 - `metabase_query` — Metabase API patterns
+- `research_corpus` — Cite field evidence (interviews, verbatims, observations) in responses
 - `save_report` — Save reports to database
 - `wishlist` — Log capability requests, tool wishes, improvement ideas
 

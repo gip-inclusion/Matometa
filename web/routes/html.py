@@ -6,10 +6,16 @@ from collections import OrderedDict
 
 from flask import Blueprint, render_template, request, g, redirect, abort
 
+import logging
+import time
+
 from ..config import FEATURE_KNOWLEDGE_CHAT, ADMIN_USERS
 from ..storage import store
 from ..helpers import validate_knowledge_path, list_knowledge_files, list_staged_files
 from .conversations import get_agent_instance
+from .research import get_corpus_stats, search_corpus, find_similar_pages, get_page
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint("html", __name__)
 
@@ -378,6 +384,92 @@ def connaissances_file(file_path):
         active_files=active_files,
         active_conversations=active_conversations,
         feature_knowledge_chat=FEATURE_KNOWLEDGE_CHAT,
+        **data
+    )
+
+
+@bp.route("/recherche")
+def recherche():
+    """Recherche terrain - semantic search across the Notion research corpus."""
+    data = get_sidebar_data()
+    corpus_stats = get_corpus_stats()
+
+    q = request.args.get("q", "").strip()
+    similar_id = request.args.get("similar", type=int)
+    db_filter = set(request.args.getlist("db")) or {"entretiens"}
+    type_filter = set(request.args.getlist("type"))
+
+    results = None
+    similar_source = None
+    elapsed = None
+    error = None
+
+    if q:
+        try:
+            t0 = time.monotonic()
+            results, _ = search_corpus(q, limit=25, db_filter=db_filter, type_filter=type_filter)
+            elapsed = round(time.monotonic() - t0, 1)
+        except Exception as e:
+            logger.exception("Research search failed")
+            error = str(e)
+    elif similar_id:
+        try:
+            t0 = time.monotonic()
+            results, similar_source = find_similar_pages(similar_id, limit=20)
+            elapsed = round(time.monotonic() - t0, 1)
+        except Exception as e:
+            logger.exception("Research similar failed")
+            error = str(e)
+
+    return render_template(
+        "recherche.html",
+        section="recherche",
+        current_conv=None,
+        current_page=None,
+        corpus_stats=corpus_stats,
+        query=q,
+        results=results,
+        similar_id=similar_id,
+        similar_source=similar_source,
+        elapsed=elapsed,
+        error=error,
+        active_dbs=db_filter,
+        active_types=type_filter,
+        **data
+    )
+
+
+@bp.route("/recherche/<page_id>")
+def recherche_page(page_id):
+    """Recherche terrain - page detail view."""
+    data = get_sidebar_data()
+    page = get_page(page_id)
+    if not page:
+        return redirect("/recherche")
+
+    # Filter properties for display (skip internal ones)
+    skip_props = {"Type", "Date", "Date calculee", "Nom", "Name", "title"}
+    visible_props = {}
+    for k, v in (page.get("properties") or {}).items():
+        if k in skip_props or v is None or v == "":
+            continue
+        if isinstance(v, list):
+            if not v:
+                continue
+            # Skip UUID lists (relation IDs)
+            if all(isinstance(x, str) and len(x) == 36 and "-" in x for x in v):
+                continue
+        if isinstance(v, str) and len(v) == 36 and "-" in v:
+            continue
+        visible_props[k] = v
+
+    return render_template(
+        "recherche.html",
+        section="recherche",
+        current_conv=None,
+        current_page=page,
+        visible_props=visible_props,
+        corpus_stats=None,
         **data
     )
 

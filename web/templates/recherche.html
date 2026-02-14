@@ -1,0 +1,425 @@
+{% extends "base.html" %}
+
+{% block title_suffix %} - Terrain{% endblock %}
+
+{% block content %}
+<section class="section-content" id="section-recherche">
+  <!-- Sticky header -->
+  <div class="section-header">
+    <div class="container">
+      <div class="d-flex align-items-center gap-3">
+        {% if current_page %}
+        <a href="/recherche{% if query %}?q={{ query | urlencode }}{% for db in active_dbs %}&db={{ db | urlencode }}{% endfor %}{% for t in active_types %}&type={{ t | urlencode }}{% endfor %}{% endif %}"
+           class="btn btn-link p-0 me-2"
+           hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+          <i class="ri-arrow-left-line ri-xl"></i>
+        </a>
+        {% endif %}
+        <div class="me-auto">
+          <p class="text-muted mb-1 small">
+            {% if current_page %}
+              {{ current_page.database_name }}
+              {% if current_page.type %} · {{ current_page.type | regex_replace('^[\\U0001F000-\\U0001FFFF\\u2000-\\u2BFF❝❞\\s]+', '') }}{% endif %}
+              {% if current_page.date %} · {{ current_page.date[:10] }}{% endif %}
+            {% elif similar_id %}
+              Connaissance du terrain · résultats similaires
+            {% else %}
+              Connaissance du terrain
+            {% endif %}
+          </p>
+          <h1 class="mb-0">
+            <i class="ri-search-eye-line ri-2x text-primary me-2" style="vertical-align: middle;"></i>
+            {% if current_page %}{{ current_page.title }}{% elif similar_id %}Résultats similaires{% else %}Terrain{% endif %}
+          </h1>
+        </div>
+        <!-- Search bar in header -->
+        <form id="searchForm" action="/recherche" method="GET" class="recherche-header-search"
+              hx-get="/recherche" hx-target="#main" hx-select="#main > *"
+              hx-swap="innerHTML" hx-push-url="true">
+          <div class="recherche-search-input">
+            <i class="ri-search-line"></i>
+            <input type="text" name="q" value="{{ query or '' }}" placeholder="Recherche sémantique…" autocomplete="off">
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Body -->
+  <div class="section-body">
+    {% if current_page %}
+    {# ========== Page detail view ========== #}
+    <div class="container" style="padding: 1.5rem; height: 100%; overflow-y: auto;">
+
+      {% if current_page.url %}
+      <div class="mb-3">
+        <a href="{{ current_page.url }}" target="_blank" class="btn btn-sm btn-outline-secondary">
+          <i class="ri-notion-fill"></i> Ouvrir dans Notion
+        </a>
+      </div>
+      {% endif %}
+
+      {# Properties #}
+      {% if visible_props %}
+      <div class="page-section">
+        <h3>Propriétés</h3>
+        <dl class="row mb-0">
+          {% for k, v in visible_props.items() %}
+          <dt class="col-sm-4 mb-1">{{ k }}</dt>
+          <dd class="col-sm-8 mb-1">
+            {% if v is iterable and v is not string %}{{ v | join(', ') }}{% elif v is mapping %}{{ v.start or v }}{% else %}{{ v }}{% endif %}
+          </dd>
+          {% endfor %}
+        </dl>
+      </div>
+      {% endif %}
+
+      {# Relations #}
+      {% if current_page.relations %}
+      <div class="page-section">
+        <h3>Relations</h3>
+        {% for prop, targets in current_page.relations.items() %}
+        <div class="mb-2">
+          <strong class="small text-muted">{{ prop }}</strong>
+          <div>
+            {% for r in targets %}
+            <a class="relation-tag" href="/recherche/{{ r.page_id }}"
+               hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+              {{ r.title or r.page_id }}
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {# Content blocks #}
+      {% set text_blocks = current_page.blocks | selectattr('text') | list %}
+      {% if text_blocks %}
+      <div class="page-section">
+        <h3>Contenu</h3>
+        <div style="white-space: pre-wrap; line-height: 1.6; font-size: 0.9rem;">{% for b in text_blocks %}{{ b.text }}
+{% endfor %}</div>
+      </div>
+      {% endif %}
+
+      {# Similar pages #}
+      {% if current_page.chunk_ids %}
+      <div class="page-section">
+        <h3>Pages similaires</h3>
+        <a href="/recherche?similar={{ current_page.chunk_ids[0] }}" class="btn btn-sm btn-outline-primary"
+           hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+          <i class="ri-links-line"></i> Voir les pages similaires
+        </a>
+      </div>
+      {% endif %}
+
+    </div>
+
+    {% else %}
+    {# ========== Search / results list view ========== #}
+    <div id="filterContent" class="filter-list-container">
+
+      <!-- Filter sidebar (SSR) -->
+      <aside class="filter-sidebar">
+        {# Database filters #}
+        {% if corpus_stats %}
+        <div class="filter-section">
+          <div class="filter-section-title">Bases</div>
+          {% for db in corpus_stats.databases %}
+          <label class="filter-checkbox-item">
+            <input type="checkbox" {% if db.key in active_dbs %}checked{% endif %}
+                   onchange="toggleFilter();" data-filter-name="db" data-filter-value="{{ db.key }}">
+            <span class="filter-label">{{ db.name }}</span>
+            <span class="filter-count">{{ db.pages }}</span>
+          </label>
+          {% endfor %}
+        </div>
+
+        {# Type filters (shown when entretiens is active) #}
+        {% if corpus_stats.types %}
+        <div class="filter-section" id="type-filters" {% if 'entretiens' not in active_dbs %}style="display: none;"{% endif %}>
+          <div class="filter-section-title">Type</div>
+          {% for type, count in corpus_stats.types | dictsort(by='value', reverse=true) %}
+          <label class="filter-checkbox-item">
+            <input type="checkbox" {% if type in active_types %}checked{% endif %}
+                   onchange="toggleFilter();" data-filter-name="type" data-filter-value="{{ type }}">
+            <span class="filter-label">{{ type | regex_replace('^[\\U0001F000-\\U0001FFFF\\u2000-\\u2BFF❝❞\\s]+', '') }}</span>
+            <span class="filter-count">{{ count }}</span>
+          </label>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% endif %}
+      </aside>
+
+      <!-- Results -->
+      <div class="conversation-list-wrapper">
+        {% if error %}
+        <div class="conv-group-header">Erreur : {{ error }}</div>
+        {% elif results is not none %}
+        <div class="conv-group-header">
+          {{ results | length }} résultat{{ 's' if results | length != 1 }}
+          {% if elapsed %}({{ elapsed }}s){% endif %}
+          {% if similar_id %} similaires{% endif %}
+        </div>
+
+        <div class="conversation-list">
+          {% if results %}
+            {% for r in results %}
+            <a href="/recherche/{{ r.page_id }}" class="conv-list-item result-item"
+               hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+              <div class="conv-item-main">
+                <div class="conv-item-icon-wrapper">
+                  <i class="{{ r | result_icon }} conv-item-icon"></i>
+                </div>
+                <div class="conv-item-content">
+                  <div class="conv-item-row">
+                    <span class="conv-item-title">{{ r.page_title or 'Sans titre' }}</span>
+                    <div class="result-type-score">
+                      {% if r.page_type %}<span class="type-badge">{{ r.page_type | regex_replace('^[\\U0001F000-\\U0001FFFF\\u2000-\\u2BFF❝❞\\s]+', '') }}</span>{% endif %}
+                      <span class="result-score">{{ '%.3f' | format(r.score) }}</span>
+                      {% if r.page_url %}<span class="result-notion-link" onclick="event.preventDefault(); window.open('{{ r.page_url }}', '_blank');" title="Ouvrir dans Notion"><i class="ri-notion-fill"></i></span>{% endif %}
+                    </div>
+                  </div>
+                  {% if r.page_date %}<div class="result-date">{{ r.page_date[:10] }}</div>{% endif %}
+                  {% if r.body %}<div class="result-body">{{ r.body[:300] }}</div>{% endif %}
+                  <div class="result-actions">
+                    <span class="result-similar-link"
+                          onclick="event.preventDefault(); event.stopPropagation(); window.location.href='/recherche?similar={{ r.chunk_id }}';">
+                      <i class="ri-links-line"></i> Résultats similaires
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </a>
+            {% endfor %}
+          {% else %}
+            <div class="empty-state">
+              <p class="text-muted">Aucun résultat</p>
+            </div>
+          {% endif %}
+        </div>
+
+        {% else %}
+        {# Empty state — no search yet #}
+        <div class="conversation-list">
+          <div class="empty-state">
+            <i class="ri-search-eye-line ri-4x text-disabled mb-3"></i>
+            <p class="mb-0 text-muted">Recherche sémantique dans le corpus terrain</p>
+            <p class="small text-muted">Entretiens, observations, verbatims, hypothèses, conclusions</p>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+    </div>
+    {% endif %}
+  </div>
+
+<style>
+  /* Header search bar */
+  .recherche-header-search {
+    flex-shrink: 0;
+    width: 100%;
+    max-width: 480px;
+  }
+  .recherche-search-input {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1rem;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    background: white;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .recherche-search-input:focus-within {
+    border-color: var(--bs-primary);
+    box-shadow: 0 0 0 2px rgba(var(--bs-primary-rgb), 0.1);
+  }
+  .recherche-search-input i {
+    color: #6c757d;
+    font-size: 1.125rem;
+    flex-shrink: 0;
+  }
+  .recherche-search-input input {
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 1rem;
+    width: 100%;
+  }
+  .recherche-search-input input::placeholder {
+    color: #adb5bd;
+  }
+
+  /* Section grid: sticky header + scrollable body */
+  #section-recherche {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    height: 100vh;
+  }
+  #section-recherche .section-body {
+    max-width: none;
+    padding: 0;
+    overflow: hidden;
+  }
+  @media (max-width: 991.98px) {
+    #section-recherche {
+      height: calc(100vh - 56px);
+    }
+  }
+
+  /* Result items */
+  .result-item .conv-item-row { flex-wrap: wrap; }
+  .result-item .conv-item-title {
+    font-weight: 600;
+    color: #161616;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+  }
+  .result-item .result-body {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: #495057;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-top: 0.25rem;
+  }
+  .result-item .result-type-score {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+  .result-item .result-score {
+    font-size: 0.75rem;
+    color: #adb5bd;
+    font-variant-numeric: tabular-nums;
+  }
+  .result-item .result-date {
+    font-size: 0.8125rem;
+    color: #6c757d;
+  }
+  .result-item .result-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+  }
+  .result-item .result-actions .result-similar-link {
+    font-size: 0.75rem;
+    color: #6c757d;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+  }
+  .result-item:hover .result-actions .result-similar-link { opacity: 1; }
+  .result-item .result-actions .result-similar-link:hover { color: #006ADC; }
+  .result-item .result-notion-link {
+    opacity: 0;
+    transition: opacity 0.15s;
+    color: #adb5bd;
+    font-size: 0.875rem;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .result-item:hover .result-notion-link { opacity: 1; }
+  .result-item .result-notion-link:hover { color: #006ADC; }
+  .type-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.75rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 0.25rem;
+    background: #f0f4ff;
+    color: #006ADC;
+    white-space: nowrap;
+  }
+
+  /* Page detail */
+  .page-section { margin-bottom: 1.5rem; }
+  .page-section h3 {
+    font-size: 0.875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #6c757d;
+    border-bottom: 1px solid #dee2e6;
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .relation-tag {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 0.25rem;
+    background: #f0f4ff;
+    color: #006ADC;
+    font-size: 0.85rem;
+    margin: 0.15rem;
+    text-decoration: none;
+  }
+  .relation-tag:hover { background: #006ADC; color: white; }
+  .similar-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f0f0f0;
+    text-decoration: none;
+    color: inherit;
+    font-size: 0.85rem;
+  }
+  .similar-item:hover { background: #f8f9fa; margin: 0 -0.5rem; padding: 0.5rem; border-radius: 0.25rem; }
+  .similar-item:last-child { border-bottom: none; }
+</style>
+
+<script>
+// Filter interactions (minimal JS — just builds URL and triggers htmx reload)
+function toggleFilter() {
+  // Check entretiens visibility
+  const entretiensChecked = document.querySelector('input[data-filter-name="db"][data-filter-value="entretiens"]');
+  const typeSection = document.getElementById('type-filters');
+  if (typeSection) {
+    typeSection.style.display = (entretiensChecked && entretiensChecked.checked) ? '' : 'none';
+  }
+
+  // If there's a query, re-run search with new filters
+  const q = document.querySelector('input[name="q"]');
+  if (q && q.value.trim()) {
+    submitSearch();
+  }
+}
+
+function submitSearch() {
+  const url = buildFilterUrl();
+  history.pushState({}, '', url);
+  htmx.ajax('GET', url, {target: '#main', select: '#main > *', swap: 'innerHTML'});
+}
+
+function buildFilterUrl() {
+  const url = new URL(window.location.href);
+  url.search = '';
+
+  const q = document.querySelector('input[name="q"]');
+  if (q && q.value.trim()) url.searchParams.set('q', q.value.trim());
+
+  document.querySelectorAll('input[data-filter-name="db"]:checked').forEach(cb => {
+    url.searchParams.append('db', cb.dataset.filterValue);
+  });
+  document.querySelectorAll('input[data-filter-name="type"]:checked').forEach(cb => {
+    url.searchParams.append('type', cb.dataset.filterValue);
+  });
+
+  return url.toString();
+}
+</script>
+
+</section>
+{% endblock %}

@@ -117,5 +117,9 @@ USE_S3 = bool(S3_BUCKET and S3_ACCESS_KEY and S3_SECRET_KEY)
 # Additional directories the agent can access (beyond working directory)
 ADDITIONAL_DIRS = ["/tmp"]
 
+# Research corpus (Notion "Connaissance du terrain")
+NOTION_RESEARCH_DB = DATA_DIR / "notion_research.db"
+DEEPINFRA_API_KEY = os.getenv("DEEPINFRA_API_KEY")
+
 # Feature flags
 FEATURE_KNOWLEDGE_CHAT = False  # Chat from Connaissance tab disabled (requires GitHub PAT)

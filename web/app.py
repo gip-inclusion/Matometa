@@ -1,6 +1,7 @@
 """Matometa web application - Flask server with SSE streaming."""
 
 import logging
+import re
 
 from flask import Flask, g, request, send_from_directory, abort, redirect
 
@@ -15,6 +16,7 @@ from .routes import (
     query_bp,
     auth_bp,
     cron_bp,
+    research_bp,
 )
 
 # Configure logging (stdout only)
@@ -26,6 +28,46 @@ logger = logging.getLogger(__name__)
 
 # Create Flask app
 app = Flask(__name__)
+
+
+# =============================================================================
+# Custom Jinja filters
+# =============================================================================
+
+TYPE_ICONS = {
+    "❝ Verbatim": "ri-chat-quote-line",
+    "👀 Observation": "ri-eye-line",
+    "🗣 Entretien": "ri-mic-line",
+    "📂 Terrain": "ri-folder-open-line",
+    "🤼 Open Lab": "ri-group-line",
+    "🧮 Questionnaire / quanti": "ri-bar-chart-box-line",
+    "📂 Événement": "ri-calendar-event-line",
+    "🗒️ Note": "ri-sticky-note-line",
+    "🎤  Retex": "ri-presentation-line",
+    "📖 Lecture": "ri-book-read-line",
+}
+DB_ICONS = {
+    "entretiens": "ri-mic-line",
+    "thematiques": "ri-bookmark-line",
+    "segments": "ri-user-settings-line",
+    "profils": "ri-user-line",
+    "hypotheses": "ri-question-line",
+    "conclusions": "ri-check-double-line",
+}
+
+
+@app.template_filter("regex_replace")
+def regex_replace_filter(value, pattern, replacement=""):
+    return re.sub(pattern, replacement, str(value))
+
+
+@app.template_filter("result_icon")
+def result_icon_filter(result):
+    """Get the icon class for a search result dict."""
+    pt = result.get("page_type")
+    if pt and pt in TYPE_ICONS:
+        return TYPE_ICONS[pt]
+    return DB_ICONS.get(result.get("database_key"), "ri-file-text-line")
 
 
 # =============================================================================
@@ -58,6 +100,7 @@ app.register_blueprint(logs_bp)
 app.register_blueprint(query_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(cron_bp)
+app.register_blueprint(research_bp)
 
 
 # =============================================================================
