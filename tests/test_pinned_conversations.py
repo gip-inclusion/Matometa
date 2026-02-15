@@ -5,34 +5,6 @@ Pinning is stored in the database, not in environment variables.
 """
 
 import pytest
-import tempfile
-import os
-from pathlib import Path
-
-
-@pytest.fixture
-def app():
-    """Create a Flask test app with a temporary database."""
-    db_fd, db_path = tempfile.mkstemp()
-    db_path = Path(db_path)
-
-    from web import config, database
-    config.SQLITE_PATH = db_path
-
-    from web.app import app as flask_app
-
-    flask_app.config["TESTING"] = True
-    database.init_db()
-
-    yield flask_app
-
-    os.close(db_fd)
-    os.unlink(db_path)
-
-
-@pytest.fixture
-def client(app):
-    return app.test_client()
 
 
 @pytest.fixture

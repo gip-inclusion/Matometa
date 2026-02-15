@@ -5,39 +5,6 @@ or to branch their own conversation.
 """
 
 import pytest
-import tempfile
-import os
-
-
-@pytest.fixture
-def app():
-    """Create a Flask test app with a temporary database."""
-    from pathlib import Path
-
-    db_fd, db_path = tempfile.mkstemp()
-    db_path = Path(db_path)
-
-    # Must set before importing database module
-    from web import database
-    database.DB_PATH = db_path
-
-    from web.app import app as flask_app
-
-    flask_app.config["TESTING"] = True
-
-    # Force re-initialization of the database
-    database.init_db()
-
-    yield flask_app
-
-    os.close(db_fd)
-    os.unlink(db_path)
-
-
-@pytest.fixture
-def client(app):
-    """Create a test client."""
-    return app.test_client()
 
 
 @pytest.fixture

@@ -4,42 +4,6 @@ Tests the /rapports/ endpoints including the .txt export feature.
 """
 
 import pytest
-import tempfile
-import os
-
-
-@pytest.fixture
-def app():
-    """Create a Flask test app with an in-memory database."""
-    from pathlib import Path
-    import importlib
-
-    db_fd, db_path = tempfile.mkstemp()
-
-    from web import config
-    original_path = config.SQLITE_PATH
-    config.SQLITE_PATH = Path(db_path)
-
-    from web import database
-    importlib.reload(database)
-
-    from web import storage
-    importlib.reload(storage)
-
-    from web.app import app as flask_app
-    flask_app.config["TESTING"] = True
-
-    yield flask_app
-
-    config.SQLITE_PATH = original_path
-    os.close(db_fd)
-    os.unlink(db_path)
-
-
-@pytest.fixture
-def client(app):
-    """Create a test client."""
-    return app.test_client()
 
 
 @pytest.fixture

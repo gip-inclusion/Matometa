@@ -4,7 +4,11 @@ Pytest configuration for Matometa tests.
 Configure test parameters here or via environment variables.
 """
 
+import importlib
 import os
+import tempfile
+from pathlib import Path
+
 import pytest
 
 # Load .env file for integration tests
@@ -51,3 +55,34 @@ def dimension_id():
 def segment():
     """Test segment filter."""
     return MATOMO_TEST_SEGMENT
+
+
+@pytest.fixture
+def app():
+    """Create a Flask test app with a temporary database."""
+    db_fd, db_path = tempfile.mkstemp()
+
+    from web import config
+    original_path = config.SQLITE_PATH
+    config.SQLITE_PATH = Path(db_path)
+
+    from web import database
+    importlib.reload(database)
+
+    from web import storage
+    importlib.reload(storage)
+
+    from web.app import app as flask_app
+    flask_app.config["TESTING"] = True
+
+    yield flask_app
+
+    config.SQLITE_PATH = original_path
+    os.close(db_fd)
+    os.unlink(db_path)
+
+
+@pytest.fixture
+def client(app):
+    """Create a test client."""
+    return app.test_client()

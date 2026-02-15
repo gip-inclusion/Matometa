@@ -9,49 +9,6 @@ When accessing a shared conversation:
 """
 
 import pytest
-import tempfile
-import os
-
-from flask import g
-
-
-@pytest.fixture
-def app():
-    """Create a Flask test app with an in-memory database."""
-    from pathlib import Path
-    import importlib
-
-    # Set up temp database
-    db_fd, db_path = tempfile.mkstemp()
-
-    # Patch config.SQLITE_PATH before importing database module
-    from web import config
-    original_path = config.SQLITE_PATH
-    config.SQLITE_PATH = Path(db_path)
-
-    # Reload database module to pick up new path and reinitialize
-    from web import database
-    importlib.reload(database)
-
-    # Reload storage to get new store singleton
-    from web import storage
-    importlib.reload(storage)
-
-    from web.app import app as flask_app
-    flask_app.config["TESTING"] = True
-
-    yield flask_app
-
-    # Cleanup
-    config.SQLITE_PATH = original_path
-    os.close(db_fd)
-    os.unlink(db_path)
-
-
-@pytest.fixture
-def client(app):
-    """Create a test client."""
-    return app.test_client()
 
 
 @pytest.fixture
