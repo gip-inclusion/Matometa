@@ -206,14 +206,17 @@ Mapping approximatif entre les segments recherche et les types d'usagers Matomo.
 |-------------------|------------------|-----------------|
 | Accompagnateur opérationnel | Emplois, RDV-Insertion, Dora | `prescriber` |
 | Acheteur | Le Marché | (anonymous — pas de UserKind) |
-| Coordinateur administratif | Emplois | `employer`, `prescriber` |
+| Coordinateur administratif | Emplois, RDV-Insertion, Dora | `employer`, `prescriber` |
 | Entreprises | Emplois, Le Marché | `employer` |
-| Gestionnaire de structure | Emplois | `employer` |
-| Partenaire | La Communauté | (anonymous) |
+| Gestionnaire de structure | Emplois, Dora, (RDV-Insertion) | `employer` |
+| Partenaire | (transversal) | — |
 | Pilote institutionnel | Emplois, Pilotage | `labor_inspector` |
 | Usager | Emplois, RDV-Insertion, Mon Recap | `job_seeker` |
 
 Notes :
+- Coordinateur administratif = rôle clé sur RDV-Insertion (agents « admin » du CD) et sur Dora (tableau de bord CD)
+- Gestionnaire de structure = sur Dora les admins/éditeurs qui publient structures et services
+- Partenaire = segment général (têtes de réseau, éditeurs logiciels), pas lié à un site spécifique
 - Un même profil peut apparaître dans plusieurs segments (ex. "Directeur d'agence" est à la fois Coordinateur administratif et Gestionnaire de structure)
 - `anonymous` sur Emplois = ~60% du trafic, mélange de candidats non connectés et visiteurs ponctuels
 - Dora et Le Marché n'ont pas de dimension UserKind
