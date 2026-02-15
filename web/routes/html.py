@@ -152,7 +152,7 @@ def index():
             p.title = p.label or app["title"]
             p.icon = "ri-window-fill"
             p.formatted_date = format_relative_date(app.get("updated")) if app.get("updated") else ""
-            p.user_id = None
+            p.user_id = ", ".join(app.get("authors", [])) or None
             p.is_external = True
         pinned.append(p)
 
@@ -297,6 +297,7 @@ def rechercher():
                 "formatted_date": format_relative_date(report.updated_at),
                 "search": " ".join(filter(None, [
                     report.title.lower(),
+                    (report.user_id or "").lower(),
                     (report.website or "").lower(),
                     (report.category or "").lower(),
                     " ".join(t.label.lower() for t in tags),
@@ -323,6 +324,7 @@ def rechercher():
                 "search": " ".join(filter(None, [
                     app["title"].lower(),
                     (app.get("description") or "").lower(),
+                    " ".join(a.lower() for a in app.get("authors", [])),
                     " ".join(t.lower() for t in app.get("tags", [])),
                 ])),
             })

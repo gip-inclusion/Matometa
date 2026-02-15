@@ -270,6 +270,16 @@
                     <span class="conv-item-date">{{ item.formatted_date }}</span>
                   </div>
                   <div class="conv-item-author-row">
+                    {% if report.user_id %}
+                    <span class="conv-item-author">{{ report.user_id.split('@')[0] }}</span>
+                    {% endif %}
+                    {% if report.source_conversation_id %}
+                    <a href="/explorations/{{ report.source_conversation_id }}" class="conv-item-action-btn"
+                       onclick="event.stopPropagation();"
+                       hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+                      <i class="ri-chat-3-line"></i> Conversation
+                    </a>
+                    {% endif %}
                     {% if is_admin %}
                     {% if ('report', report.id|string) in pinned_ids %}
                     <button class="conv-item-pin-btn" title="Désépingler"
@@ -312,7 +322,15 @@
                     <span class="conv-item-date">{{ item.formatted_date }}</span>
                   </div>
                   <div class="conv-item-author-row">
+                    {% if app.authors %}<span class="conv-item-author">{{ app.authors|join(', ') }}</span>{% endif %}
                     {% if app.description %}<span class="conv-item-description">{{ app.description }}</span>{% endif %}
+                    {% if app.conversation_id %}
+                    <a href="/explorations/{{ app.conversation_id }}" class="conv-item-action-btn"
+                       onclick="event.stopPropagation();"
+                       hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+                      <i class="ri-chat-3-line"></i> Conversation
+                    </a>
+                    {% endif %}
                     {% if is_admin %}
                     {% if ('app', app.slug) in pinned_ids %}
                     <button class="conv-item-pin-btn" title="Désépingler"
