@@ -216,7 +216,7 @@ Mapping approximatif entre les segments recherche et les types d'usagers Matomo.
 Notes :
 - Coordinateur administratif = rôle clé sur RDV-Insertion (agents « admin » du CD) et sur Dora (tableau de bord CD)
 - Gestionnaire de structure = sur Dora les admins/éditeurs qui publient structures et services
-- Partenaire = segment général (têtes de réseau, éditeurs logiciels), pas lié à un site spécifique
+- Partenaire = segment général (têtes de réseau, éditeurs logiciels) ; les éditeurs de logiciels correspondent aussi aux utilisateurs API / fournisseurs de données de data·inclusion
 - Un même profil peut apparaître dans plusieurs segments (ex. "Directeur d'agence" est à la fois Coordinateur administratif et Gestionnaire de structure)
 - `anonymous` sur Emplois = ~60% du trafic, mélange de candidats non connectés et visiteurs ponctuels
 - Dora et Le Marché n'ont pas de dimension UserKind
