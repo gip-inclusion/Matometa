@@ -32,8 +32,13 @@
           {% for task in tasks %}
           <tr id="cron-row-{{ task.slug }}">
             <td>
+              {% if task.tier == 'app' %}
               <a href="/interactive/{{ task.slug }}/" target="_blank">{{ task.title }}</a>
+              {% else %}
+              {{ task.title }}
+              {% endif %}
               <span class="text-muted small ms-1">{{ task.slug }}</span>
+              {% if task.schedule != 'daily' %}<span class="badge bg-light text-muted ms-1">{{ task.schedule }}</span>{% endif %}
             </td>
             <td>
               {% if not task.enabled %}

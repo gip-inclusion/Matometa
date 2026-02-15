@@ -10,13 +10,15 @@ import pytest
 
 from web import config
 from web.cron import (
-    _parse_cron_enabled,
+    _parse_frontmatter,
+    _is_enabled,
     discover_cron_tasks,
+    find_task,
     run_cron_task,
     get_last_runs,
     get_app_runs,
     set_cron_enabled,
-    SCRIPT_TIMEOUT,
+    DEFAULT_TIMEOUT,
 )
 from web.database import get_db, init_db
 
@@ -26,7 +28,10 @@ def interactive_dir(tmp_path, monkeypatch):
     """Set up a temporary interactive directory with test apps."""
     d = tmp_path / "interactive"
     d.mkdir()
+    cron_dir = tmp_path / "cron"
+    cron_dir.mkdir()
     monkeypatch.setattr(config, "INTERACTIVE_DIR", d)
+    monkeypatch.setattr(config, "CRON_DIR", cron_dir)
     monkeypatch.setattr(config, "BASE_DIR", tmp_path)
     return d
 
@@ -63,39 +68,51 @@ def _create_app(interactive_dir, slug, cron_script=None, app_md=None):
 # Discovery tests
 # =============================================================================
 
-class TestParseCronEnabled:
-    def test_no_app_md(self, tmp_path):
-        assert _parse_cron_enabled(tmp_path / "nonexistent" / "APP.md") is True
+class TestParseFrontmatter:
+    def test_no_file(self, tmp_path):
+        assert _parse_frontmatter(tmp_path / "nonexistent" / "APP.md") == {}
 
     def test_no_cron_field(self, tmp_path):
         p = tmp_path / "APP.md"
         p.write_text("---\ntitle: Test\n---\n")
-        assert _parse_cron_enabled(p) is True
+        assert _is_enabled(_parse_frontmatter(p)) is True
 
     def test_cron_true(self, tmp_path):
         p = tmp_path / "APP.md"
         p.write_text("---\ntitle: Test\ncron: true\n---\n")
-        assert _parse_cron_enabled(p) is True
+        assert _is_enabled(_parse_frontmatter(p)) is True
 
     def test_cron_false(self, tmp_path):
         p = tmp_path / "APP.md"
         p.write_text("---\ntitle: Test\ncron: false\n---\n")
-        assert _parse_cron_enabled(p) is False
+        assert _is_enabled(_parse_frontmatter(p)) is False
 
     def test_cron_no(self, tmp_path):
         p = tmp_path / "APP.md"
         p.write_text("---\ntitle: Test\ncron: no\n---\n")
-        assert _parse_cron_enabled(p) is False
+        assert _is_enabled(_parse_frontmatter(p)) is False
 
     def test_cron_off(self, tmp_path):
         p = tmp_path / "APP.md"
         p.write_text("---\ntitle: Test\ncron: off\n---\n")
-        assert _parse_cron_enabled(p) is False
+        assert _is_enabled(_parse_frontmatter(p)) is False
 
     def test_no_frontmatter(self, tmp_path):
         p = tmp_path / "APP.md"
         p.write_text("Just some text")
-        assert _parse_cron_enabled(p) is True
+        assert _is_enabled(_parse_frontmatter(p)) is True
+
+    def test_timeout_field(self, tmp_path):
+        p = tmp_path / "CRON.md"
+        p.write_text("---\ntimeout: 1200\n---\n")
+        from web.cron import _get_timeout
+        assert _get_timeout(_parse_frontmatter(p)) == 1200
+
+    def test_schedule_field(self, tmp_path):
+        p = tmp_path / "CRON.md"
+        p.write_text("---\nschedule: weekly\n---\n")
+        from web.cron import _get_schedule
+        assert _get_schedule(_parse_frontmatter(p)) == "weekly"
 
 
 class TestDiscoverCronTasks:
@@ -143,7 +160,30 @@ class TestDiscoverCronTasks:
 
     def test_nonexistent_dir(self, monkeypatch):
         monkeypatch.setattr(config, "INTERACTIVE_DIR", Path("/nonexistent"))
+        monkeypatch.setattr(config, "CRON_DIR", Path("/nonexistent"))
         assert discover_cron_tasks() == []
+
+    def test_system_tasks_come_first(self, interactive_dir, tmp_path, monkeypatch):
+        """System tasks (cron/) are listed before app tasks (interactive/)."""
+        cron_dir = tmp_path / "cron"
+        monkeypatch.setattr(config, "CRON_DIR", cron_dir)
+
+        # Create a system task
+        sys_dir = cron_dir / "sys-task"
+        sys_dir.mkdir(parents=True)
+        (sys_dir / "cron.py").write_text("pass")
+        (sys_dir / "CRON.md").write_text("---\ntitle: System Task\nschedule: weekly\n---\n")
+
+        # Create an app task
+        _create_app(interactive_dir, "app-task", cron_script="pass")
+
+        tasks = discover_cron_tasks()
+        assert len(tasks) == 2
+        assert tasks[0]["slug"] == "sys-task"
+        assert tasks[0]["tier"] == "system"
+        assert tasks[0]["schedule"] == "weekly"
+        assert tasks[1]["slug"] == "app-task"
+        assert tasks[1]["tier"] == "app"
 
 
 # =============================================================================
@@ -191,12 +231,12 @@ class TestRunCronTask:
         assert data_file.exists()
         assert json.loads(data_file.read_text())["updated"] is True
 
-    def test_timeout(self, interactive_dir, db_setup, monkeypatch):
-        monkeypatch.setattr("web.cron.SCRIPT_TIMEOUT", 1)
+    def test_timeout(self, interactive_dir, db_setup):
         _create_app(
             interactive_dir,
             "slow-app",
             cron_script="import time; time.sleep(10)",
+            app_md="---\ntitle: Slow\ntimeout: 1\n---\n",
         )
         result = run_cron_task("slow-app")
         assert result["status"] == "timeout"

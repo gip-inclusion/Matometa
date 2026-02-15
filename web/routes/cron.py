@@ -2,8 +2,7 @@
 
 from flask import Blueprint, render_template, request, jsonify, abort
 
-from ..cron import discover_cron_tasks, run_cron_task, get_last_runs, get_app_runs, set_cron_enabled
-from .. import config
+from ..cron import discover_cron_tasks, find_task, run_cron_task, get_last_runs, get_app_runs, set_cron_enabled
 from .html import get_sidebar_data, format_relative_date
 
 bp = Blueprint("cron", __name__)
@@ -11,7 +10,7 @@ bp = Blueprint("cron", __name__)
 
 @bp.route("/cron")
 def cron_page():
-    """Cron task dashboard — shows all cron-eligible apps with status."""
+    """Cron task dashboard — shows all cron-eligible tasks with status."""
     data = get_sidebar_data()
     tasks = discover_cron_tasks()
     last_runs = get_last_runs(limit_per_app=1)
@@ -38,9 +37,8 @@ def cron_page():
 @bp.route("/api/cron/<slug>/run", methods=["POST"])
 def run_task(slug):
     """Trigger a manual cron run."""
-    # Verify the app exists
-    cron_script = config.INTERACTIVE_DIR / slug / "cron.py"
-    if not cron_script.exists():
+    task = find_task(slug)
+    if not task:
         abort(404)
 
     result = run_cron_task(slug, trigger="manual")
@@ -49,7 +47,7 @@ def run_task(slug):
 
 @bp.route("/api/cron/<slug>/toggle", methods=["POST"])
 def toggle_task(slug):
-    """Enable or disable a cron task by updating APP.md."""
+    """Enable or disable a cron task by updating its metadata file."""
     data = request.get_json(silent=True) or {}
     enabled = data.get("enabled", True)
 
@@ -62,16 +60,17 @@ def toggle_task(slug):
 @bp.route("/api/cron/<slug>/script")
 def view_script(slug):
     """Return the cron.py source code for auditing."""
-    cron_script = config.INTERACTIVE_DIR / slug / "cron.py"
-    if not cron_script.exists():
+    task = find_task(slug)
+    if not task:
         abort(404)
 
-    return cron_script.read_text(), 200, {"Content-Type": "text/plain; charset=utf-8"}
+    from pathlib import Path
+    return Path(task["cron_path"]).read_text(), 200, {"Content-Type": "text/plain; charset=utf-8"}
 
 
 @bp.route("/api/cron/<slug>/logs")
 def task_logs(slug):
-    """Return recent runs for an app as JSON."""
+    """Return recent runs for a task as JSON."""
     limit = request.args.get("limit", 20, type=int)
     runs = get_app_runs(slug, limit=limit)
     return jsonify(runs)

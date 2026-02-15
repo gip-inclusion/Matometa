@@ -86,6 +86,9 @@ SCRIPTS_DIR = DATA_DIR / "scripts"
 # Used for local storage fallback when S3 is not configured
 INTERACTIVE_DIR = DATA_DIR / "interactive"
 
+# System cron tasks (checked into repo, always available)
+CRON_DIR = BASE_DIR / "cron"
+
 # Common shared assets (CSS/JS frameworks used by interactive apps)
 # Always relative to BASE_DIR (framework code, not per-environment data)
 COMMON_DIR = BASE_DIR / "data" / "common"
