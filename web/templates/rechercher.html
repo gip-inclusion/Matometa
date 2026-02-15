@@ -1,0 +1,488 @@
+{% extends "base.html" %}
+
+{% block title_suffix %} - Rechercher{% endblock %}
+
+{% block content %}
+<section class="section-content" id="section-rechercher">
+  <!-- Sticky section header with search -->
+  <div class="section-header">
+    <div class="container">
+      <div class="d-flex align-items-center gap-3">
+        <div class="me-auto">
+          <h1 class="mb-0">
+            <i class="ri-search-line ri-2x text-primary me-2" style="vertical-align: middle;"></i>
+            Rechercher
+          </h1>
+        </div>
+        <div class="accueil-search-wrapper">
+          <div class="accueil-search-input">
+            <i class="ri-search-line"></i>
+            <input type="text" id="rechercherSearchInput"
+                   placeholder="Rechercher..."
+                   autocomplete="off" value="{{ q }}"
+                   oninput="filterByText(this.value)">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main content area -->
+  <div class="section-body">
+    <div id="filterContent" class="filter-list-container">
+    <!-- Filter sidebar -->
+    <aside class="filter-sidebar filter-sidebar-sticky-reset" id="filterSidebar">
+      <!-- Mobile filter bar -->
+      <div class="filter-bar-mobile">
+        <div class="filter-bar-mobile-row">
+          <button class="filter-toggle {% if not show %}active{% endif %}"
+                  onclick="setShow('')" data-show="">
+            Tout
+          </button>
+          <button class="filter-toggle {% if show == 'convos' %}active{% endif %}"
+                  onclick="setShow('convos')" data-show="convos">
+            <i class="ri-chat-3-line"></i> Conversations
+          </button>
+          <button class="filter-toggle {% if show == 'mine' %}active{% endif %}"
+                  onclick="setShow('mine')" data-show="mine">
+            <i class="ri-user-line"></i> Mes convos
+          </button>
+          <button class="filter-toggle {% if show == 'reports' %}active{% endif %}"
+                  onclick="setShow('reports')" data-show="reports">
+            <i class="ri-file-text-line"></i> Rapports
+          </button>
+          <button class="filter-toggle {% if show == 'apps' %}active{% endif %}"
+                  onclick="setShow('apps')" data-show="apps">
+            <i class="ri-window-fill"></i> Applis
+          </button>
+        </div>
+
+        <div class="filter-bar-mobile-row">
+          {% if all_tags.get('product') %}
+          {% set product_count = active_tags|select('in', all_tags.get('product', [])|map(attribute='name')|list)|list|length %}
+          <div class="filter-dropdown">
+            <button class="filter-dropdown-btn {% if product_count %}active{% endif %}" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+              Produit{% if product_count %} <span class="filter-count">{{ product_count }}</span>{% endif %} <i class="ri-arrow-down-s-line"></i>
+            </button>
+            <div class="dropdown-menu filter-dropdown-menu">
+              {% for tag in all_tags.get('product', []) %}
+              <label class="filter-checkbox-item" data-tag="{{ tag.name }}">
+                <input type="checkbox" {% if tag.name in active_tags %}checked{% endif %}
+                       onchange="toggleFilter('{{ tag.name }}', this)">
+                {{ tag.label }}
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
+          {% if all_tags.get('theme') %}
+          {% set theme_count = active_tags|select('in', all_tags.get('theme', [])|map(attribute='name')|list)|list|length %}
+          <div class="filter-dropdown">
+            <button class="filter-dropdown-btn {% if theme_count %}active{% endif %}" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+              Theme{% if theme_count %} <span class="filter-count">{{ theme_count }}</span>{% endif %} <i class="ri-arrow-down-s-line"></i>
+            </button>
+            <div class="dropdown-menu filter-dropdown-menu">
+              {% for tag in all_tags.get('theme', []) %}
+              <label class="filter-checkbox-item" data-tag="{{ tag.name }}">
+                <input type="checkbox" {% if tag.name in active_tags %}checked{% endif %}
+                       onchange="toggleFilter('{{ tag.name }}', this)">
+                {{ tag.label }}
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
+          {% if active_tags or show %}
+          <button class="filter-reset" onclick="resetFilters()">
+            <i class="ri-close-line"></i> Effacer
+          </button>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Desktop type selector -->
+      <div class="filter-section">
+        <div class="filter-section-title">Contenu</div>
+        <div class="rechercher-type-list">
+          <button class="rechercher-type-btn {% if not show %}active{% endif %}"
+                  onclick="setShow('')" data-show="">
+            <i class="ri-apps-line"></i> Tout
+          </button>
+          <button class="rechercher-type-btn {% if show == 'convos' %}active{% endif %}"
+                  onclick="setShow('convos')" data-show="convos">
+            <i class="ri-chat-3-line"></i> Conversations
+          </button>
+          <button class="rechercher-type-btn {% if show == 'mine' %}active{% endif %}"
+                  onclick="setShow('mine')" data-show="mine">
+            <i class="ri-user-line"></i> Mes conversations
+          </button>
+          <button class="rechercher-type-btn {% if show == 'reports' %}active{% endif %}"
+                  onclick="setShow('reports')" data-show="reports">
+            <i class="ri-file-text-line"></i> Rapports
+          </button>
+          <button class="rechercher-type-btn {% if show == 'apps' %}active{% endif %}"
+                  onclick="setShow('apps')" data-show="apps">
+            <i class="ri-window-fill"></i> Applications
+          </button>
+        </div>
+      </div>
+
+      {% if all_tags.get('product') and all_tags.get('product')|length > 0 %}
+      <div class="filter-section">
+        <div class="filter-section-title">Produit</div>
+        {% for tag in all_tags.get('product', []) %}
+        <label class="filter-checkbox-item" data-tag="{{ tag.name }}">
+          <input type="checkbox" {% if tag.name in active_tags %}checked{% endif %}
+                 onchange="toggleFilter('{{ tag.name }}', this)">
+          <span class="filter-label">{{ tag.label }}</span>
+          {% if tag.count is defined and tag.count is not none %}
+          <span class="filter-count">{{ tag.count }}</span>
+          {% endif %}
+        </label>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if all_tags.get('theme') and all_tags.get('theme')|length > 0 %}
+      <div class="filter-section">
+        <div class="filter-section-title">Theme</div>
+        {% for tag in all_tags.get('theme', []) %}
+        <label class="filter-checkbox-item" data-tag="{{ tag.name }}">
+          <input type="checkbox" {% if tag.name in active_tags %}checked{% endif %}
+                 onchange="toggleFilter('{{ tag.name }}', this)">
+          <span class="filter-label">{{ tag.label }}</span>
+          {% if tag.count is defined and tag.count is not none %}
+          <span class="filter-count">{{ tag.count }}</span>
+          {% endif %}
+        </label>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if all_tags.get('type_demande') and all_tags.get('type_demande')|length > 0 %}
+      <div class="filter-section">
+        <div class="filter-section-title">Type</div>
+        {% for tag in all_tags.get('type_demande', []) %}
+        <label class="filter-checkbox-item" data-tag="{{ tag.name }}">
+          <input type="checkbox" {% if tag.name in active_tags %}checked{% endif %}
+                 onchange="toggleFilter('{{ tag.name }}', this)">
+          <span class="filter-label">{{ tag.label }}</span>
+          {% if tag.count is defined and tag.count is not none %}
+          <span class="filter-count">{{ tag.count }}</span>
+          {% endif %}
+        </label>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if active_tags or show %}
+      <button class="filter-reset mt-3" onclick="resetFilters()">
+        <i class="ri-close-line"></i> Effacer les filtres
+      </button>
+      {% endif %}
+    </aside>
+
+    <div class="conversation-list-wrapper">
+    <div class="conversation-list" id="searchResultsList">
+      {% if grouped_items %}
+        {% for group_name, group_items in grouped_items.items() %}
+        <div class="conv-group">
+          <div class="conv-group-header">{{ group_name }}</div>
+          <div class="conv-group-items">
+            {% for item in group_items %}
+
+            {% if item.type == 'conversation' %}
+            {% set conv = item.conv %}
+            <a href="/explorations/{{ conv.id }}"
+               class="conv-list-item filterable-card"
+               id="conv-{{ conv.id }}"
+               hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true"
+               data-search="{{ item.search }}">
+              <div class="conv-item-main">
+                <div class="conv-item-icon-wrapper">
+                  {% if conv.is_running %}
+                  <i class="ri-loader-4-line ri-spin conv-item-spinner"></i>
+                  {% endif %}
+                  <i class="{{ item.icon }} conv-item-icon"></i>
+                </div>
+                <div class="conv-item-content">
+                  <div class="conv-item-row">
+                    <span class="conv-item-title">{{ conv.title or 'Sans titre' }}</span>
+                    <span class="conv-item-date">{{ item.formatted_date }}</span>
+                  </div>
+                  <div class="conv-item-author-row">
+                    {% if conv.user_id %}
+                    <span class="conv-item-author">
+                      {% if conv.is_mine %}<i class="ri-user-5-fill conv-item-author-icon"></i>{% endif %}
+                      {{ conv.user_id.split('@')[0] }}
+                    </span>
+                    {% endif %}
+                    {% if is_admin %}
+                    {% if ('conversation', conv.id) in pinned_ids %}
+                    <button class="conv-item-pin-btn" title="Désépingler"
+                            onclick="event.preventDefault(); event.stopPropagation(); togglePin('/api/conversations/{{ conv.id }}/pin', 'DELETE')">
+                      <i class="ri-pushpin-fill"></i>
+                    </button>
+                    {% else %}
+                    <button class="conv-item-action-btn" title="Épingler"
+                            onclick="event.preventDefault(); event.stopPropagation(); togglePin('/api/conversations/{{ conv.id }}/pin', 'POST')">
+                      <i class="ri-pushpin-line"></i>
+                    </button>
+                    {% endif %}
+                    {% endif %}
+                    {% if is_admin or conv.user_id == user_email %}
+                    <button class="conv-item-delete-btn" title="Supprimer"
+                            onclick="event.preventDefault(); event.stopPropagation();"
+                            hx-delete="/api/conversations/{{ conv.id }}"
+                            hx-target="#conv-{{ conv.id }}"
+                            hx-swap="outerHTML"
+                            hx-confirm="Supprimer cette conversation ?">
+                      <i class="ri-delete-bin-line"></i>
+                    </button>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            </a>
+
+            {% elif item.type == 'report' %}
+            {% set report = item.report %}
+            <a href="/rapports/{{ report.id }}"
+               class="conv-list-item filterable-card"
+               id="report-{{ report.id }}"
+               hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true"
+               data-search="{{ item.search }}">
+              <div class="conv-item-main">
+                <div class="conv-item-icon-wrapper">
+                  <i class="{{ item.icon }} conv-item-icon"></i>
+                </div>
+                <div class="conv-item-content">
+                  <div class="conv-item-row">
+                    <span class="conv-item-title">{{ report.title }}</span>
+                    {% for tag in report.tag_objects if tag.type == 'product' %}
+                    <span class="badge badge-tag badge-product">{{ tag.label }}</span>
+                    {% endfor %}
+                    {% if not report.tag_objects|selectattr('type', 'eq', 'product')|list and report.website %}
+                    <span class="badge badge-tag badge-product">{{ report.website }}</span>
+                    {% endif %}
+                    <span class="conv-item-date">{{ item.formatted_date }}</span>
+                  </div>
+                  <div class="conv-item-author-row">
+                    {% if is_admin %}
+                    {% if ('report', report.id|string) in pinned_ids %}
+                    <button class="conv-item-pin-btn" title="Désépingler"
+                            onclick="event.preventDefault(); event.stopPropagation(); togglePin('/api/reports/{{ report.id }}/pin', 'DELETE')">
+                      <i class="ri-pushpin-fill"></i>
+                    </button>
+                    {% else %}
+                    <button class="conv-item-action-btn" title="Épingler"
+                            onclick="event.preventDefault(); event.stopPropagation(); togglePin('/api/reports/{{ report.id }}/pin', 'POST')">
+                      <i class="ri-pushpin-line"></i>
+                    </button>
+                    {% endif %}
+                    {% endif %}
+                    <button class="conv-item-action-btn" title="Archiver"
+                            onclick="event.preventDefault(); event.stopPropagation();"
+                            hx-post="/api/reports/{{ report.id }}/archive"
+                            hx-target="#report-{{ report.id }}"
+                            hx-swap="outerHTML"
+                            hx-confirm="Archiver ce rapport ?">
+                      <i class="ri-archive-line"></i> Archiver
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </a>
+
+            {% elif item.type == 'app' %}
+            {% set app = item.app %}
+            <a href="{{ app.url }}" target="_blank"
+               class="conv-list-item conv-list-item-app filterable-card"
+               data-search="{{ item.search }}">
+              <div class="conv-item-main">
+                <div class="conv-item-icon-wrapper">
+                  <i class="{{ item.icon }} conv-item-icon"></i>
+                </div>
+                <div class="conv-item-content">
+                  <div class="conv-item-row">
+                    <span class="conv-item-title">{{ app.title }}</span>
+                    {% if app.website %}<span class="badge badge-tag badge-product">{{ app.website }}</span>{% endif %}
+                    <span class="conv-item-date">{{ item.formatted_date }}</span>
+                  </div>
+                  <div class="conv-item-author-row">
+                    {% if app.description %}<span class="conv-item-description">{{ app.description }}</span>{% endif %}
+                    {% if is_admin %}
+                    {% if ('app', app.slug) in pinned_ids %}
+                    <button class="conv-item-pin-btn" title="Désépingler"
+                            onclick="event.preventDefault(); event.stopPropagation(); togglePin('/api/apps/{{ app.slug }}/pin', 'DELETE')">
+                      <i class="ri-pushpin-fill"></i>
+                    </button>
+                    {% else %}
+                    <button class="conv-item-action-btn" title="Épingler"
+                            onclick="event.preventDefault(); event.stopPropagation(); togglePin('/api/apps/{{ app.slug }}/pin', 'POST')">
+                      <i class="ri-pushpin-line"></i>
+                    </button>
+                    {% endif %}
+                    {% endif %}
+                    <span class="conv-item-action-btn conv-item-external-link"><i class="ri-external-link-line"></i> Ouvrir</span>
+                  </div>
+                </div>
+              </div>
+            </a>
+            {% endif %}
+
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+      <div class="empty-state" id="emptyState">
+        <i class="ri-search-line ri-4x text-disabled mb-3"></i>
+        <p class="mb-0 text-muted">Aucun resultat</p>
+        <p class="small text-muted">{% if active_tags %}Aucun resultat pour ces filtres{% else %}Modifiez vos filtres pour voir des resultats{% endif %}</p>
+      </div>
+      {% endif %}
+    </div>
+    </div><!-- /.conversation-list-wrapper -->
+    </div><!-- /#filterContent -->
+  </div>
+</section>
+
+<script>
+// Build URL from current filter state
+function buildFilterUrl() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete('tag');
+  url.searchParams.delete('show');
+  url.searchParams.delete('q');
+
+  // Get active show value from any active type button
+  const activeBtn = document.querySelector('.rechercher-type-btn.active, .filter-bar-mobile .filter-toggle.active');
+  const show = activeBtn ? activeBtn.dataset.show : '';
+  if (show) url.searchParams.set('show', show);
+
+  // Collect checked tags (deduplicate across mobile/desktop)
+  const tags = new Set();
+  document.querySelectorAll('.filter-checkbox-item[data-tag] input[type="checkbox"]').forEach(cb => {
+    if (cb.checked) {
+      const tag = cb.closest('label').dataset.tag;
+      if (tag) tags.add(tag);
+    }
+  });
+  tags.forEach(tag => url.searchParams.append('tag', tag));
+
+  // Preserve text search from header
+  const searchInput = document.getElementById('rechercherSearchInput');
+  if (searchInput && searchInput.value.trim()) {
+    url.searchParams.set('q', searchInput.value.trim());
+  }
+
+  return url.toString();
+}
+
+// Single-select type toggle
+function setShow(show) {
+  const url = buildFilterUrl();
+  const parsed = new URL(url);
+  parsed.searchParams.delete('show');
+  if (show) parsed.searchParams.set('show', show);
+  history.pushState({}, '', parsed.toString());
+  htmx.ajax('GET', parsed.toString(), {target: '#filterContent', select: '#filterContent', swap: 'outerHTML'});
+}
+
+function toggleFilter(tagName, checkbox) {
+  // Sync mobile/desktop copies of same checkbox
+  document.querySelectorAll(`.filter-checkbox-item[data-tag="${tagName}"] input[type="checkbox"]`).forEach(cb => {
+    cb.checked = checkbox.checked;
+  });
+  const url = buildFilterUrl();
+  history.pushState({}, '', url);
+  htmx.ajax('GET', url, {target: '#filterContent', select: '#filterContent', swap: 'outerHTML'});
+}
+
+function togglePin(url, method) {
+  fetch(url, {method, headers: {'Content-Type': 'application/json'}, body: method === 'POST' ? '{}' : undefined})
+    .then(() => {
+      const currentUrl = buildFilterUrl();
+      htmx.ajax('GET', currentUrl, {target: '#filterContent', select: '#filterContent', swap: 'outerHTML'});
+    });
+}
+
+function resetFilters() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete('tag');
+  url.searchParams.delete('show');
+  url.searchParams.delete('q');
+  const searchInput = document.getElementById('rechercherSearchInput');
+  if (searchInput) searchInput.value = '';
+  history.pushState({}, '', url.toString());
+  htmx.ajax('GET', url.toString(), {target: '#filterContent', select: '#filterContent', swap: 'outerHTML'});
+}
+
+function filterByText(query) {
+  const search = query.toLowerCase().trim();
+  const cards = document.querySelectorAll('.filterable-card');
+  let visibleCount = 0;
+
+  cards.forEach(card => {
+    const searchData = card.dataset.search || '';
+    const matches = !search || searchData.includes(search);
+    card.style.display = matches ? '' : 'none';
+    if (matches) visibleCount++;
+  });
+
+  // Show/hide empty state and groups
+  const emptyState = document.getElementById('emptyState');
+  const convGroups = document.querySelectorAll('.conv-group');
+  if (convGroups.length > 0) {
+    if (visibleCount === 0 && cards.length > 0) {
+      convGroups.forEach(g => g.style.display = 'none');
+      if (!emptyState) {
+        const list = document.getElementById('searchResultsList');
+        const div = document.createElement('div');
+        div.className = 'empty-state';
+        div.id = 'emptyState';
+        div.innerHTML = '<i class="ri-search-line ri-4x text-disabled mb-3"></i><p class="mb-0 text-muted">Aucun resultat</p>';
+        list.appendChild(div);
+      } else {
+        emptyState.style.display = '';
+      }
+    } else {
+      convGroups.forEach(g => g.style.display = '');
+      if (emptyState) emptyState.style.display = 'none';
+    }
+  }
+
+  // Update URL with search query (debounced)
+  clearTimeout(window._searchUrlTimer);
+  window._searchUrlTimer = setTimeout(() => {
+    const url = new URL(window.location.href);
+    if (search) {
+      url.searchParams.set('q', search);
+    } else {
+      url.searchParams.delete('q');
+    }
+    history.replaceState({}, '', url.toString());
+  }, 500);
+}
+
+// Auto-filter on load if q param present
+document.addEventListener('DOMContentLoaded', () => {
+  const q = new URLSearchParams(window.location.search).get('q');
+  if (q) filterByText(q);
+});
+document.body.addEventListener('htmx:afterSettle', () => {
+  const q = new URLSearchParams(window.location.search).get('q');
+  if (q) filterByText(q);
+  // Refocus header search input after htmx swap
+  const input = document.getElementById('rechercherSearchInput');
+  if (input && document.getElementById('section-rechercher')) {
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+});
+</script>
+{% endblock %}
+

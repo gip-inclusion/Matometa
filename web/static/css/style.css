@@ -210,14 +210,16 @@ body.has-sidebar {
   height: 100vh;
 }
 
-/* Rapports uses grid: header / body (no chat-bar) */
-#section-rapports {
+/* Rapports and Rechercher use grid: header / body (no chat-bar) */
+#section-rapports,
+#section-rechercher {
   display: grid;
   grid-template-rows: auto 1fr;
   height: 100vh;
 }
 
-#section-rapports .section-body {
+#section-rapports .section-body,
+#section-rechercher .section-body {
   max-width: none;
   padding: 0;
   overflow: hidden;
@@ -225,7 +227,8 @@ body.has-sidebar {
 
 @media (max-width: 991.98px) {
   #section-explorations,
-  #section-rapports {
+  #section-rapports,
+  #section-rechercher {
     height: calc(100vh - 56px);
   }
 }
@@ -249,8 +252,6 @@ body.has-sidebar {
   flex: 1;
   padding: 2rem 1.5rem;
   padding-bottom: 120px; /* Space for chat bar */
-  max-width: 900px;
-  margin: 0 auto;
   width: 100%;
 }
 
@@ -1102,6 +1103,16 @@ body.has-sidebar {
     max-width: 100%;
   }
 
+  /* On accueil & rechercher, hide h1 text — icon + search bar are enough */
+  #section-accueil .section-header h1,
+  #section-rechercher .section-header h1 {
+    font-size: 0;
+  }
+  #section-accueil .section-header h1 i,
+  #section-rechercher .section-header h1 i {
+    font-size: 1.5rem;
+  }
+
 
   .section-body {
     padding: 1.5rem 1rem;
@@ -1534,6 +1545,53 @@ body.has-sidebar {
   color: white;
 }
 
+/* Sticky reset button variant */
+.filter-sidebar-sticky-reset {
+  display: flex;
+  flex-direction: column;
+}
+
+.filter-sidebar-sticky-reset .filter-reset {
+  position: sticky;
+  bottom: 0;
+  margin-top: auto;
+  background: white;
+  z-index: 1;
+}
+
+/* Rechercher: type list (single-select) */
+.rechercher-type-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.rechercher-type-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.8125rem;
+  border: none;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: #495057;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+}
+
+.rechercher-type-btn:hover {
+  background: #f0f4ff;
+}
+
+.rechercher-type-btn.active {
+  background: var(--bs-primary);
+  color: white;
+  font-weight: 600;
+}
+
 /* Mobile: use compact dropdown filters */
 @media (max-width: 991.98px) {
   .filter-list-container {
@@ -1559,10 +1617,16 @@ body.has-sidebar {
   /* Show mobile filter bar */
   .filter-bar-mobile {
     display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0 0.25rem;
+  }
+
+  .filter-bar-mobile-row {
+    display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
     align-items: center;
-    padding: 0 0.25rem;
   }
 
   .filter-bar-mobile .filter-toggle {
@@ -1601,7 +1665,8 @@ body.has-sidebar {
   /* Hide desktop expanded filters on mobile */
   .filter-sidebar > .filter-search,
   .filter-sidebar > .filter-toggle-btn,
-  .filter-sidebar .filter-section {
+  .filter-sidebar .filter-section,
+  .filter-sidebar > .filter-reset {
     display: none !important;
   }
 }
@@ -1782,6 +1847,24 @@ body.has-sidebar {
 
 .conv-item-action-btn:hover {
   color: #dc3545;
+}
+
+/* Pin button — always visible for pinned items */
+.conv-item-pin-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--bs-primary);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+.conv-item-pin-btn:hover {
+  opacity: 1;
 }
 
 .conv-item-external-link:hover {

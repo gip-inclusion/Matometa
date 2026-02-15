@@ -14,15 +14,14 @@
             Accueil
           </h1>
         </div>
-        <!-- Universal search bar -->
+        <!-- Universal search bar — navigates to /rechercher -->
         <div class="accueil-search-wrapper">
           <div class="accueil-search-input">
             <i class="ri-search-line"></i>
             <input type="text" id="universalSearchInput"
                    placeholder="Rechercher conversations, rapports, applis..."
-                   autocomplete="off" oninput="universalSearch(this.value)">
+                   autocomplete="off" oninput="accueilSearchDebounce(this.value)">
           </div>
-          <div class="accueil-search-results" id="searchResults"></div>
         </div>
       </div>
     </div>
@@ -35,22 +34,22 @@
       <div class="accueil-section">
         <h3 class="accueil-grid-title">Navigation</h3>
         <div class="accueil-button-grid">
-          <a href="/explorations" class="accueil-button"
+          <a href="/rechercher?show=convos" class="accueil-button"
              hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
             <i class="ri-group-line"></i>
             <span>Toutes les conversations</span>
           </a>
-          <a href="/explorations?mine=1" class="accueil-button"
+          <a href="/rechercher?show=mine" class="accueil-button"
              hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
             <i class="ri-user-line"></i>
             <span>Mes conversations</span>
           </a>
-          <a href="/rapports?type=apps" class="accueil-button"
+          <a href="/rechercher?show=apps" class="accueil-button"
              hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
             <i class="ri-window-fill"></i>
             <span>Applications</span>
           </a>
-          <a href="/rapports" class="accueil-button"
+          <a href="/rechercher?show=reports" class="accueil-button"
              hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
             <i class="ri-file-text-line"></i>
             <span>Rapports</span>
@@ -68,30 +67,37 @@
         </div>
       </div>
 
-      <!-- Pinned conversations -->
+      <!-- Pinned items -->
       {% if pinned %}
       <div class="accueil-section">
         <h3 class="accueil-grid-title">
-          <i class="ri-pushpin-line me-1"></i>Conversations épinglées
+          <i class="ri-pushpin-line me-1"></i>Épinglés
         </h3>
         <div class="accueil-starred">
-          {% for conv in pinned %}
-          <a href="/explorations/{{ conv.id }}" class="conv-list-item"
-             hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+          {% for item in pinned %}
+          <a href="{{ item.url }}" class="conv-list-item"
+             {% if item.is_external|default(false) %}target="_blank"{% endif %}
+             {% if not item.is_external|default(false) %}hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true"{% endif %}>
             <div class="conv-item-main">
               <div class="conv-item-icon-wrapper">
-                <i class="ri-pushpin-line conv-item-icon"></i>
+                <i class="{{ item.icon }} conv-item-icon"></i>
               </div>
               <div class="conv-item-content">
                 <div class="conv-item-row">
-                  <span class="conv-item-title">{{ conv.pinned_label or conv.title or 'Sans titre' }}</span>
-                  <span class="conv-item-date">{{ conv.formatted_date }}</span>
+                  <span class="conv-item-title">{{ item.title or item.label or 'Sans titre' }}</span>
+                  <span class="conv-item-date">{{ item.formatted_date }}</span>
                 </div>
-                {% if conv.user_id %}
                 <div class="conv-item-author-row">
-                  <span class="conv-item-author">{{ conv.user_id.split('@')[0] }}</span>
+                  {% if item.user_id %}
+                  <span class="conv-item-author">{{ item.user_id.split('@')[0] }}</span>
+                  {% endif %}
+                  {% if is_admin %}
+                  <button class="conv-item-pin-btn" title="Désépingler"
+                          onclick="event.preventDefault(); event.stopPropagation(); unpinFromAccueil('{{ item.pin_url }}', this)">
+                    <i class="ri-pushpin-fill"></i>
+                  </button>
+                  {% endif %}
                 </div>
-                {% endif %}
               </div>
             </div>
           </a>
@@ -121,70 +127,36 @@
     </div>
   </div>
 </section>
-
-<!-- Search index (preloaded JSON) -->
-<script type="application/json" id="searchIndex">{{ search_items | tojson }}</script>
 {% endblock %}
 
 {% block scripts %}
 <script>
-let searchIndex = null;
-
-function getSearchIndex() {
-  if (!searchIndex) {
-    const el = document.getElementById('searchIndex');
-    if (el) searchIndex = JSON.parse(el.textContent);
-  }
-  return searchIndex || [];
+function unpinFromAccueil(url, btn) {
+  fetch(url, {method: 'DELETE'}).then(() => {
+    const item = btn.closest('.conv-list-item');
+    if (item) item.remove();
+  });
 }
 
-function universalSearch(query) {
-  const results = document.getElementById('searchResults');
-  if (!results) return;
+let _accueilSearchTimer = null;
 
-  const search = query.toLowerCase().trim();
-  if (!search) {
-    results.style.display = 'none';
-    return;
-  }
+function accueilSearchDebounce(query) {
+  clearTimeout(_accueilSearchTimer);
+  const search = query.trim();
+  if (!search) return;
 
-  const items = getSearchIndex();
-  const matches = items.filter(item => item.search.includes(search)).slice(0, 20);
-
-  if (!matches.length) {
-    results.innerHTML = '<div class="p-3 text-muted">Aucun résultat</div>';
-    results.style.display = 'block';
-    return;
-  }
-
-  results.innerHTML = matches.map(item => `
-    <a href="${item.url}" class="conv-list-item"
-       hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
-      <div class="conv-item-main">
-        <div class="conv-item-icon-wrapper">
-          <i class="${item.icon} conv-item-icon"></i>
-        </div>
-        <div class="conv-item-content">
-          <div class="conv-item-row">
-            <span class="conv-item-title">${item.title}</span>
-            <span class="conv-item-date">${item.date}</span>
-          </div>
-        </div>
-      </div>
-    </a>
-  `).join('');
-  results.style.display = 'block';
-
-  // Enable htmx on dynamically inserted links
-  htmx.process(results);
+  _accueilSearchTimer = setTimeout(() => {
+    const url = '/rechercher?q=' + encodeURIComponent(search);
+    history.pushState({}, '', url);
+    if (typeof updateSidebarActive === 'function') updateSidebarActive();
+    htmx.ajax('GET', url, {target: '#main', select: '#main > *', swap: 'innerHTML'}).then(() => {
+      const input = document.getElementById('rechercherSearchInput');
+      if (input) {
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      }
+    });
+  }, 300);
 }
-
-// Close search results on click outside
-document.addEventListener('click', (e) => {
-  if (!e.target.closest('.accueil-search-wrapper')) {
-    const results = document.getElementById('searchResults');
-    if (results) results.style.display = 'none';
-  }
-});
 </script>
 {% endblock %}

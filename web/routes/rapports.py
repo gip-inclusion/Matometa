@@ -9,9 +9,12 @@ import markdown as md
 from flask import Blueprint, redirect, render_template, request, url_for, Response, abort
 from markupsafe import Markup
 
+from flask import g, jsonify
+
 from ..storage import store
 from .html import get_sidebar_data, format_relative_date
 from .. import config
+from ..config import ADMIN_USERS
 
 bp = Blueprint("rapports", __name__)
 
@@ -311,3 +314,33 @@ def _render_rapports_page(report_id: int | None = None):
         type_filter=type_filter,
         **data
     )
+
+
+@bp.route("/api/apps/<slug>/pin", methods=["POST"])
+def pin_app(slug: str):
+    """Pin an app. Admin only."""
+    user_email = getattr(g, "user_email", None)
+    if user_email not in ADMIN_USERS:
+        return jsonify({"error": "Permission denied"}), 403
+
+    # Verify app exists
+    apps = {a["slug"]: a for a in scan_interactive_apps()}
+    app = apps.get(slug)
+    if not app:
+        return jsonify({"error": "App not found"}), 404
+
+    data = request.get_json() or {}
+    label = data.get("label", "").strip() or app["title"]
+    store.pin_item("app", slug, label)
+    return jsonify({"ok": True, "label": label}), 200
+
+
+@bp.route("/api/apps/<slug>/pin", methods=["DELETE"])
+def unpin_app(slug: str):
+    """Unpin an app. Admin only."""
+    user_email = getattr(g, "user_email", None)
+    if user_email not in ADMIN_USERS:
+        return jsonify({"error": "Permission denied"}), 403
+
+    store.unpin_item("app", slug)
+    return jsonify({"ok": True}), 200

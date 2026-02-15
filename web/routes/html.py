@@ -180,68 +180,47 @@ def index():
     """Home page — dashboard with navigation, sources, starred items."""
     data = get_sidebar_data()
 
-    # Pinned conversations (starred items)
-    pinned = store.list_pinned_conversations()
-    for p in pinned:
-        if p.title:
-            p.title = humanize_title(p.title)
-        p.formatted_date = format_relative_date(p.updated_at)
-        p.tags = store.get_conversation_tags(p.id)
+    # Pinned items (conversations, reports, apps)
+    from .rapports import scan_interactive_apps
+    pinned_raw = store.list_pinned_items()
+    apps_by_slug = {a["slug"]: a for a in scan_interactive_apps()} if any(p.item_type == "app" for p in pinned_raw) else {}
+    pinned = []
+    for p in pinned_raw:
+        if p.item_type == "conversation":
+            conv = store.get_conversation(p.item_id, include_messages=False)
+            if not conv:
+                continue
+            p.url = f"/explorations/{p.item_id}"
+            p.pin_url = f"/api/conversations/{p.item_id}/pin"
+            p.title = humanize_title(conv.title) if conv.title else p.label
+            p.icon = "ri-chat-3-fill"
+            p.formatted_date = format_relative_date(conv.updated_at)
+            p.user_id = conv.user_id
+        elif p.item_type == "report":
+            report = store.get_report(int(p.item_id))
+            if not report:
+                continue
+            p.url = f"/rapports/{p.item_id}"
+            p.pin_url = f"/api/reports/{p.item_id}/pin"
+            p.title = p.label or report.title
+            p.icon = "ri-file-text-line"
+            p.formatted_date = format_relative_date(report.updated_at)
+            p.user_id = report.user_id
+        elif p.item_type == "app":
+            app = apps_by_slug.get(p.item_id)
+            if not app:
+                continue
+            p.url = app["url"]
+            p.pin_url = f"/api/apps/{p.item_id}/pin"
+            p.title = p.label or app["title"]
+            p.icon = "ri-window-fill"
+            p.formatted_date = format_relative_date(app.get("updated")) if app.get("updated") else ""
+            p.user_id = None
+            p.is_external = True
+        pinned.append(p)
 
     # Knowledge sections (top-level folders only)
     knowledge_sections = list_knowledge_sections()
-
-    # Search index: all conversations + reports + apps
-    search_items = []
-
-    conversations_with_tags = store.list_conversations_with_tags(limit=200)
-    for conv, tags in conversations_with_tags:
-        if conv.title:
-            conv.title = humanize_title(conv.title)
-        search_items.append({
-            "type": "conversation",
-            "title": conv.title or "Sans titre",
-            "url": f"/explorations/{conv.id}",
-            "icon": "ri-chat-3-fill",
-            "date": format_relative_date(conv.updated_at),
-            "search": " ".join(filter(None, [
-                (conv.title or "").lower(),
-                (conv.user_id or "").lower(),
-                " ".join(t.label.lower() for t in tags),
-            ])),
-        })
-
-    from .rapports import scan_interactive_apps
-
-    reports_with_tags = store.list_reports_with_tags(limit=200)
-    for report, tags in reports_with_tags:
-        search_items.append({
-            "type": "report",
-            "title": report.title,
-            "url": f"/rapports/{report.id}",
-            "icon": "ri-file-text-line",
-            "date": format_relative_date(report.updated_at),
-            "search": " ".join(filter(None, [
-                report.title.lower(),
-                (report.website or "").lower(),
-                (report.category or "").lower(),
-                " ".join(t.label.lower() for t in tags),
-            ])),
-        })
-
-    for app in scan_interactive_apps():
-        search_items.append({
-            "type": "app",
-            "title": app["title"],
-            "url": app["url"],
-            "icon": "ri-window-fill",
-            "date": "",
-            "search": " ".join(filter(None, [
-                app["title"].lower(),
-                (app.get("description") or "").lower(),
-                " ".join(t.lower() for t in app.get("tags", [])),
-            ])),
-        })
 
     return render_template(
         "accueil.html",
@@ -249,7 +228,214 @@ def index():
         current_conv=None,
         pinned=pinned,
         knowledge_sections=knowledge_sections,
-        search_items=search_items,
+        **data
+    )
+
+
+def _group_items_by_date(items):
+    """Group mixed items (conversations, reports, apps) by relative date periods."""
+    now = datetime.now()
+    today = now.date()
+
+    groups = OrderedDict()
+    groups["aujourd'hui"] = []
+    groups["hier"] = []
+    groups["plus tôt cette semaine"] = []
+    groups["la semaine dernière"] = []
+    groups["plus tôt ce mois-ci"] = []
+
+    yesterday = today - timedelta(days=1)
+    days_since_monday = today.weekday()
+    this_week_start = today - timedelta(days=days_since_monday)
+    last_week_start = this_week_start - timedelta(days=7)
+    last_week_end = this_week_start - timedelta(days=1)
+    this_month_start = today.replace(day=1)
+
+    month_names = {
+        1: "janvier", 2: "février", 3: "mars", 4: "avril",
+        5: "mai", 6: "juin", 7: "juillet", 8: "août",
+        9: "septembre", 10: "octobre", 11: "novembre", 12: "décembre"
+    }
+
+    for item in items:
+        item_date = item["sort_date"].date()
+
+        if item_date == today:
+            groups["aujourd'hui"].append(item)
+        elif item_date == yesterday:
+            groups["hier"].append(item)
+        elif this_week_start <= item_date < today:
+            groups["plus tôt cette semaine"].append(item)
+        elif last_week_start <= item_date <= last_week_end:
+            groups["la semaine dernière"].append(item)
+        elif this_month_start <= item_date < this_week_start:
+            groups["plus tôt ce mois-ci"].append(item)
+        else:
+            month_key = month_names[item_date.month]
+            if item_date.year < today.year:
+                month_key = f"{month_key} {item_date.year}"
+            if month_key not in groups:
+                groups[month_key] = []
+            groups[month_key].append(item)
+
+    return OrderedDict((k, v) for k, v in groups.items() if v)
+
+
+@bp.route("/rechercher")
+def rechercher():
+    """Universal search page — combines conversations, reports, and apps."""
+    from .rapports import scan_interactive_apps
+
+    user_email = getattr(g, "user_email", None)
+    agent = get_agent_instance()
+
+    # Parse show param: single value, empty = all
+    show = request.args.get("show", "")
+    show_convos = show in ("", "convos", "mine")
+    show_mine = show == "mine"
+    show_reports = show in ("", "reports")
+    show_apps = show in ("", "apps")
+
+    tag_params = request.args.getlist("tag")
+    q = request.args.get("q", "")
+
+    items = []
+
+    # Conversations
+    if show_convos:
+        filter_user = user_email if show_mine else None
+        conversations_with_tags = store.list_conversations_with_tags(
+            user_id=filter_user,
+            tag_names=tag_params if tag_params else None,
+            limit=100,
+        )
+        for conv, tags in conversations_with_tags:
+            if conv.title:
+                conv.title = humanize_title(conv.title)
+            conv.is_running = agent.is_running(conv.id)
+            conv.tags = tags
+            conv.is_mine = conv.user_id == user_email
+
+            # Determine icon
+            conv.icon = "ri-chat-3-fill"
+            for tag in tags:
+                if tag.name == "analyse":
+                    conv.icon = "ri-chat-3-fill"
+                    break
+                elif tag.name == "meta":
+                    conv.icon = "ri-settings-3-fill"
+                    break
+                elif tag.name == "appli":
+                    conv.icon = "ri-window-fill"
+                    break
+
+            items.append({
+                "type": "conversation",
+                "conv": conv,
+                "tags": tags,
+                "icon": conv.icon,
+                "sort_date": conv.updated_at,
+                "formatted_date": format_relative_date(conv.updated_at),
+                "search": " ".join(filter(None, [
+                    (conv.title or "").lower(),
+                    (conv.user_id or "").lower(),
+                    " ".join(t.label.lower() for t in tags),
+                ])),
+            })
+
+    # Reports
+    if show_reports:
+        reports_with_tags = store.list_reports_with_tags(
+            tag_names=tag_params if tag_params else None,
+            limit=100,
+        )
+        for report, tags in reports_with_tags:
+            report.tag_objects = tags
+            items.append({
+                "type": "report",
+                "report": report,
+                "tags": tags,
+                "icon": "ri-file-text-line",
+                "sort_date": report.updated_at,
+                "formatted_date": format_relative_date(report.updated_at),
+                "search": " ".join(filter(None, [
+                    report.title.lower(),
+                    (report.website or "").lower(),
+                    (report.category or "").lower(),
+                    " ".join(t.label.lower() for t in tags),
+                ])),
+            })
+
+    # Apps
+    if show_apps:
+        for app in scan_interactive_apps():
+            app_tags = set(app.get("tags", []))
+            app_tags.add(app.get("website", ""))
+            app_tags.add("appli")
+            if tag_params and not all(t in app_tags for t in tag_params):
+                continue
+
+            sort_date = app.get("updated") or datetime.min
+            items.append({
+                "type": "app",
+                "app": app,
+                "tags": [],
+                "icon": "ri-window-fill",
+                "sort_date": sort_date,
+                "formatted_date": format_relative_date(sort_date) if sort_date != datetime.min else "",
+                "search": " ".join(filter(None, [
+                    app["title"].lower(),
+                    (app.get("description") or "").lower(),
+                    " ".join(t.lower() for t in app.get("tags", [])),
+                ])),
+            })
+
+    # Sort by date descending
+    items.sort(key=lambda x: x["sort_date"], reverse=True)
+
+    # Group by date
+    grouped_items = _group_items_by_date(items)
+
+    # Merge tags from conversations and reports
+    all_tags = {}
+    if show_convos:
+        filter_user = user_email if show_mine else None
+        conv_tags = store.get_used_conversation_tags_by_type(
+            active_tag_names=tag_params if tag_params else None,
+            user_id=filter_user,
+        )
+        for tag_type, tag_list in conv_tags.items():
+            all_tags.setdefault(tag_type, {})
+            for tag in tag_list:
+                if tag.name in all_tags[tag_type]:
+                    all_tags[tag_type][tag.name].count += tag.count
+                else:
+                    all_tags[tag_type][tag.name] = tag
+
+    if show_reports:
+        report_tags = store.get_used_report_tags_by_type()
+        for tag_type, tag_list in report_tags.items():
+            all_tags.setdefault(tag_type, {})
+            for tag in tag_list:
+                if tag.name not in all_tags[tag_type]:
+                    all_tags[tag_type][tag.name] = tag
+
+    # Convert from {type: {name: Tag}} to {type: [Tag]}
+    all_tags = {k: sorted(v.values(), key=lambda t: t.label) for k, v in all_tags.items()}
+
+    pinned_ids = store.get_pinned_ids()
+
+    data = get_sidebar_data()
+    return render_template(
+        "rechercher.html",
+        section="rechercher",
+        current_conv=None,
+        grouped_items=grouped_items,
+        all_tags=all_tags,
+        active_tags=tag_params,
+        pinned_ids=pinned_ids,
+        show=show,
+        q=q,
         **data
     )
 

@@ -15,7 +15,7 @@ from . import config
 USE_POSTGRES = config.DATABASE_URL is not None and config.DATABASE_URL.startswith(("postgres://", "postgresql://"))
 
 # Schema version - increment when adding migrations
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 if USE_POSTGRES:
     import psycopg2
@@ -285,11 +285,14 @@ def init_db():
                     _migrate_to_v15(conn)
                 if current_version < 16:
                     _migrate_to_v16(conn)
+                if current_version < 17:
+                    _migrate_to_v17(conn)
 
             _set_schema_version(conn, SCHEMA_VERSION)
 
-        # Safety: ensure cron_runs exists even if version was already bumped
+        # Safety: ensure tables exist even if version was already bumped
         _migrate_to_v15(conn)
+        _migrate_to_v17(conn)
 
 
 def _migrate_to_v11(conn: ConnectionWrapper):
@@ -410,6 +413,29 @@ def _migrate_to_v16(conn: ConnectionWrapper):
         conn.execute("ALTER TABLE conversations ADD COLUMN needs_response INTEGER DEFAULT 0")
 
 
+def _migrate_to_v17(conn: ConnectionWrapper):
+    """Migrate to v17: add pinned_items table for generic pinning (conversations, reports, apps)."""
+    serial_pk = "SERIAL PRIMARY KEY" if conn.is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
+
+    conn.execute(f"""
+        CREATE TABLE IF NOT EXISTS pinned_items (
+            id {serial_pk},
+            item_type TEXT NOT NULL,
+            item_id TEXT NOT NULL,
+            label TEXT,
+            pinned_at TEXT NOT NULL,
+            UNIQUE(item_type, item_id)
+        )
+    """)
+
+    # Migrate existing pinned conversations
+    conn.execute("""
+        INSERT OR IGNORE INTO pinned_items (item_type, item_id, label, pinned_at)
+        SELECT 'conversation', id, pinned_label, pinned_at
+        FROM conversations WHERE pinned_at IS NOT NULL
+    """)
+
+
 def _create_schema(conn: ConnectionWrapper):
     """Create the complete database schema."""
     # Use SERIAL for PostgreSQL, INTEGER PRIMARY KEY AUTOINCREMENT for SQLite
@@ -528,6 +554,15 @@ def _create_schema(conn: ConnectionWrapper):
             trigger TEXT NOT NULL DEFAULT 'scheduled'
         );
 
+        CREATE TABLE IF NOT EXISTS pinned_items (
+            id {serial_pk},
+            item_type TEXT NOT NULL,
+            item_id TEXT NOT NULL,
+            label TEXT,
+            pinned_at TEXT NOT NULL,
+            UNIQUE(item_type, item_id)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_uploaded_files_conversation ON uploaded_files(conversation_id);
         CREATE INDEX IF NOT EXISTS idx_uploaded_files_hash ON uploaded_files(sha256_hash);
         CREATE INDEX IF NOT EXISTS idx_uploaded_files_user ON uploaded_files(user_id);
@@ -606,6 +641,16 @@ class Tag:
     type: str = ""  # product | theme | source | type_demande
     label: str = ""
     count: int = 0  # Number of conversations/reports with this tag
+
+
+@dataclass
+class PinnedItem:
+    """A pinned item (conversation, report, or app)."""
+    id: Optional[int] = None
+    item_type: str = ""  # conversation | report | app
+    item_id: str = ""
+    label: str = ""
+    pinned_at: Optional[datetime] = None
 
 
 @dataclass
@@ -982,33 +1027,73 @@ class ConversationStore:
                 for row in rows
             ]
 
-    def pin_conversation(self, conv_id: str, label: str) -> bool:
-        """Pin a conversation (visible to all users in the sidebar)."""
+    # --- Generic pinning (pinned_items table) ---
+
+    def pin_item(self, item_type: str, item_id: str, label: str) -> bool:
+        """Pin an item (conversation, report, or app)."""
+        with get_db() as conn:
+            conn.execute(
+                """INSERT INTO pinned_items (item_type, item_id, label, pinned_at)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(item_type, item_id) DO UPDATE SET label = ?, pinned_at = ?""",
+                (item_type, str(item_id), label, datetime.now().isoformat(),
+                 label, datetime.now().isoformat())
+            )
+            return True
+
+    def unpin_item(self, item_type: str, item_id: str) -> bool:
+        """Unpin an item."""
         with get_db() as conn:
             cursor = conn.execute(
-                "UPDATE conversations SET pinned_at = ?, pinned_label = ? WHERE id = ?",
-                (datetime.now().isoformat(), label, conv_id)
+                "DELETE FROM pinned_items WHERE item_type = ? AND item_id = ?",
+                (item_type, str(item_id))
             )
             return cursor.rowcount > 0
+
+    def list_pinned_items(self, item_type: Optional[str] = None) -> list[PinnedItem]:
+        """List pinned items, optionally filtered by type."""
+        with get_db() as conn:
+            if item_type:
+                rows = conn.execute(
+                    "SELECT * FROM pinned_items WHERE item_type = ? ORDER BY pinned_at",
+                    (item_type,)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM pinned_items ORDER BY pinned_at"
+                ).fetchall()
+            return [
+                PinnedItem(
+                    id=row["id"],
+                    item_type=row["item_type"],
+                    item_id=row["item_id"],
+                    label=row["label"],
+                    pinned_at=datetime.fromisoformat(row["pinned_at"]),
+                )
+                for row in rows
+            ]
+
+    def get_pinned_ids(self) -> set[tuple[str, str]]:
+        """Get set of (item_type, item_id) for all pinned items."""
+        with get_db() as conn:
+            rows = conn.execute("SELECT item_type, item_id FROM pinned_items").fetchall()
+            return {(row["item_type"], row["item_id"]) for row in rows}
+
+    # Backwards-compatible wrappers
+    def pin_conversation(self, conv_id: str, label: str) -> bool:
+        return self.pin_item("conversation", conv_id, label)
 
     def unpin_conversation(self, conv_id: str) -> bool:
-        """Unpin a conversation."""
-        with get_db() as conn:
-            cursor = conn.execute(
-                "UPDATE conversations SET pinned_at = NULL, pinned_label = NULL WHERE id = ?",
-                (conv_id,)
-            )
-            return cursor.rowcount > 0
+        return self.unpin_item("conversation", conv_id)
 
     def list_pinned_conversations(self) -> list[Conversation]:
-        """List all pinned conversations, ordered by pinned_at."""
+        """List pinned conversations (legacy wrapper)."""
         with get_db() as conn:
             rows = conn.execute(
-                """SELECT * FROM conversations
-                   WHERE pinned_at IS NOT NULL
-                   ORDER BY pinned_at""",
+                """SELECT c.* FROM conversations c
+                   JOIN pinned_items p ON p.item_id = c.id AND p.item_type = 'conversation'
+                   ORDER BY p.pinned_at""",
             ).fetchall()
-
             return [
                 Conversation(
                     id=row["id"],

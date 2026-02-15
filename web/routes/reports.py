@@ -7,6 +7,7 @@ from flask import Blueprint, g, jsonify, request
 
 from ..storage import store
 from .. import notion
+from ..config import ADMIN_USERS
 
 bp = Blueprint("reports", __name__, url_prefix="/api/reports")
 
@@ -174,6 +175,34 @@ def publish_to_notion(report_id: int):
         )
 
     return jsonify({"url": url})
+
+
+@bp.route("/<int:report_id>/pin", methods=["POST"])
+def pin_report(report_id: int):
+    """Pin a report. Admin only."""
+    user_email = getattr(g, "user_email", None)
+    if user_email not in ADMIN_USERS:
+        return jsonify({"error": "Permission denied"}), 403
+
+    report = store.get_report(report_id)
+    if not report:
+        return jsonify({"error": "Report not found"}), 404
+
+    data = request.get_json() or {}
+    label = data.get("label", "").strip() or report.title
+    store.pin_item("report", str(report_id), label)
+    return jsonify({"ok": True, "label": label}), 200
+
+
+@bp.route("/<int:report_id>/pin", methods=["DELETE"])
+def unpin_report(report_id: int):
+    """Unpin a report. Admin only."""
+    user_email = getattr(g, "user_email", None)
+    if user_email not in ADMIN_USERS:
+        return jsonify({"error": "Permission denied"}), 403
+
+    store.unpin_item("report", str(report_id))
+    return jsonify({"ok": True}), 200
 
 
 @bp.route("/<int:report_id>/tags", methods=["GET"])
