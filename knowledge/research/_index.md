@@ -185,21 +185,35 @@ python scripts/search_research.py "prescripteurs" --type "❝ Verbatim" --json
 - `GET /api/research/pages/{page_id}`
 - `GET /api/research/stats`
 
-## Segments et usagers des sites
+## Segments (8)
 
-Correspondance approximative entre les segments de la recherche terrain et les types d'usagers Matomo des sites du GIP.
+| Segment | Profils (exemples) |
+|---------|-------------------|
+| Accompagnateur opérationnel | CIP, coach emploi, AS, conseillers FT/ML/Cap Emploi, éducateur spécialisé, médiateur, référent IAE |
+| Acheteur | Acheteur public, acheteur privé, facilitateur clauses sociales, responsable commercial |
+| Coordinateur administratif | Directeur d'agence, directeur de territoire, encadrant technique, personnel admin SIAE, chargé de com |
+| Entreprises | SIAE, entreprise ordinaire |
+| Gestionnaire de structure | Directeur d'agence, gérant, recruteur/RH |
+| Partenaire | Tête de réseau insertion, éditeur de logiciels |
+| Pilote institutionnel | Agent DDETS, agent DREETS |
+| Usager | Demandeur d'emploi, salarié en SIAE, aidant, particulier acheteur, employé tuteur |
 
-| Segment recherche | Description | Sites principaux | UserKind Matomo |
-|-------------------|-------------|------------------|-----------------|
-| Prescripteurs | France Travail, Mission Locale, Cap Emploi, CCAS, Conseil départemental | Emplois, RDV-Insertion, Dora | `prescriber` |
-| Employeurs inclusifs | SIAE (AI, ACI, EI, ETTI, GEIQ), ESAT | Emplois, Le Marché | `employer` |
-| Candidats / demandeurs d'emploi | Bénéficiaires IAE, personnes en parcours d'insertion | Emplois, RDV-Insertion, Mon Recap | `job_seeker` |
-| Institutionnels | DDETS, DREETS, Préfectures, pilotes du dispositif | Emplois, Pilotage | `labor_inspector` |
-| Acheteurs publics / privés | Donneurs d'ordres, acheteurs de clauses sociales | Le Marché | (anonymous) |
-| Professionnels de l'inclusion | Tous acteurs IAE (transversal) | La Communauté, Plateforme | (anonymous) |
+## Correspondance segments → sites
+
+Mapping approximatif entre les segments recherche et les types d'usagers Matomo.
+
+| Segment recherche | Sites principaux | UserKind Matomo |
+|-------------------|------------------|-----------------|
+| Accompagnateur opérationnel | Emplois, RDV-Insertion, Dora | `prescriber` |
+| Acheteur | Le Marché | (anonymous — pas de UserKind) |
+| Coordinateur administratif | Emplois | `employer`, `prescriber` |
+| Entreprises | Emplois, Le Marché | `employer` |
+| Gestionnaire de structure | Emplois | `employer` |
+| Partenaire | La Communauté | (anonymous) |
+| Pilote institutionnel | Emplois, Pilotage | `labor_inspector` |
+| Usager | Emplois, RDV-Insertion, Mon Recap | `job_seeker` |
 
 Notes :
-- Un même utilisateur réel peut correspondre à plusieurs segments (ex. un prescripteur qui est aussi employeur)
+- Un même profil peut apparaître dans plusieurs segments (ex. "Directeur d'agence" est à la fois Coordinateur administratif et Gestionnaire de structure)
 - `anonymous` sur Emplois = ~60% du trafic, mélange de candidats non connectés et visiteurs ponctuels
-- Dora n'a pas de dimension UserKind — ses usagers sont principalement des prescripteurs cherchant des services locaux
-- Le Marché n'a pas de dimension UserKind — ses usagers sont principalement des acheteurs et des SIAE
+- Dora et Le Marché n'ont pas de dimension UserKind
