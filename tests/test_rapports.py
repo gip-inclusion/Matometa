@@ -22,6 +22,31 @@ def report(app):
         return report
 
 
+@pytest.fixture
+def conversation(app):
+    """Create a test conversation to link to a report."""
+    from web.storage import store
+
+    with app.test_request_context():
+        return store.create_conversation(user_id="test@example.com")
+
+
+@pytest.fixture
+def report_with_source(app, conversation):
+    """Create a report linked to a source conversation."""
+    from web.storage import store
+
+    with app.test_request_context():
+        return store.create_report(
+            title="Linked Report",
+            content="# Linked\n\nContent.",
+            website="test",
+            category="testing",
+            user_id="test@example.com",
+            source_conversation_id=conversation.id,
+        )
+
+
 class TestRapportTxtExport:
     """Test the .txt export endpoint."""
 
@@ -212,3 +237,49 @@ def _report_body_has_content(main_html: str) -> bool:
         return False
     body_content = match.group(1).strip()
     return len(body_content) > 0
+
+
+class TestReportAuthorInSearch:
+    """Test that report author and source conversation appear in /rechercher."""
+
+    def test_report_shows_author(self, app, client, report):
+        """Report author (user_id) appears in search results."""
+        response = client.get(
+            "/rechercher?show=reports",
+            headers={"X-Forwarded-Email": "test@example.com"},
+        )
+        html = response.data.decode("utf-8")
+        assert "conv-item-author" in html
+        assert "test" in html  # test@example.com -> "test"
+
+    def test_report_shows_source_conversation_link(self, app, client, report_with_source, conversation):
+        """Report with source_conversation_id shows a conversation link."""
+        response = client.get(
+            "/rechercher?show=reports",
+            headers={"X-Forwarded-Email": "test@example.com"},
+        )
+        html = response.data.decode("utf-8")
+        assert f"/explorations/{conversation.id}" in html
+        assert "Conversation" in html
+
+    def test_report_without_source_has_no_conversation_link(self, app, client, report):
+        """Report without source_conversation_id has no conversation link."""
+        response = client.get(
+            "/rechercher?show=reports",
+            headers={"X-Forwarded-Email": "test@example.com"},
+        )
+        html = response.data.decode("utf-8")
+        main_content = _extract_main_content(html)
+        # No /explorations/ link inside the report item
+        assert "/explorations/" not in main_content
+
+    def test_report_author_is_searchable(self, app, client, report):
+        """Report author appears in data-search attribute for client-side filtering."""
+        response = client.get(
+            "/rechercher?show=reports",
+            headers={"X-Forwarded-Email": "test@example.com"},
+        )
+        html = response.data.decode("utf-8")
+        assert 'data-search="' in html
+        # user_id should be in the search string
+        assert "test@example.com" in html
