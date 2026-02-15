@@ -10,6 +10,8 @@ Ces documents constituent la mémoire de l'agent Matometa. Ils sont lus avant ch
 
 3. **Pour les analyses thématiques** : l'agent lit `stats/` pour comprendre le contexte métier (candidats, prescripteurs, etc.).
 
+4. **Pour la recherche terrain** : l'agent consulte `research/` pour le modèle de données du corpus ethnographique, et `notion/` pour l'intégration Notion.
+
 ## Structure des dossiers
 
 ### `sites/`
@@ -41,6 +43,14 @@ Contexte métier et données Metabase :
 - `candidats.md`, `prescribers.md`, `pass-iae.md` : thématiques IAE
 - `cards/` : fiches par thème (topic-candidatures.md, etc.)
 - `dashboards/` : documentation des tableaux de bord
+
+### `notion/`
+Intégration Notion (API, authentification, fonctionnalités) :
+- `_index.md` : endpoints, config, 3 features (publish, wishlist, corpus)
+
+### `research/`
+Corpus de recherche terrain (ethnographie « Connaissance du terrain ») :
+- `_index.md` : bases Notion, hiérarchie, schéma SQLite, requêtes, recherche vectorielle, correspondance segments/sites
 
 ## Règles d'édition
 

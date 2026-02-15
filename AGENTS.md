@@ -196,15 +196,19 @@ knowledge/
 ├── sites/          # One file per website (baselines, dimensions, context)
 ├── stats/          # Topic files (candidates.md, prescribers.md, etc.)
 ├── metabase/       # Metabase API reference
-└── matomo/         # Matomo API reference
-    ├── README.md       # Index — read this first
-    ├── core-modules.md # VisitsSummary, Actions, Events, Referrers
-    ├── cohorts.md      # Premium: cohort analysis
-    └── funnels.md      # Premium: conversion funnels
+├── matomo/         # Matomo API reference
+│   ├── README.md       # Index — read this first
+│   ├── core-modules.md # VisitsSummary, Actions, Events, Referrers
+│   ├── cohorts.md      # Premium: cohort analysis
+│   └── funnels.md      # Premium: conversion funnels
+├── notion/         # Notion API integration (publish, wishlist, corpus)
+└── research/       # Corpus ethnographique (bases Notion, schéma SQLite, segments)
 ```
 
 **Load only what's relevant.** For site queries: `knowledge/sites/{site}.md`.
 For API reference: `knowledge/matomo/README.md`.
+For Notion integration: `knowledge/notion/_index.md`.
+For research corpus: `knowledge/research/_index.md`.
 
 ### Available Skills
 
