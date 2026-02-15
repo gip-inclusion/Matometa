@@ -136,22 +136,23 @@ class TestPinDatabase:
 class TestPinInSidebar:
     """Test that pinned conversations appear in the sidebar."""
 
-    def test_pinned_visible_in_sidebar(self, app, client, conversation):
+    def test_pinned_visible_on_home(self, app, client, conversation):
         from web.storage import store
         with app.test_request_context():
             store.pin_conversation(conversation.id, "Bonnes pratiques")
 
         resp = client.get(
-            "/explorations/new",
+            "/",
             headers={"X-Forwarded-Email": NON_ADMIN_EMAIL},
         )
         assert resp.status_code == 200
-        assert b"Bonnes pratiques" in resp.data
         assert b"ri-pushpin-line" in resp.data
+        # Pinned conversation shows its title (or label as fallback)
+        assert b"Test conversation" in resp.data
 
     def test_no_pins_no_pushpin(self, client):
         resp = client.get(
-            "/explorations/new",
+            "/",
             headers={"X-Forwarded-Email": NON_ADMIN_EMAIL},
         )
         assert resp.status_code == 200

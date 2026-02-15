@@ -837,11 +837,17 @@ class ConversationStore:
         with get_db() as conn:
             if user_id:
                 row = conn.execute(
-                    "SELECT * FROM conversations WHERE id = ? AND user_id = ?", (conv_id, user_id)
+                    """SELECT c.*, p.pinned_at AS p_pinned_at, p.label AS p_label
+                       FROM conversations c
+                       LEFT JOIN pinned_items p ON p.item_id = c.id AND p.item_type = 'conversation'
+                       WHERE c.id = ? AND c.user_id = ?""", (conv_id, user_id)
                 ).fetchone()
             else:
                 row = conn.execute(
-                    "SELECT * FROM conversations WHERE id = ?", (conv_id,)
+                    """SELECT c.*, p.pinned_at AS p_pinned_at, p.label AS p_label
+                       FROM conversations c
+                       LEFT JOIN pinned_items p ON p.item_id = c.id AND p.item_type = 'conversation'
+                       WHERE c.id = ?""", (conv_id,)
                 ).fetchone()
 
             if not row:
@@ -914,8 +920,8 @@ class ConversationStore:
                 usage_cache_read_tokens=row["usage_cache_read_tokens"] if "usage_cache_read_tokens" in row.keys() else 0,
                 usage_backend=row["usage_backend"] if "usage_backend" in row.keys() else None,
                 usage_extra=usage_extra,
-                pinned_at=datetime.fromisoformat(row["pinned_at"]) if "pinned_at" in row.keys() and row["pinned_at"] else None,
-                pinned_label=row["pinned_label"] if "pinned_label" in row.keys() else None,
+                pinned_at=datetime.fromisoformat(row["p_pinned_at"]) if "p_pinned_at" in row.keys() and row["p_pinned_at"] else None,
+                pinned_label=row["p_label"] if "p_label" in row.keys() else None,
                 needs_response=bool(row["needs_response"]) if "needs_response" in row.keys() and row["needs_response"] else False,
                 created_at=datetime.fromisoformat(row["created_at"]),
                 updated_at=datetime.fromisoformat(row["updated_at"]),
@@ -1090,7 +1096,8 @@ class ConversationStore:
         """List pinned conversations (legacy wrapper)."""
         with get_db() as conn:
             rows = conn.execute(
-                """SELECT c.* FROM conversations c
+                """SELECT c.*, p.pinned_at AS p_pinned_at, p.label AS p_label
+                   FROM conversations c
                    JOIN pinned_items p ON p.item_id = c.id AND p.item_type = 'conversation'
                    ORDER BY p.pinned_at""",
             ).fetchall()
@@ -1099,8 +1106,8 @@ class ConversationStore:
                     id=row["id"],
                     user_id=row["user_id"],
                     title=row["title"],
-                    pinned_at=datetime.fromisoformat(row["pinned_at"]) if row["pinned_at"] else None,
-                    pinned_label=row["pinned_label"],
+                    pinned_at=datetime.fromisoformat(row["p_pinned_at"]) if row["p_pinned_at"] else None,
+                    pinned_label=row["p_label"],
                     created_at=datetime.fromisoformat(row["created_at"]),
                     updated_at=datetime.fromisoformat(row["updated_at"]),
                 )
