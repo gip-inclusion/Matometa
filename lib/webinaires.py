@@ -1,12 +1,12 @@
-"""Webinaire attendance data: Livestorm + Grist sync into SQLite.
+"""Webinaire attendance data: Livestorm + Grist sync.
 
-Provides API clients for both platforms and sync logic to maintain
-a unified webinaires.db database.
+Provides API clients for both platforms and sync logic to write
+to the datalake PostgreSQL via Metabase API.
 
 Usage:
     from lib.webinaires import (
-        LivestormClient, GristClient,
-        ensure_schema, sync_livestorm, sync_grist,
+        LivestormClient, GristClient, DatalakeWriter,
+        sync_livestorm, sync_grist,
     )
 """
 
@@ -27,7 +27,14 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 
 log = logging.getLogger(__name__)
 
-DEFAULT_DB_PATH = Path(__file__).parent.parent / "data" / "webinaires.db"
+# ---------------------------------------------------------------------------
+# Table names (datalake public schema)
+# ---------------------------------------------------------------------------
+
+T_WEBINAIRES = "matometa_webinaires"
+T_SESSIONS = "matometa_webinaire_sessions"
+T_INSCRIPTIONS = "matometa_webinaire_inscriptions"
+T_SYNC_META = "matometa_webinaire_sync_meta"
 
 # ---------------------------------------------------------------------------
 # Product inference
@@ -51,6 +58,79 @@ def infer_product(title: str, organizer_email: str | None = None) -> str | None:
         if re.search(pattern, text):
             return product
     return None
+
+
+# ---------------------------------------------------------------------------
+# Datalake writer (PostgreSQL via Metabase API)
+# ---------------------------------------------------------------------------
+
+class _ResultProxy:
+    """Minimal result wrapper matching sqlite3 cursor interface."""
+
+    def __init__(self, data):
+        self._rows = [tuple(r) for r in (data or {}).get("rows", [])]
+
+    def fetchall(self):
+        return self._rows
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
+
+class DatalakeWriter:
+    """Write to datalake PostgreSQL via Metabase SQL API.
+
+    Provides a sqlite3-like ``execute(sql, params)`` interface.
+    Parameterized queries use ``?`` placeholders (interpolated before sending).
+    """
+
+    def __init__(self, database_id: int = 2):
+        from lib.query import CallerType
+        self._database_id = database_id
+        self._caller = CallerType.APP
+
+    def execute(self, sql, params=None):
+        from lib.query import execute_metabase_query
+        if params:
+            sql = self._interpolate(sql, params)
+        result = execute_metabase_query(
+            instance="datalake",
+            caller=self._caller,
+            sql=sql,
+            database_id=self._database_id,
+        )
+        if not result.success:
+            # INSERT/UPDATE/DDL execute but Metabase complains about no ResultSet
+            if result.error and "ResultSet" in result.error:
+                return _ResultProxy(None)
+            raise RuntimeError(f"Datalake query failed: {result.error}")
+        return _ResultProxy(result.data)
+
+    def commit(self):
+        pass  # auto-commit per query
+
+    @staticmethod
+    def _interpolate(sql, params):
+        parts = sql.split("?")
+        if len(parts) - 1 != len(params):
+            raise ValueError(
+                f"Expected {len(parts) - 1} placeholders, got {len(params)} params"
+            )
+        out = parts[0]
+        for i, val in enumerate(params):
+            out += DatalakeWriter._escape(val) + parts[i + 1]
+        return out
+
+    @staticmethod
+    def _escape(val):
+        if val is None:
+            return "NULL"
+        if isinstance(val, bool):
+            return "TRUE" if val else "FALSE"
+        if isinstance(val, (int, float)):
+            return str(val)
+        s = str(val).replace("'", "''")
+        return f"'{s}'"
 
 
 # ---------------------------------------------------------------------------
@@ -157,11 +237,11 @@ class GristClient:
 
 
 # ---------------------------------------------------------------------------
-# Database schema
+# Test-only schema (SQLite, for unit tests)
 # ---------------------------------------------------------------------------
 
-SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS webinars (
+SCHEMA_SQL = f"""
+CREATE TABLE IF NOT EXISTS {T_WEBINAIRES} (
     id TEXT PRIMARY KEY,
     source TEXT NOT NULL,
     source_id TEXT NOT NULL,
@@ -182,9 +262,9 @@ CREATE TABLE IF NOT EXISTS webinars (
     synced_at TEXT
 );
 
-CREATE TABLE IF NOT EXISTS sessions (
+CREATE TABLE IF NOT EXISTS {T_SESSIONS} (
     id TEXT PRIMARY KEY,
-    webinar_id TEXT REFERENCES webinars(id),
+    webinar_id TEXT REFERENCES {T_WEBINAIRES}(id),
     status TEXT,
     started_at TEXT,
     ended_at TEXT,
@@ -195,7 +275,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     synced_at TEXT
 );
 
-CREATE TABLE IF NOT EXISTS registrations (
+CREATE TABLE IF NOT EXISTS {T_INSCRIPTIONS} (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     source TEXT NOT NULL,
     webinar_id TEXT NOT NULL,
@@ -215,23 +295,24 @@ CREATE TABLE IF NOT EXISTS registrations (
     UNIQUE(source, webinar_id, session_id, email)
 );
 
-CREATE TABLE IF NOT EXISTS sync_meta (
+CREATE TABLE IF NOT EXISTS {T_SYNC_META} (
     key TEXT PRIMARY KEY,
     value TEXT
 );
 """
 
-INDEX_SQL = """
-CREATE INDEX IF NOT EXISTS idx_reg_email ON registrations(email);
-CREATE INDEX IF NOT EXISTS idx_reg_org ON registrations(organisation);
-CREATE INDEX IF NOT EXISTS idx_reg_webinar ON registrations(webinar_id);
+INDEX_SQL = f"""
+CREATE INDEX IF NOT EXISTS idx_reg_email ON {T_INSCRIPTIONS}(email);
+CREATE INDEX IF NOT EXISTS idx_reg_org ON {T_INSCRIPTIONS}(organisation);
+CREATE INDEX IF NOT EXISTS idx_reg_webinar ON {T_INSCRIPTIONS}(webinar_id);
 CREATE INDEX IF NOT EXISTS idx_reg_source_unique
-    ON registrations(source, webinar_id, session_id, email);
-CREATE INDEX IF NOT EXISTS idx_sessions_webinar ON sessions(webinar_id);
+    ON {T_INSCRIPTIONS}(source, webinar_id, session_id, email);
+CREATE INDEX IF NOT EXISTS idx_sessions_webinar ON {T_SESSIONS}(webinar_id);
 """
 
 
 def ensure_schema(conn: sqlite3.Connection):
+    """Create tables in SQLite (for testing only)."""
     conn.executescript(SCHEMA_SQL)
     conn.executescript(INDEX_SQL)
     conn.commit()
@@ -287,7 +368,7 @@ def _extract_organisation(fields: list[dict]) -> str | None:
     return None
 
 
-def sync_livestorm(conn: sqlite3.Connection, client: LivestormClient):
+def sync_livestorm(conn, client: LivestormClient):
     """Full Livestorm sync: events -> sessions -> people."""
     now = _now_iso()
 
@@ -308,11 +389,25 @@ def sync_livestorm(conn: sqlite3.Connection, client: LivestormClient):
             organizer_email = organizer_attrs.get("email")
 
         conn.execute(
-            """INSERT OR REPLACE INTO webinars
+            f"""INSERT INTO {T_WEBINAIRES}
                (id, source, source_id, title, description, organizer_email,
                 product, status, duration_minutes, registrants_count,
                 registration_url, webinar_url, raw_json, synced_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   source=excluded.source,
+                   source_id=excluded.source_id,
+                   title=excluded.title,
+                   description=excluded.description,
+                   organizer_email=excluded.organizer_email,
+                   product=excluded.product,
+                   status=excluded.status,
+                   duration_minutes=excluded.duration_minutes,
+                   registrants_count=excluded.registrants_count,
+                   registration_url=excluded.registration_url,
+                   webinar_url=excluded.webinar_url,
+                   raw_json=excluded.raw_json,
+                   synced_at=excluded.synced_at""",
             (
                 webinar_id,
                 "livestorm",
@@ -336,6 +431,7 @@ def sync_livestorm(conn: sqlite3.Connection, client: LivestormClient):
     # Phase 2: Sessions
     print("  Fetching sessions...")
     session_count = 0
+    session_webinar_map = {}  # sess_id -> webinar_id (for phase 3)
     for i, ev in enumerate(events):
         source_id = ev["id"]
         webinar_id = f"livestorm:{source_id}"
@@ -343,12 +439,23 @@ def sync_livestorm(conn: sqlite3.Connection, client: LivestormClient):
         for sess in sessions:
             sa = sess["attributes"]
             sess_id = f"livestorm:{sess['id']}"
+            session_webinar_map[sess_id] = webinar_id
             conn.execute(
-                """INSERT OR REPLACE INTO sessions
+                f"""INSERT INTO {T_SESSIONS}
                    (id, webinar_id, status, started_at, ended_at,
                     duration_seconds, registrants_count, attendees_count,
                     room_link, synced_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(id) DO UPDATE SET
+                       webinar_id=excluded.webinar_id,
+                       status=excluded.status,
+                       started_at=excluded.started_at,
+                       ended_at=excluded.ended_at,
+                       duration_seconds=excluded.duration_seconds,
+                       registrants_count=excluded.registrants_count,
+                       attendees_count=excluded.attendees_count,
+                       room_link=excluded.room_link,
+                       synced_at=excluded.synced_at""",
                 (
                     sess_id,
                     webinar_id,
@@ -374,11 +481,11 @@ def sync_livestorm(conn: sqlite3.Connection, client: LivestormClient):
     # Only fetch people for sessions not yet synced (incremental)
     already_synced = set(
         row[0] for row in conn.execute(
-            "SELECT DISTINCT session_id FROM registrations WHERE source='livestorm'"
+            f"SELECT DISTINCT session_id FROM {T_INSCRIPTIONS} WHERE source='livestorm'"
         ).fetchall()
     )
     all_sessions = conn.execute(
-        "SELECT id FROM sessions WHERE id LIKE 'livestorm:%'"
+        f"SELECT id FROM {T_SESSIONS} WHERE id LIKE 'livestorm:%'"
     ).fetchall()
     to_sync = [(s,) for (s,) in all_sessions if s not in already_synced]
     print(f"  Fetching attendance data: {len(to_sync)} sessions "
@@ -387,9 +494,18 @@ def sync_livestorm(conn: sqlite3.Connection, client: LivestormClient):
     skipped_sessions = 0
     for i, (sess_id_row,) in enumerate(to_sync):
         livestorm_sess_id = sess_id_row.replace("livestorm:", "")
-        webinar_id = conn.execute(
-            "SELECT webinar_id FROM sessions WHERE id = ?", (sess_id_row,)
-        ).fetchone()[0]
+        webinar_id = session_webinar_map.get(sess_id_row)
+        if not webinar_id:
+            # Fallback: query the DB (for sessions from a previous run)
+            row = conn.execute(
+                f"SELECT webinar_id FROM {T_SESSIONS} WHERE id = ?",
+                (sess_id_row,),
+            ).fetchone()
+            webinar_id = row[0] if row else None
+        if not webinar_id:
+            log.warning("Skipping session %s: no webinar_id found", sess_id_row)
+            skipped_sessions += 1
+            continue
 
         try:
             people = client.get_session_people(livestorm_sess_id)
@@ -411,7 +527,7 @@ def sync_livestorm(conn: sqlite3.Connection, client: LivestormClient):
                       if f.get("id") not in ("email", "first_name", "last_name")}
 
             conn.execute(
-                """INSERT INTO registrations
+                f"""INSERT INTO {T_INSCRIPTIONS}
                    (source, webinar_id, session_id, email, first_name, last_name,
                     organisation, registered, attended, attendance_rate,
                     attendance_duration_seconds, has_viewed_replay,
@@ -479,7 +595,7 @@ def _grist_duration_to_minutes(duree: str | None) -> int | None:
     return int(m.group(1)) if m else None
 
 
-def sync_grist(conn: sqlite3.Connection, client: GristClient):
+def sync_grist(conn, client: GristClient):
     """Full Grist sync (always full replace for this small dataset)."""
     now = _now_iso()
 
@@ -499,12 +615,29 @@ def sync_grist(conn: sqlite3.Connection, client: GristClient):
         organizer_email = f.get("organizer_email")
 
         conn.execute(
-            """INSERT OR REPLACE INTO webinars
+            f"""INSERT INTO {T_WEBINAIRES}
                (id, source, source_id, title, description, organizer_email,
                 product, status, started_at, ended_at, duration_minutes,
                 capacity, registrants_count, registration_url, webinar_url,
                 raw_json, synced_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   source=excluded.source,
+                   source_id=excluded.source_id,
+                   title=excluded.title,
+                   description=excluded.description,
+                   organizer_email=excluded.organizer_email,
+                   product=excluded.product,
+                   status=excluded.status,
+                   started_at=excluded.started_at,
+                   ended_at=excluded.ended_at,
+                   duration_minutes=excluded.duration_minutes,
+                   capacity=excluded.capacity,
+                   registrants_count=excluded.registrants_count,
+                   registration_url=excluded.registration_url,
+                   webinar_url=excluded.webinar_url,
+                   raw_json=excluded.raw_json,
+                   synced_at=excluded.synced_at""",
             (
                 webinar_id,
                 "grist",
@@ -542,7 +675,7 @@ def sync_grist(conn: sqlite3.Connection, client: GristClient):
         webinar_id = f"grist:{event_id}" if event_id else None
 
         conn.execute(
-            """INSERT INTO registrations
+            f"""INSERT INTO {T_INSCRIPTIONS}
                (source, webinar_id, session_id, email, first_name, last_name,
                 organisation, registered, attended, registered_at, synced_at)
                VALUES (?, ?, '', ?, ?, ?, ?, 1, ?, ?, ?)

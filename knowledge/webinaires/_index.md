@@ -13,9 +13,16 @@ Base de données unifiée des webinaires et inscriptions, alimentée par deux so
 
 Période couverte : février 2022 → aujourd'hui.
 
-## Fichier
+## Stockage
 
-`data/webinaires.db` (SQLite, ~80 Mo)
+**Datalake PostgreSQL** (via Metabase API, database 2).
+
+| Table datalake | Contenu |
+|---|---|
+| `matometa_webinaires` | Webinaires (événements) |
+| `matometa_webinaire_sessions` | Sessions Livestorm |
+| `matometa_webinaire_inscriptions` | Inscriptions / participations |
+| `matometa_webinaire_sync_meta` | Métadonnées de synchronisation |
 
 Sync :
 - **Grist** : quotidien via `cron/webinaires/` (2 appels API)
@@ -79,7 +86,7 @@ Un webinaire Livestorm peut avoir plusieurs sessions (occurrences d'un même év
 | `attendance_rate` | REAL | 0–100, % du webinaire vu (Livestorm) |
 | `attendance_duration_seconds` | INTEGER | Durée de présence en secondes (Livestorm) |
 | `has_viewed_replay` | INTEGER | 0 ou 1 (Livestorm) |
-| `custom_fields` | TEXT | JSON des champs personnalisés d'inscription (Livestorm) |
+| `custom_fields` | JSONB | Champs personnalisés d'inscription (Livestorm) |
 | `registered_at` | TEXT | ISO8601 date inscription |
 | `synced_at` | TEXT | Dernier sync |
 
@@ -127,10 +134,10 @@ Champs personnalisés d'inscription (varient selon l'événement) :
 | `votre_role_au_sein_de_la_structure` | 8 758 | Rôle/fonction |
 | `votre_poste` | 6 481 | Intitulé de poste |
 
-Accessibles dans `registrations.custom_fields` (JSON) :
+Accessibles dans `matometa_webinaire_inscriptions.custom_fields` (JSONB) :
 
 ```sql
-SELECT json_extract(custom_fields, '$.votre_structure') FROM registrations
+SELECT custom_fields->>'votre_structure' FROM matometa_webinaire_inscriptions
 WHERE source='livestorm' AND custom_fields IS NOT NULL;
 ```
 
@@ -191,9 +198,9 @@ Le champ `custom_fields` (JSON) contient l'intégralité des champs pour des ext
 SELECT r.organisation, r.email, r.first_name, r.last_name,
        w.title, w.product, r.attended,
        COALESCE(s.started_at, w.started_at) as date
-FROM registrations r
-JOIN webinars w ON r.webinar_id = w.id
-LEFT JOIN sessions s ON r.session_id = s.id
+FROM matometa_webinaire_inscriptions r
+JOIN matometa_webinaires w ON r.webinar_id = w.id
+LEFT JOIN matometa_webinaire_sessions s ON r.session_id = s.id
 WHERE LOWER(r.organisation) LIKE '%plie%'
 ORDER BY date DESC;
 ```
@@ -204,16 +211,16 @@ ORDER BY date DESC;
 -- Par email exact
 SELECT w.title, w.product, r.attended,
        COALESCE(s.started_at, w.started_at) as date
-FROM registrations r
-JOIN webinars w ON r.webinar_id = w.id
-LEFT JOIN sessions s ON r.session_id = s.id
+FROM matometa_webinaire_inscriptions r
+JOIN matometa_webinaires w ON r.webinar_id = w.id
+LEFT JOIN matometa_webinaire_sessions s ON r.session_id = s.id
 WHERE r.email = 'jean.dupont@example.fr';
 
 -- Par domaine
 SELECT r.email, r.first_name, r.last_name, r.organisation,
        w.title, w.product, r.attended
-FROM registrations r
-JOIN webinars w ON r.webinar_id = w.id
+FROM matometa_webinaire_inscriptions r
+JOIN matometa_webinaires w ON r.webinar_id = w.id
 WHERE r.email LIKE '%@mairie-paris.fr'
 ORDER BY r.registered_at DESC;
 ```
@@ -226,8 +233,8 @@ SELECT w.product,
        COUNT(*) as inscriptions,
        SUM(r.attended) as participations,
        ROUND(SUM(r.attended) * 100.0 / COUNT(*), 1) as taux_participation
-FROM registrations r
-JOIN webinars w ON r.webinar_id = w.id
+FROM matometa_webinaire_inscriptions r
+JOIN matometa_webinaires w ON r.webinar_id = w.id
 WHERE w.product IS NOT NULL
 GROUP BY w.product
 ORDER BY inscriptions DESC;
@@ -239,7 +246,7 @@ ORDER BY inscriptions DESC;
 SELECT r.organisation, COUNT(*) as inscriptions,
        SUM(r.attended) as participations,
        COUNT(DISTINCT r.email) as personnes_uniques
-FROM registrations r
+FROM matometa_webinaire_inscriptions r
 WHERE r.organisation IS NOT NULL AND r.organisation != ''
 GROUP BY r.organisation
 ORDER BY inscriptions DESC
@@ -250,17 +257,17 @@ LIMIT 20;
 
 ```sql
 -- Département des inscrits
-SELECT json_extract(custom_fields, '$.votre_departement_indiquez_les_2_ou_3_premiers_chiffres_de_votre_departement_ex_93_pour_la_seine_saint_denis_971_pour_la_guadeloupe') as dept,
+SELECT custom_fields->>'votre_departement_indiquez_les_2_ou_3_premiers_chiffres_de_votre_departement_ex_93_pour_la_seine_saint_denis_971_pour_la_guadeloupe' as dept,
        COUNT(*) as n
-FROM registrations
+FROM matometa_webinaire_inscriptions
 WHERE source='livestorm' AND custom_fields IS NOT NULL
 GROUP BY dept HAVING dept IS NOT NULL
 ORDER BY n DESC LIMIT 10;
 
 -- Type de prescripteur
-SELECT json_extract(custom_fields, '$.quel_type_de_prescripteur_etes-vous') as type_prescripteur,
+SELECT custom_fields->>'quel_type_de_prescripteur_etes-vous' as type_prescripteur,
        COUNT(*) as n
-FROM registrations
+FROM matometa_webinaire_inscriptions
 WHERE source='livestorm' AND custom_fields IS NOT NULL
 GROUP BY type_prescripteur HAVING type_prescripteur IS NOT NULL
 ORDER BY n DESC;
@@ -270,8 +277,9 @@ ORDER BY n DESC;
 
 | Fichier | Rôle |
 |---------|------|
-| `lib/webinaires.py` | Clients API (Livestorm, Grist), schéma, logique de sync |
-| `scripts/sync_webinaires.py` | CLI : `--grist-only`, `--livestorm-only`, `--db PATH` |
+| `lib/webinaires.py` | Clients API (Livestorm, Grist), DatalakeWriter, logique de sync |
+| `scripts/sync_webinaires.py` | CLI : `--grist-only`, `--livestorm-only` |
+| `scripts/datalake_create_webinaires.py` | Création des tables + export initial SQLite → datalake |
 | `cron/webinaires/cron.py` | Cron quotidien : Grist uniquement |
 | `cron/webinaires/CRON.md` | Métadonnées cron (daily, timeout 600s) |
 | `tests/test_webinaires.py` | 43 tests (helpers, schema, sync Grist mocké) |

@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
-"""Sync webinaire attendance data from Livestorm and Grist into SQLite.
+"""Sync webinaire attendance data from Livestorm and Grist into datalake.
 
 Usage:
     python scripts/sync_webinaires.py                  # Full sync (both sources)
     python scripts/sync_webinaires.py --grist-only     # Grist only (for daily cron)
     python scripts/sync_webinaires.py --livestorm-only  # Livestorm only
-    python scripts/sync_webinaires.py --db PATH         # Custom DB path
 """
 
 import argparse
 import logging
-import sqlite3
 import sys
 import time
 from datetime import datetime, timezone
@@ -20,10 +18,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.webinaires import (
-    DEFAULT_DB_PATH,
+    DatalakeWriter,
     GristClient,
     LivestormClient,
-    ensure_schema,
+    T_INSCRIPTIONS,
+    T_SESSIONS,
+    T_SYNC_META,
+    T_WEBINAIRES,
     sync_grist,
     sync_livestorm,
 )
@@ -37,26 +38,20 @@ logging.basicConfig(
 
 def main():
     parser = argparse.ArgumentParser(description="Sync webinaire attendance data")
-    parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH,
-                        help="SQLite database path")
     parser.add_argument("--grist-only", action="store_true",
                         help="Only sync Grist (for daily cron)")
     parser.add_argument("--livestorm-only", action="store_true",
                         help="Only sync Livestorm")
     args = parser.parse_args()
 
-    args.db.parent.mkdir(parents=True, exist_ok=True)
+    conn = DatalakeWriter()
 
     print("=" * 50)
     print("WEBINAIRES SYNC")
     print("=" * 50)
-    print(f"Database: {args.db}")
+    print(f"Target: datalake (Metabase API)")
     print(f"Mode: {'grist-only' if args.grist_only else 'livestorm-only' if args.livestorm_only else 'full'}")
     print()
-
-    conn = sqlite3.connect(args.db)
-    conn.row_factory = sqlite3.Row
-    ensure_schema(conn)
 
     t0 = time.time()
     results = {}
@@ -108,30 +103,28 @@ def main():
     total_time = time.time() - t0
     now = datetime.now(tz=timezone.utc).isoformat()
 
-    total_webinars = conn.execute("SELECT COUNT(*) FROM webinars").fetchone()[0]
-    total_sessions = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
-    total_regs = conn.execute("SELECT COUNT(*) FROM registrations").fetchone()[0]
+    total_webinars = conn.execute(f"SELECT COUNT(*) FROM {T_WEBINAIRES}").fetchone()[0]
+    total_sessions = conn.execute(f"SELECT COUNT(*) FROM {T_SESSIONS}").fetchone()[0]
+    total_regs = conn.execute(f"SELECT COUNT(*) FROM {T_INSCRIPTIONS}").fetchone()[0]
     unique_emails = conn.execute(
-        "SELECT COUNT(DISTINCT email) FROM registrations"
+        f"SELECT COUNT(DISTINCT email) FROM {T_INSCRIPTIONS}"
     ).fetchone()[0]
 
-    conn.execute("INSERT OR REPLACE INTO sync_meta VALUES (?, ?)",
-                 ("last_sync", now))
-    conn.execute("INSERT OR REPLACE INTO sync_meta VALUES (?, ?)",
-                 ("sync_duration_seconds", str(round(total_time, 1))))
-    conn.execute("INSERT OR REPLACE INTO sync_meta VALUES (?, ?)",
-                 ("total_webinars", str(total_webinars)))
-    conn.execute("INSERT OR REPLACE INTO sync_meta VALUES (?, ?)",
-                 ("total_sessions", str(total_sessions)))
-    conn.execute("INSERT OR REPLACE INTO sync_meta VALUES (?, ?)",
-                 ("total_registrations", str(total_regs)))
-    conn.execute("INSERT OR REPLACE INTO sync_meta VALUES (?, ?)",
-                 ("unique_emails", str(unique_emails)))
-    conn.commit()
-    conn.close()
+    for key, value in [
+        ("last_sync", now),
+        ("sync_duration_seconds", str(round(total_time, 1))),
+        ("total_webinars", str(total_webinars)),
+        ("total_sessions", str(total_sessions)),
+        ("total_registrations", str(total_regs)),
+        ("unique_emails", str(unique_emails)),
+    ]:
+        conn.execute(
+            f"""INSERT INTO {T_SYNC_META} (key, value) VALUES (?, ?)
+                ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+            (key, value),
+        )
 
     # Summary
-    db_size = args.db.stat().st_size / 1024 / 1024
     print("=" * 50)
     print("SYNC COMPLETE")
     print("=" * 50)
@@ -140,7 +133,6 @@ def main():
     print(f"Sessions:        {total_sessions}")
     print(f"Registrations:   {total_regs}")
     print(f"Unique emails:   {unique_emails}")
-    print(f"DB size:         {db_size:.1f} MB")
 
     # Exit with error if any source failed
     for source, info in results.items():

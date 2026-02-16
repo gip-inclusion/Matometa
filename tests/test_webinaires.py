@@ -8,6 +8,10 @@ import pytest
 
 from lib.webinaires import (
     GristClient,
+    T_INSCRIPTIONS,
+    T_SESSIONS,
+    T_SYNC_META,
+    T_WEBINAIRES,
     _extract_organisation,
     _grist_duration_to_minutes,
     _ts_to_iso,
@@ -189,10 +193,10 @@ class TestSchema:
                 "SELECT name FROM sqlite_master WHERE type='table'"
             ).fetchall()
         }
-        assert "webinars" in tables
-        assert "sessions" in tables
-        assert "registrations" in tables
-        assert "sync_meta" in tables
+        assert T_WEBINAIRES in tables
+        assert T_SESSIONS in tables
+        assert T_INSCRIPTIONS in tables
+        assert T_SYNC_META in tables
 
     def test_ensure_schema_idempotent(self, db):
         """Calling ensure_schema twice doesn't fail."""
@@ -202,26 +206,26 @@ class TestSchema:
     def test_registration_unique_constraint(self, db):
         """Duplicate (source, webinar_id, session_id, email) is rejected."""
         db.execute(
-            "INSERT INTO registrations (source, webinar_id, session_id, email) "
+            f"INSERT INTO {T_INSCRIPTIONS} (source, webinar_id, session_id, email) "
             "VALUES ('test', 'w1', 's1', 'a@b.com')"
         )
         with pytest.raises(sqlite3.IntegrityError):
             db.execute(
-                "INSERT INTO registrations (source, webinar_id, session_id, email) "
+                f"INSERT INTO {T_INSCRIPTIONS} (source, webinar_id, session_id, email) "
                 "VALUES ('test', 'w1', 's1', 'a@b.com')"
             )
 
     def test_registration_different_sessions_ok(self, db):
         """Same email in different sessions is allowed."""
         db.execute(
-            "INSERT INTO registrations (source, webinar_id, session_id, email) "
+            f"INSERT INTO {T_INSCRIPTIONS} (source, webinar_id, session_id, email) "
             "VALUES ('test', 'w1', 's1', 'a@b.com')"
         )
         db.execute(
-            "INSERT INTO registrations (source, webinar_id, session_id, email) "
+            f"INSERT INTO {T_INSCRIPTIONS} (source, webinar_id, session_id, email) "
             "VALUES ('test', 'w1', 's2', 'a@b.com')"
         )
-        count = db.execute("SELECT COUNT(*) FROM registrations").fetchone()[0]
+        count = db.execute(f"SELECT COUNT(*) FROM {T_INSCRIPTIONS}").fetchone()[0]
         assert count == 2
 
 
@@ -327,7 +331,7 @@ class TestGristSync:
         grist_client._session.get.side_effect = mock_get
         sync_grist(db, grist_client)
 
-        rows = db.execute("SELECT * FROM webinars ORDER BY id").fetchall()
+        rows = db.execute(f"SELECT * FROM {T_WEBINAIRES} ORDER BY id").fetchall()
         assert len(rows) == 2
 
         dora = dict(rows[0])
@@ -351,7 +355,7 @@ class TestGristSync:
         sync_grist(db, grist_client)
 
         rows = db.execute(
-            "SELECT * FROM registrations ORDER BY email"
+            f"SELECT * FROM {T_INSCRIPTIONS} ORDER BY email"
         ).fetchall()
         assert len(rows) == 3
 
@@ -378,7 +382,7 @@ class TestGristSync:
 
         emails = [
             r[0] for r in db.execute(
-                "SELECT email FROM registrations ORDER BY email"
+                f"SELECT email FROM {T_INSCRIPTIONS} ORDER BY email"
             ).fetchall()
         ]
         assert all(e == e.lower() for e in emails)
@@ -398,8 +402,8 @@ class TestGristSync:
         sync_grist(db, grist_client)
         sync_grist(db, grist_client)
 
-        webinar_count = db.execute("SELECT COUNT(*) FROM webinars").fetchone()[0]
-        reg_count = db.execute("SELECT COUNT(*) FROM registrations").fetchone()[0]
+        webinar_count = db.execute(f"SELECT COUNT(*) FROM {T_WEBINAIRES}").fetchone()[0]
+        reg_count = db.execute(f"SELECT COUNT(*) FROM {T_INSCRIPTIONS}").fetchone()[0]
         assert webinar_count == 2
         assert reg_count == 3
 
@@ -417,7 +421,7 @@ class TestGristSync:
 
         # Nora didn't attend initially
         attended = db.execute(
-            "SELECT attended FROM registrations WHERE email='nora@example.fr'"
+            f"SELECT attended FROM {T_INSCRIPTIONS} WHERE email='nora@example.fr'"
         ).fetchone()[0]
         assert attended == 0
 
@@ -441,7 +445,7 @@ class TestGristSync:
         sync_grist(db, grist_client)
 
         attended = db.execute(
-            "SELECT attended FROM registrations WHERE email='nora@example.fr'"
+            f"SELECT attended FROM {T_INSCRIPTIONS} WHERE email='nora@example.fr'"
         ).fetchone()[0]
         assert attended == 1
 
@@ -467,7 +471,7 @@ class TestGristSync:
         grist_client._session.get.side_effect = mock_get
         sync_grist(db, grist_client)
 
-        count = db.execute("SELECT COUNT(*) FROM registrations").fetchone()[0]
+        count = db.execute(f"SELECT COUNT(*) FROM {T_INSCRIPTIONS}").fetchone()[0]
         assert count == 0
 
     def test_skips_empty_event_id(self, db, grist_client):
@@ -488,7 +492,7 @@ class TestGristSync:
         grist_client._session.get.side_effect = mock_get
         sync_grist(db, grist_client)
 
-        count = db.execute("SELECT COUNT(*) FROM webinars").fetchone()[0]
+        count = db.execute(f"SELECT COUNT(*) FROM {T_WEBINAIRES}").fetchone()[0]
         assert count == 0
 
     def test_return_value(self, db, grist_client):

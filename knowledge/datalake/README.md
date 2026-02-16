@@ -217,6 +217,17 @@ ORDER BY nb_services DESC;
 | `immersion_facile_stats_support` | ~29k | Immersion Facile support stats |
 | `immersion_facile_email_agences` | ~3.5k | Immersion Facile agency emails |
 
+### Webinaires (Matometa)
+
+| Table | Description |
+|-------|-------------|
+| `matometa_webinaires` | Webinaires (Livestorm + Grist), synced by Matometa cron |
+| `matometa_webinaire_sessions` | Sessions Livestorm |
+| `matometa_webinaire_inscriptions` | Inscriptions et participations (~95k) |
+| `matometa_webinaire_sync_meta` | Métadonnées de synchronisation |
+
+See `knowledge/webinaires/_index.md` for schema details and query examples.
+
 ### Operational Data
 
 | Table | Rows | Description |
