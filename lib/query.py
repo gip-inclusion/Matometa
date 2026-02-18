@@ -24,6 +24,7 @@ Usage:
     visits = api.get_visits(site_id=117, period="month", date="2025-12-01")
 """
 
+import logging
 import os
 import time
 from dataclasses import dataclass
@@ -32,6 +33,9 @@ from typing import Any, Optional
 
 from ._sources import get_metabase, get_matomo
 from ._audit import log_query, _get_db_connection
+from ._pii_guard import check_sql_for_pii
+
+logger = logging.getLogger(__name__)
 
 # Re-export API classes and helpers for convenience
 from ._matomo import MatomoAPI, MatomoError
@@ -72,6 +76,28 @@ def execute_metabase_query(
         conversation_id = os.environ.get("MATOMETA_CONVERSATION_ID")
 
     start_time = time.time()
+
+    # PII guard: block queries that select personal data columns
+    if sql:
+        pii_check = check_sql_for_pii(sql)
+        if pii_check.blocked:
+            logger.warning("PII guard blocked query: %s", pii_check.reason)
+            log_query(
+                source="metabase",
+                instance=instance,
+                caller=caller.value,
+                conversation_id=conversation_id,
+                query_type="sql",
+                query_details={"sql": sql[:500], "pii_blocked": True,
+                               "pii_reason": pii_check.reason},
+                success=False,
+                error=f"PII guard: {pii_check.reason}",
+                execution_time_ms=0,
+            )
+            return QueryResult(
+                success=False, data=None,
+                error=f"PII guard: {pii_check.reason}",
+            )
 
     try:
         # Get API client (logging is built into the class)
