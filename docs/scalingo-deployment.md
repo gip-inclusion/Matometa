@@ -58,15 +58,15 @@ automatically on startup.
 # --- App core ---
 scalingo --app matometa env-set \
   AGENT_BACKEND=sdk \
-  ANTHROPIC_API_KEY=sk-ant-... \
+  ANTHROPIC_API_KEY=<your-anthropic-api-key> \
   WEB_DEBUG=false \
   ADMIN_USERS=you@inclusion.gouv.fr
 
 # --- OAuth2 (see "Google OAuth setup" section below) ---
 scalingo --app matometa env-set \
   OAUTH2_PROXY_PROVIDER=google \
-  OAUTH2_PROXY_CLIENT_ID=123456789.apps.googleusercontent.com \
-  OAUTH2_PROXY_CLIENT_SECRET=GOCSPX-... \
+  OAUTH2_PROXY_CLIENT_ID=<your-google-client-id>.apps.googleusercontent.com \
+  OAUTH2_PROXY_CLIENT_SECRET=<your-google-client-secret> \
   OAUTH2_PROXY_COOKIE_SECRET=$(python3 -c 'from secrets import token_urlsafe; print(token_urlsafe(32)[:32])') \
   OAUTH2_PROXY_EMAIL_DOMAINS=inclusion.gouv.fr \
   OAUTH2_PROXY_REDIRECT_URL=https://matometa.osc-fr1.scalingo.io/oauth2/callback \
@@ -82,11 +82,11 @@ without them, but query features will fail for the corresponding sources.
 
 ```bash
 scalingo --app matometa env-set \
-  MATOMO_API_KEY=... \
-  METABASE_STATS_API_KEY=... \
-  METABASE_DATALAKE_API_KEY=... \
-  METABASE_DORA_API_KEY=... \
-  METABASE_RDVI_API_KEY=...
+  MATOMO_API_KEY=<your-matomo-token> \
+  METABASE_STATS_API_KEY=<your-metabase-stats-key> \
+  METABASE_DATALAKE_API_KEY=<your-metabase-datalake-key> \
+  METABASE_DORA_API_KEY=<your-metabase-dora-key> \
+  METABASE_RDVI_API_KEY=<your-metabase-rdvi-key>
 ```
 
 ### Optional integrations
@@ -94,24 +94,24 @@ scalingo --app matometa env-set \
 ```bash
 # Notion (report publishing, wishlist, research corpus sync)
 scalingo --app matometa env-set \
-  NOTION_TOKEN=secret_... \
-  NOTION_REPORTS_DB=... \
-  NOTION_WISHLIST_DB=...
+  NOTION_TOKEN=<your-notion-token> \
+  NOTION_REPORTS_DB=<your-notion-reports-db-id> \
+  NOTION_WISHLIST_DB=<your-notion-wishlist-db-id>
 
 # GitHub (knowledge file PRs)
 scalingo --app matometa env-set \
-  GITHUB_PR_TOKEN=ghp_... \
+  GITHUB_PR_TOKEN=<your-github-pat> \
   GITHUB_REPO=gip-inclusion/Matometa
 
 # Livestorm + Grist (webinaire sync)
 scalingo --app matometa env-set \
-  LIVESTORM_API_KEY=... \
-  GRIST_API_KEY=... \
-  GRIST_WEBINAIRES_DOC_ID=...
+  LIVESTORM_API_KEY=<your-livestorm-key> \
+  GRIST_API_KEY=<your-grist-key> \
+  GRIST_WEBINAIRES_DOC_ID=<your-grist-doc-id>
 
 # DeepInfra (research corpus embeddings)
 scalingo --app matometa env-set \
-  DEEPINFRA_API_KEY=...
+  DEEPINFRA_API_KEY=<your-deepinfra-key>
 ```
 
 ### S3 storage (optional)
@@ -122,10 +122,10 @@ Scalingo dynos lose local files on restart.
 
 ```bash
 scalingo --app matometa env-set \
-  S3_BUCKET=matometa-prod \
+  S3_BUCKET=<your-bucket-name> \
   S3_ENDPOINT=https://s3.fr-par.scw.cloud \
-  S3_ACCESS_KEY=... \
-  S3_SECRET_KEY=... \
+  S3_ACCESS_KEY=<your-s3-access-key> \
+  S3_SECRET_KEY=<your-s3-secret-key> \
   S3_REGION=fr-par
 ```
 
@@ -307,7 +307,7 @@ The app auto-migrates the schema on startup. If you suspect corruption:
 
 ```bash
 scalingo --app matometa run bash
-python -c "from web.database import get_db; print('DB OK')"
+python -c "from web.database import get_db; next(get_db()); print('DB OK')"
 ```
 
 ### Local files lost on restart
@@ -324,7 +324,7 @@ ProConnect (French government SSO):
 ```bash
 scalingo --app matometa env-set \
   OAUTH2_PROXY_PROVIDER=oidc \
-  OAUTH2_PROXY_OIDC_ISSUER_URL=https://fca.integ01.dev-agentconnect.fr/api/v2 \
+  OAUTH2_PROXY_OIDC_ISSUER_URL=<proconnect-issuer-url> \
   OAUTH2_PROXY_SCOPE="openid given_name usual_name email profile" \
   OAUTH2_PROXY_EMAIL_DOMAINS=beta.gouv.fr
 ```
