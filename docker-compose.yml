@@ -4,8 +4,6 @@ services:
     restart: always
     hostname: matometa
     init: true  # Use tini to reap zombie processes from Claude CLI tool calls
-    depends_on:
-      - ollama
     # Container hardening
     security_opt:
       - no-new-privileges:true
@@ -14,12 +12,9 @@ services:
     mem_limit: 2g
     pids_limit: 200
     environment:
-      - AGENT_BACKEND=${AGENT_BACKEND:-ollama}
-      - LLM_BACKEND=${LLM_BACKEND:-ollama}
+      - AGENT_BACKEND=${AGENT_BACKEND:-cli}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3-coder-next}
-      - OLLAMA_TITLE_MODEL=${OLLAMA_TITLE_MODEL:-qwen3-coder-next}
-      - OLLAMA_TAG_MODEL=${OLLAMA_TAG_MODEL:-qwen3-coder-next}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - GITHUB_PR_TOKEN=${GITHUB_PR_TOKEN}
       - GITHUB_REPO=${GITHUB_REPO}
@@ -48,6 +43,8 @@ services:
   ollama:
     image: ollama/ollama:latest
     restart: unless-stopped
+    profiles:
+      - ollama
     volumes:
       - ollama_data:/root/.ollama
 
