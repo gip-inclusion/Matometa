@@ -28,7 +28,7 @@ Matometa combine les APIs **Matomo** (analytics web) et **Metabase** (données m
 │   └── sync_*/          # Synchronisation des données de référence
 │
 ├── web/                 # Application web Flask
-│   ├── agents/          # Backends CLI et SDK pour Claude
+│   ├── agents/          # Backends agent (cli, cli-ollama)
 │   ├── routes/          # Endpoints API et pages HTML
 │   ├── templates/       # Templates Jinja2
 │   └── static/          # CSS, JS, assets
@@ -99,22 +99,35 @@ cp .env.example .env
 npm install -g @anthropic-ai/claude-code
 
 # Lancer l'application
-python -m web.app
+make dev
 ```
 
 L'interface est accessible sur http://127.0.0.1:5000
 
+### Backends
+
+Deux backends disponibles :
+
+| Backend | Description | Prérequis |
+|---------|-------------|-----------|
+| `cli` (défaut) | Claude Code CLI avec OAuth Anthropic | Claude CLI installé |
+| `cli-ollama` | Claude Code CLI pointé vers Ollama | Ollama en local ou en conteneur |
+
+```bash
+make dev           # Backend cli (défaut)
+make dev-ollama    # Backend cli-ollama (ollama doit tourner)
+```
+
 ### Configuration
 
-Variables d'environnement principales :
+Variables d'environnement principales (voir `.env.example`) :
 
 | Variable | Description |
 |----------|-------------|
+| `AGENT_BACKEND` | `cli` (défaut) ou `cli-ollama` |
 | `MATOMO_TOKEN` | Token API Matomo |
 | `METABASE_USER` | Email utilisateur Metabase |
 | `METABASE_PASSWORD` | Mot de passe Metabase |
-| `ANTHROPIC_API_KEY` | Clé API Anthropic (optionnel, OAuth par défaut) |
-| `AGENT_BACKEND` | `cli` (défaut) ou `sdk` |
 | `ADMIN_USERS` | Emails des admins (séparés par virgules) |
 
 ## Déploiement
@@ -122,12 +135,16 @@ Variables d'environnement principales :
 ### Docker (auto-hébergé)
 
 ```bash
-# Build et run avec Docker
-docker-compose up -d
+make up             # Backend cli (défaut)
+make up-ollama      # Backend cli-ollama + conteneur Ollama
+make up-eval        # Backend cli + Ollama disponible pour les evals
+make down           # Tout arrêter
 
 # L'app écoute sur 127.0.0.1:5002
 # Configurer un reverse proxy (nginx, Caddy) pour l'exposer
 ```
+
+Le conteneur Ollama est géré via un profil Docker Compose. Il ne démarre que lorsqu'il est explicitement demandé (`make up-ollama` ou `COMPOSE_PROFILES=ollama`).
 
 Le conteneur utilise OAuth2-Proxy pour l'authentification. L'email de l'utilisateur est passé via le header `X-Forwarded-Email`.
 
@@ -170,14 +187,15 @@ git push scalingo main
 
 ```bash
 # Tests
-pytest
+make test
 
-# Linter
-ruff check .
+# Evals (comparer les backends)
+make up-eval                                   # Démarrer Ollama pour les evals
+.venv/bin/python evals/run_eval.py             # Lancer les evals
 
 # Synchroniser les données de référence
-python -m skills.sync_sites.scripts.sync      # Sites Matomo
-python -m skills.sync_metabase.scripts.sync   # Cartes Metabase
+python -m skills.sync_sites.scripts.sync       # Sites Matomo
+python -m skills.sync_metabase.scripts.sync    # Cartes Metabase
 ```
 
 ## Licence
