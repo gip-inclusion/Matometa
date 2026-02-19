@@ -34,15 +34,9 @@ def build_sql_url(base_url: str, database_id: int, sql: str) -> str:
     """
     query_obj = {
         "dataset_query": {
-            "lib/type": "mbql/query",
+            "type": "native",
+            "native": {"query": sql, "template-tags": {}},
             "database": database_id,
-            "stages": [
-                {
-                    "native": sql,
-                    "lib/type": "mbql.stage/native",
-                    "template-tags": {},
-                }
-            ],
         },
         "display": "table",
         "parameters": [],
