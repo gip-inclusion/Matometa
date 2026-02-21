@@ -499,6 +499,22 @@ async def stream_conversation(
                 store.get_conversation, conv_id, False
             )
             if updated and not updated.needs_response:
+                # Final sweep: the PM commits all messages before clearing
+                # needs_response, so one last poll catches anything written
+                # between our message query and this status check.
+                final = await asyncio.to_thread(
+                    store.get_messages_since, conv_id, last_msg_id
+                )
+                for msg in final:
+                    sse_data = {"type": msg.type, "content": msg.content}
+                    if msg.type in ("tool_use", "tool_result"):
+                        try:
+                            sse_data["content"] = json.loads(msg.content)
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                    yield f"event: {msg.type}\n"
+                    yield f"data: {json.dumps(sse_data)}\n\n"
+
                 yield f"event: done\n"
                 yield f"data: {json.dumps({'conversation_id': conv_id})}\n\n"
                 return
