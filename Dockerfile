@@ -7,7 +7,6 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y \
     curl \
     git \
-    gosu \
     procps \
     clamav \
     clamav-daemon \
@@ -45,9 +44,12 @@ COPY --chown=matometa:matometa . .
 RUN mkdir -p /app/data /app/data/uploads /app/data/modified \
     && chown matometa:matometa /app/data /app/data/uploads /app/data/modified
 
-# Entrypoint fixes data dir ownership then drops to matometa via gosu
-COPY entrypoint.sh /entrypoint.sh
+# Entrypoint cleans stale SQLite WAL/SHM files left by other host users
+COPY --chown=matometa:matometa entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# Switch to non-root user
+USER matometa
 
 # Environment variables
 ENV AGENT_BACKEND=sdk \

@@ -1,8 +1,12 @@
 #!/bin/bash
 set -e
 
-# Fix ownership of data directory — handles files created by other host users
-# (e.g. meduse-agent running sqlite3 directly, leaving WAL/SHM owned by UID 1003)
-chown -R matometa:matometa /app/data 2>/dev/null || true
+# Remove stale SQLite WAL/SHM files if not writable by current user.
+# These can be left by other host users (e.g. meduse-agent running sqlite3 directly)
+# with a different UID. The data dir is owned by matometa, so we can always delete
+# files in it. SQLite will recreate them with correct ownership on next open.
+for f in /app/data/*.db-wal /app/data/*.db-shm; do
+    [ -f "$f" ] && [ ! -w "$f" ] && rm -f "$f" && echo "Removed stale $f"
+done
 
-exec gosu matometa "$@"
+exec "$@"
