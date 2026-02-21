@@ -603,6 +603,8 @@ User request: """
                             # Using str(dict) breaks JSON parsing because Python escapes ' as \'
                             if isinstance(event.content, dict) and 'output' in event.content:
                                 raw_content = event.content['output']
+                                if not isinstance(raw_content, str):
+                                    raw_content = str(raw_content)
                             elif isinstance(event.content, str):
                                 raw_content = event.content
                             else:

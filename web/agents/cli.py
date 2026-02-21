@@ -133,13 +133,14 @@ class CLIBackend(AgentBackend):
 
         env = self._build_env(conversation_id)
 
-        # Spawn process
+        # Spawn process (10 MB buffer to handle large tool results)
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(config.BASE_DIR),
             env=env,
+            limit=10 * 1024 * 1024,
         )
 
         logger.info(f"Process started with PID: {process.pid}")
