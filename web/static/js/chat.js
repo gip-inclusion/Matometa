@@ -1147,7 +1147,25 @@ function startStream() {
       return;
     }
 
-    // Max retries exceeded or no message to retry
+    // Max retries exceeded — but check if agent is still running before giving up
+    try {
+      const checkResponse = await fetch(`/api/conversations/${currentConversationId}`);
+      if (checkResponse.ok) {
+        const conv = await checkResponse.json();
+        if (conv.is_running) {
+          // Agent still running, reset retries and keep waiting
+          console.log('Agent still running, resetting retries...');
+          retryCount = 0;
+          await loadConversation(currentConversationId, { autoStream: false });
+          startStream();
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Failed to check if agent is running:', err);
+    }
+
+    // Agent truly stopped or unreachable
     setStreamingState(false);
     hideLoading();
     removeProgressIndicator();
