@@ -4,10 +4,14 @@
 
 ## Start locally with cli backend (reads .env)
 dev:
+	.venv/bin/python3 -m web.pm & PID=$$!; \
+	trap "kill $$PID 2>/dev/null" EXIT; \
 	.venv/bin/python3 -m web.app
 
 ## Start locally with cli-ollama backend (ollama must be running)
 dev-ollama:
+	.venv/bin/python3 -m web.pm & PID=$$!; \
+	trap "kill $$PID 2>/dev/null" EXIT; \
 	AGENT_BACKEND=cli-ollama .venv/bin/python3 -m web.app
 
 # --- Docker ---
