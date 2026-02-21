@@ -180,6 +180,44 @@ class TestSSEFormat:
         assert "assistant" in types
 
 
+class TestRaceCondition:
+    """PM writes messages before SSE handler connects."""
+
+    def test_pm_writes_before_sse_connect(self, app, client):
+        """Messages written by PM before SSE connect must still be streamed.
+
+        Race condition: the PM can write messages between the client's POST
+        (which enqueues the command) and the SSE connect.  The client passes
+        ``after=<user_msg_id>`` so the SSE handler starts streaming from
+        the user message onward — catching anything the PM wrote in between.
+        """
+        from web.storage import store
+
+        conv = store.create_conversation(user_id="test@example.com")
+        user_msg = store.add_message(conv.id, "user", "Hello")
+        store.update_conversation(conv.id, needs_response=True)
+
+        # PM writes a response BEFORE the SSE handler connects
+        store.add_message(conv.id, "assistant", "Fast response")
+
+        # Then more messages arrive and PM finishes
+        t = _simulate_pm(conv.id, [("assistant", "Second part")])
+        response = client.get(
+            f"/api/conversations/{conv.id}/stream?after={user_msg.id}",
+            headers={"X-Forwarded-Email": "test@example.com"},
+        )
+        t.join()
+        events = _parse_sse_events(response.content)
+        assistant = [e for e in events if e["event"] == "assistant"]
+
+        assert len(assistant) >= 1, (
+            "No assistant events in SSE stream! "
+            "Messages written before SSE connect were lost."
+        )
+        # The first assistant message must be the one written before connect
+        assert assistant[0]["data"]["content"] == "Fast response"
+
+
 class TestNeedsResponse:
     """needs_response column controls stream behavior."""
 
@@ -380,6 +418,7 @@ class TestClientDisconnect:
         async def _run():
             response = await stream_conversation(
                 conv_id=conversation.id,
+                after=0,
                 user_email="test@example.com",
             )
             gen = response.body_iterator

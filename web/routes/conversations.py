@@ -5,7 +5,7 @@ import json
 import logging
 import threading
 
-from fastapi import APIRouter, Depends, Request, UploadFile
+from fastapi import APIRouter, Depends, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from ..deps import get_current_user
@@ -375,7 +375,7 @@ async def send_message(conv_id: str, request: Request, user_email: str = Depends
         return JSONResponse({"error": "Conversation already running"}, status_code=409)
 
     is_first_message = len(conv.messages) == 0
-    store.add_message(conv_id, "user", content)
+    user_msg = store.add_message(conv_id, "user", content)
     store.update_conversation(conv_id, needs_response=True)
 
     if is_first_message:
@@ -436,6 +436,7 @@ User request: """
 
     return {
         "status": "started",
+        "after_id": user_msg.id if user_msg else 0,
         "links": {
             "stream": f"/api/conversations/{conv_id}/stream",
             "cancel": f"/api/conversations/{conv_id}/cancel",
@@ -444,18 +445,27 @@ User request: """
 
 
 @router.get("/{conv_id}/stream")
-async def stream_conversation(conv_id: str, user_email: str = Depends(get_current_user)):
+async def stream_conversation(
+    conv_id: str,
+    after: int = Query(default=0),
+    user_email: str = Depends(get_current_user),
+):
     """Stream agent responses via Server-Sent Events.
 
     Tails the messages table for new events written by the process manager.
     Decoupled from the agent subprocess — client disconnect does NOT kill
     the agent.
+
+    The ``after`` query parameter tells the handler where to start streaming
+    from (the ID of the last message the client already has).  This prevents
+    a race condition where the PM writes messages between the client's POST
+    and the SSE connect — without ``after``, those messages would be skipped.
     """
-    conv = store.get_conversation(conv_id)
+    conv = store.get_conversation(conv_id, include_messages=after == 0)
     if not conv:
         return JSONResponse({"error": "Conversation not found"}, status_code=404)
 
-    if not conv.messages:
+    if after == 0 and not conv.messages:
         return JSONResponse({"error": "No messages in conversation"}, status_code=400)
 
     # If no response needed, nothing to stream
@@ -472,8 +482,8 @@ async def stream_conversation(conv_id: str, user_email: str = Depends(get_curren
 
     # Tail the messages table: poll for new messages written by the PM
     async def generate():
-        # Start from the last message ID we already know about
-        last_msg_id = conv.messages[-1].id if conv.messages else 0
+        # Use client-provided watermark, or fall back to last known message
+        last_msg_id = after if after > 0 else (conv.messages[-1].id if conv.messages else 0)
         poll_count = 0
         max_polls = 600  # 5 minutes at 0.5s intervals
 

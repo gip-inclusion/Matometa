@@ -1039,8 +1039,8 @@ async function sendToAgent(message) {
       return;
     }
 
-    // Start streaming
-    startStream();
+    // Start streaming from after the user message we just sent
+    startStream(data.after_id || 0);
 
   } catch (error) {
     console.error('Failed to send message:', error);
@@ -1060,9 +1060,18 @@ function closeEventSource() {
 }
 
 /**
+ * Return the ID of the last message the client already has from a conv payload.
+ */
+function lastLoadedMsgId(conv) {
+  return conv?.messages?.length
+    ? conv.messages[conv.messages.length - 1].id
+    : 0;
+}
+
+/**
  * Start SSE streaming for the current conversation
  */
-function startStream() {
+function startStream(afterMsgId = 0) {
   if (!currentConversationId) return;
 
   // Close any existing connection first
@@ -1073,8 +1082,9 @@ function startStream() {
   // Show loading indicator
   showLoading();
 
-  // Connect to SSE endpoint
-  eventSource = new EventSource(`/api/conversations/${currentConversationId}/stream`);
+  // Connect to SSE endpoint (after= tells server where client left off)
+  const afterParam = afterMsgId ? `?after=${afterMsgId}` : '';
+  eventSource = new EventSource(`/api/conversations/${currentConversationId}/stream${afterParam}`);
   eventSourceConversationId = currentConversationId;
 
   // Handle different event types
@@ -1142,8 +1152,8 @@ function startStream() {
       }
 
       // Conversation exists — reload from DB to catch missed events, then retry stream
-      await loadConversation(currentConversationId, { autoStream: false });
-      startStream();
+      const reloaded = await loadConversation(currentConversationId, { autoStream: false });
+      startStream(lastLoadedMsgId(reloaded));
       return;
     }
 
@@ -1156,8 +1166,8 @@ function startStream() {
           // Agent still running, reset retries and keep waiting
           console.log('Agent still running, resetting retries...');
           retryCount = 0;
-          await loadConversation(currentConversationId, { autoStream: false });
-          startStream();
+          const reloaded = await loadConversation(currentConversationId, { autoStream: false });
+          startStream(lastLoadedMsgId(reloaded));
           return;
         }
       }
@@ -2476,8 +2486,11 @@ async function loadConversation(convId, { autoStream = true } = {}) {
     // If conversation is running, resume the stream (unless caller handles it)
     if (autoStream && conv.is_running) {
       console.log('Conversation is running, resuming stream...');
-      startStream();
+      const lastMsgId = lastLoadedMsgId(conv);
+      startStream(lastMsgId);
     }
+
+    return conv;
 
   } catch (error) {
     console.error('Failed to load conversation:', error);
