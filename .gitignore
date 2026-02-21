@@ -19,3 +19,4 @@ AGENTS.local.md
 knowledge/metabase/cards.db
 auth/allowed_emails.txt
 docker-compose.local.yml
+.pm.pid
