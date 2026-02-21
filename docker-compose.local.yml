@@ -56,19 +56,13 @@ services:
         condition: service_healthy
       minio-setup:
         condition: service_completed_successfully
+    env_file: .env
     environment:
+      # Overrides (take precedence over .env)
       - AGENT_BACKEND=cli
-      # Note: ANTHROPIC_API_KEY intentionally not set for CLI backend
-      # CLI uses OAuth credentials from ~/.claude/.credentials.json
-      - GITHUB_PR_TOKEN=${GITHUB_PR_TOKEN}
-      - GITHUB_REPO=${GITHUB_REPO}
-      - NOTION_TOKEN=${NOTION_TOKEN}
-      - NOTION_WISHLIST_DB=${NOTION_WISHLIST_DB}
       - WEB_HOST=0.0.0.0
       - WEB_PORT=5000
       - WEB_DEBUG=true
-      - ADMIN_USERS=${ADMIN_USERS}
-      - BASE_URL=${BASE_URL:-}
       # PostgreSQL
       - DATABASE_URL=postgresql://${POSTGRES_USER:-matometa}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-matometa}
       # S3 (MinIO)

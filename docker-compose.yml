@@ -11,20 +11,12 @@ services:
       - ALL
     mem_limit: 2g
     pids_limit: 200
+    env_file: .env
     environment:
-      - AGENT_BACKEND=${AGENT_BACKEND:-cli}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3-coder-next}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - GITHUB_PR_TOKEN=${GITHUB_PR_TOKEN}
-      - GITHUB_REPO=${GITHUB_REPO}
-      - NOTION_TOKEN=${NOTION_TOKEN}
-      - NOTION_WISHLIST_DB=${NOTION_WISHLIST_DB}
+      # Overrides (take precedence over .env)
       - WEB_HOST=0.0.0.0
       - WEB_PORT=5000
       - WEB_DEBUG=false
-      # Admin users who can see all conversations (comma-separated emails)
-      - ADMIN_USERS=${ADMIN_USERS}
     ports:
       - "127.0.0.1:5002:5000"
     volumes:
