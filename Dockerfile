@@ -7,6 +7,7 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y \
     curl \
     git \
+    gosu \
     procps \
     clamav \
     clamav-daemon \
@@ -41,12 +42,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY --chown=matometa:matometa . .
 
 # Create data directories for SQLite, uploads, and modified files
-# (chown only these dirs — COPY --chown already handled /app)
 RUN mkdir -p /app/data /app/data/uploads /app/data/modified \
     && chown matometa:matometa /app/data /app/data/uploads /app/data/modified
 
-# Switch to non-root user
-USER matometa
+# Entrypoint fixes data dir ownership then drops to matometa via gosu
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Environment variables
 ENV AGENT_BACKEND=sdk \
@@ -56,4 +57,5 @@ ENV AGENT_BACKEND=sdk \
 
 EXPOSE 5000
 
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python", "-m", "web.app"]
