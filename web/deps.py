@@ -1,5 +1,6 @@
 """Shared FastAPI dependencies and template helpers."""
 
+import os
 import re
 
 from fastapi import Request
@@ -63,3 +64,15 @@ def _result_icon_filter(result):
 
 templates.env.filters["regex_replace"] = _regex_replace_filter
 templates.env.filters["result_icon"] = _result_icon_filter
+
+
+def _static_url(path: str) -> str:
+    """Return /static/path?v=mtime for cache busting."""
+    try:
+        mtime = int(os.path.getmtime(f"web/static/{path}"))
+    except OSError:
+        mtime = 0
+    return f"/static/{path}?v={mtime}"
+
+
+templates.env.globals["static_url"] = _static_url

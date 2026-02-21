@@ -16,7 +16,7 @@
   <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
 
   <!-- App styles -->
-  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="{{ static_url('css/style.css') }}">
 
   {% block head %}{% endblock %}
 </head>
@@ -232,7 +232,7 @@
   <script>mermaid.initialize({ startOnLoad: false, theme: 'default' });</script>
 
   <!-- App JS -->
-  <script src="/static/js/chat.js"></script>
+  <script src="{{ static_url('js/chat.js') }}"></script>
 
   <!-- Allow cmd/ctrl+click to open links in new tabs (bypass htmx) -->
   <script>

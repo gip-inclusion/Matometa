@@ -471,6 +471,20 @@ async def stream_conversation(
     # Tail the messages table: poll for new messages written by the PM.
     # Even when needs_response is already False (PM finished before SSE
     # connect), we flush unseen messages before sending done.
+    def _sse_event(msg_type: str, data: dict) -> str:
+        """Format a complete SSE event as a single string (avoids split-chunk buffering)."""
+        return f"event: {msg_type}\ndata: {json.dumps(data)}\n\n"
+
+    def _format_msg(msg) -> str:
+        """Format a DB message as an SSE event string."""
+        sse_data = {"type": msg.type, "content": msg.content}
+        if msg.type in ("tool_use", "tool_result"):
+            try:
+                sse_data["content"] = json.loads(msg.content)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return _sse_event(msg.type, sse_data)
+
     async def generate():
         last_msg_id = after if after > 0 else (conv.messages[-1].id if conv.messages else 0)
         logger.debug(f"SSE stream start: conv={conv_id}, after={after}, watermark={last_msg_id}")
@@ -482,20 +496,10 @@ async def stream_conversation(
                 store.get_messages_since, conv_id, last_msg_id
             )
             if new_messages:
-                logger.debug(f"SSE poll {poll_count}: {len(new_messages)} new msgs: {[(m.id, m.type, m.content[:60]) for m in new_messages]}")
+                logger.debug(f"SSE poll {poll_count}: {len(new_messages)} new msgs, types={[m.type for m in new_messages]}")
             for msg in new_messages:
                 last_msg_id = msg.id
-                sse_data = {"type": msg.type, "content": msg.content}
-
-                # Parse JSON content for tool events
-                if msg.type in ("tool_use", "tool_result"):
-                    try:
-                        sse_data["content"] = json.loads(msg.content)
-                    except (json.JSONDecodeError, TypeError):
-                        pass
-
-                yield f"event: {msg.type}\n"
-                yield f"data: {json.dumps(sse_data)}\n\n"
+                yield _format_msg(msg)
 
             # Check if the PM has finished (needs_response cleared)
             updated = await asyncio.to_thread(
@@ -509,17 +513,9 @@ async def stream_conversation(
                     store.get_messages_since, conv_id, last_msg_id
                 )
                 for msg in final:
-                    sse_data = {"type": msg.type, "content": msg.content}
-                    if msg.type in ("tool_use", "tool_result"):
-                        try:
-                            sse_data["content"] = json.loads(msg.content)
-                        except (json.JSONDecodeError, TypeError):
-                            pass
-                    yield f"event: {msg.type}\n"
-                    yield f"data: {json.dumps(sse_data)}\n\n"
+                    yield _format_msg(msg)
 
-                yield f"event: done\n"
-                yield f"data: {json.dumps({'conversation_id': conv_id})}\n\n"
+                yield _sse_event("done", {"conversation_id": conv_id})
                 return
 
             poll_count += 1
@@ -528,8 +524,7 @@ async def stream_conversation(
                 yield ": keepalive\n\n"
             await asyncio.sleep(0.5)
 
-        yield f"event: error\n"
-        yield f"data: {json.dumps({'error': 'Timeout waiting for agent'})}\n\n"
+        yield _sse_event("error", {"error": "Timeout waiting for agent"})
 
     return StreamingResponse(
         generate(),
