@@ -1,0 +1,22 @@
+.git
+__pycache__
+*.pyc
+.pytest_cache
+.DS_Store
+.env
+.env.*
+.venv
+
+# Runtime volumes — mounted, not baked
+data/
+data-remote/
+claude-credentials/
+
+# Not needed in production image
+reports/
+knowledge-drafts/
+tests/
+evals/
+docker-compose.local.yml
+AGENTS.local.md
+auth/allowed_emails.txt

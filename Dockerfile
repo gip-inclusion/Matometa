@@ -29,14 +29,21 @@ WORKDIR /app
 
 # Copy requirements first for caching
 COPY requirements.txt .
+
+# Install CPU-only PyTorch (server has no GPU).
+# Avoids pulling ~7GB of CUDA/nvidia libraries.
+# Local dev on macOS gets MPS support from the default torch wheel.
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY --chown=matometa:matometa . .
 
 # Create data directories for SQLite, uploads, and modified files
+# (chown only these dirs — COPY --chown already handled /app)
 RUN mkdir -p /app/data /app/data/uploads /app/data/modified \
-    && chown -R matometa:matometa /app/data
+    && chown matometa:matometa /app/data /app/data/uploads /app/data/modified
 
 # Switch to non-root user
 USER matometa
