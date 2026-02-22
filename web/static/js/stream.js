@@ -116,9 +116,8 @@ async function sendToAgent(message) {
     const data = await response.json();
 
     if (!response.ok) {
-      // If conversation not found, try to recover
       if (response.status === 404) {
-        await recoverConversation(message);
+        await recover({ createNew: true });
         return;
       }
       showError(data.error || 'Erreur lors de l\'envoi');
@@ -214,64 +213,55 @@ function startStream(afterMsgId = 0) {
     markFinalAnswer();
   });
 
-  // Handle errors
-  eventSource.onerror = async (e) => {
-    console.error('SSE error:', e);
+  // Handle errors — flat logic, no counter reset
+  eventSource.onerror = async () => {
     eventSource.close();
     eventSource = null;
     eventSourceConversationId = null;
 
-    // Try to retry if we haven't exceeded max retries
-    if (retryCount < MAX_RETRIES && lastUserMessage) {
-      retryCount++;
-      console.log(`Retrying (${retryCount}/${MAX_RETRIES})...`);
-
-      // Wait before retrying (exponential backoff)
-      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * retryCount));
-
-      // Check if conversation still exists, recover if not
-      try {
-        const checkResponse = await fetch(`/api/conversations/${currentConversationId}`);
-        if (checkResponse.status === 404) {
-          console.log('Conversation lost, recovering...');
-          await recoverConversation(lastUserMessage);
-          return;
-        }
-      } catch (err) {
-        console.error('Failed to check conversation:', err);
-      }
-
-      // Conversation exists — reload from DB to catch missed events, then retry stream
-      const reloaded = await loadConversation(currentConversationId, { autoStream: false });
-      startStream(lastLoadedMsgId(reloaded));
+    if (retryCount >= MAX_RETRIES) {
+      setStreamingState(false);
+      hideLoading();
+      removeProgressIndicator();
+      appendRecoveryMessage();
       return;
     }
 
-    // Max retries exceeded — but check if agent is still running before giving up
+    retryCount++;
+    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * retryCount));
+
+    // Check conversation status
+    let conv;
     try {
-      const checkResponse = await fetch(`/api/conversations/${currentConversationId}`);
-      if (checkResponse.ok) {
-        const conv = await checkResponse.json();
-        if (conv.is_running) {
-          // Agent still running, reset retries and keep waiting
-          console.log('Agent still running, resetting retries...');
-          retryCount = 0;
-          const reloaded = await loadConversation(currentConversationId, { autoStream: false });
-          startStream(lastLoadedMsgId(reloaded));
-          return;
-        }
+      const resp = await fetch(`/api/conversations/${currentConversationId}`);
+      if (!resp.ok) {
+        setStreamingState(false);
+        hideLoading();
+        removeProgressIndicator();
+        appendRecoveryMessage();
+        return;
       }
-    } catch (err) {
-      console.error('Failed to check if agent is running:', err);
+      conv = await resp.json();
+    } catch {
+      setStreamingState(false);
+      hideLoading();
+      removeProgressIndicator();
+      appendRecoveryMessage();
+      return;
     }
 
-    // Agent truly stopped or unreachable
-    setStreamingState(false);
-    hideLoading();
-    removeProgressIndicator();
+    // Reload conversation to catch missed messages
+    const reloaded = await loadConversation(currentConversationId, { autoStream: false });
 
-    // Show error with recovery option
-    appendRecoveryMessage();
+    if (conv.is_running) {
+      startStream(lastLoadedMsgId(reloaded));
+    } else {
+      // Agent finished while we were disconnected
+      setStreamingState(false);
+      hideLoading();
+      removeProgressIndicator();
+      markFinalAnswer();
+    }
   };
 }
 
@@ -293,10 +283,10 @@ function appendRecoveryMessage() {
   block.className = 'event-block event-error';
   block.innerHTML = `
     <div>Connexion interrompue.</div>
-    <button class="btn btn-sm btn-outline-primary mt-2" onclick="retryLastMessage()">
+    <button class="btn btn-sm btn-outline-primary mt-2" onclick="recover()">
       Réessayer
     </button>
-    <button class="btn btn-sm btn-outline-secondary mt-2 ms-2" onclick="startNewConversation()">
+    <button class="btn btn-sm btn-outline-secondary mt-2 ms-2" onclick="recover({ createNew: true })">
       Nouvelle conversation
     </button>
   `;
@@ -310,84 +300,45 @@ function appendRecoveryMessage() {
 }
 
 /**
- * Retry the last message
+ * Remove the recovery error message if visible
  */
-async function retryLastMessage() {
+function removeRecoveryMessage() {
+  const chatOutput = document.getElementById('chatOutput');
+  if (!chatOutput) return;
+  const lastBlock = chatOutput.lastElementChild;
+  if (lastBlock && lastBlock.classList.contains('event-error')) {
+    lastBlock.remove();
+  }
+}
+
+/**
+ * Retry the last message, optionally in a new conversation
+ */
+async function recover({ createNew = false } = {}) {
   if (!lastUserMessage) {
     showError('Pas de message à réessayer');
     return;
   }
 
-  // Remove the recovery message
-  const chatOutput = document.getElementById('chatOutput');
-  const lastBlock = chatOutput.lastElementChild;
-  if (lastBlock && lastBlock.classList.contains('event-error')) {
-    lastBlock.remove();
+  removeRecoveryMessage();
+
+  if (createNew) {
+    currentConversationId = null;
+    try {
+      const resp = await fetch('/api/conversations', { method: 'POST' });
+      const data = await resp.json();
+      currentConversationId = data.id;
+    } catch (error) {
+      console.error('Failed to create conversation:', error);
+      showError('Impossible de créer une nouvelle conversation');
+      return;
+    }
   }
 
   retryCount = 0;
   setStreamingState(true);
   showLoading();
-
-  // Try with existing conversation first, recover if needed
   await sendToAgent(lastUserMessage);
-}
-
-/**
- * Start a completely new conversation
- */
-async function startNewConversation() {
-  // Remove the recovery message
-  const chatOutput = document.getElementById('chatOutput');
-  const lastBlock = chatOutput.lastElementChild;
-  if (lastBlock && lastBlock.classList.contains('event-error')) {
-    lastBlock.remove();
-  }
-
-  // Reset state
-  currentConversationId = null;
-  retryCount = 0;
-
-  // Create new conversation
-  try {
-    const response = await fetch('/api/conversations', { method: 'POST' });
-    const data = await response.json();
-    currentConversationId = data.id;
-
-    // Re-send the last message
-    if (lastUserMessage) {
-      setStreamingState(true);
-      showLoading();
-      await sendToAgent(lastUserMessage);
-    }
-  } catch (error) {
-    console.error('Failed to create conversation:', error);
-    showError('Impossible de créer une nouvelle conversation');
-  }
-}
-
-/**
- * Recover from a lost conversation by creating a new one
- */
-async function recoverConversation(message) {
-  console.log('Conversation not found, creating new one...');
-
-  // Reset conversation
-  currentConversationId = null;
-
-  try {
-    const response = await fetch('/api/conversations', { method: 'POST' });
-    const data = await response.json();
-    currentConversationId = data.id;
-
-    // Re-send the message
-    await sendToAgent(message);
-  } catch (error) {
-    console.error('Failed to recover conversation:', error);
-    setStreamingState(false);
-    hideLoading();
-    showError('Impossible de reprendre la conversation');
-  }
 }
 
 /**
@@ -588,21 +539,14 @@ async function loadConversation(convId, { autoStream = true } = {}) {
     const hash = window.location.hash;
     window.history.replaceState({}, '', `/explorations/${convId}${hash}`);
 
-    // Scroll handling: if URL has a section hash, scroll to it; otherwise scroll to bottom
-    // Use longer delay to ensure DOM is fully rendered
-    setTimeout(() => {
+    // Scroll after browser layout: hash anchor or bottom
+    requestAnimationFrame(() => {
       if (hash) {
-        const element = document.getElementById(hash.substring(1));
-        if (element) {
-          // Instant scroll on page load (no smooth)
-          element.scrollIntoView({ block: 'start' });
-          return;
-        }
+        const el = document.getElementById(hash.substring(1));
+        if (el) { el.scrollIntoView({ block: 'start' }); return; }
       }
-      // Default: scroll to bottom
       scrollToBottom();
-      window.scrollTo(0, document.body.scrollHeight);
-    }, 100);
+    });
 
     // If conversation is running, resume the stream (unless caller handles it)
     if (autoStream && conv.is_running) {
