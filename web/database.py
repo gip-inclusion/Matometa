@@ -1476,8 +1476,35 @@ class ConversationStore:
                  datetime.now().isoformat())
             )
 
+    def claim_pending_pm_commands(self) -> list[dict]:
+        """Atomically claim and return unprocessed PM commands.
+
+        Uses UPDATE ... RETURNING to prevent two PM instances from
+        processing the same command (the SELECT+UPDATE race condition).
+        """
+        now = datetime.now().isoformat()
+        with get_db() as conn:
+            rows = conn.execute(
+                """UPDATE pm_commands
+                   SET processed_at = ?
+                   WHERE processed_at IS NULL
+                   RETURNING id, conversation_id, command, payload, created_at""",
+                (now,)
+            ).fetchall()
+
+            return [
+                {
+                    "id": r["id"],
+                    "conversation_id": r["conversation_id"],
+                    "command": r["command"],
+                    "payload": json.loads(r["payload"]) if r["payload"] else None,
+                    "created_at": r["created_at"],
+                }
+                for r in rows
+            ]
+
     def get_pending_pm_commands(self) -> list[dict]:
-        """Get unprocessed PM commands."""
+        """Get unprocessed PM commands (read-only, for status checks)."""
         with get_db() as conn:
             rows = conn.execute(
                 """SELECT id, conversation_id, command, payload, created_at
@@ -1496,15 +1523,6 @@ class ConversationStore:
                 }
                 for r in rows
             ]
-
-    def mark_pm_command_processed(self, command_id: int) -> bool:
-        """Mark a PM command as processed."""
-        with get_db() as conn:
-            cursor = conn.execute(
-                "UPDATE pm_commands SET processed_at = ? WHERE id = ?",
-                (datetime.now().isoformat(), command_id)
-            )
-            return cursor.rowcount > 0
 
 
 # =============================================================================

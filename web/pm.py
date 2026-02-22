@@ -35,7 +35,7 @@ class ProcessManager:
         while True:
             try:
                 await asyncio.to_thread(store.update_pm_heartbeat)
-                commands = await asyncio.to_thread(store.get_pending_pm_commands)
+                commands = await asyncio.to_thread(store.claim_pending_pm_commands)
                 for cmd in commands:
                     if cmd["command"] == "run":
                         conv_id = cmd["conversation_id"]
@@ -48,7 +48,6 @@ class ProcessManager:
                             self.running[conv_id] = task
                     elif cmd["command"] == "cancel":
                         await self._cancel_agent(cmd["conversation_id"])
-                    await asyncio.to_thread(store.mark_pm_command_processed, cmd["id"])
             except Exception:
                 logger.exception("Error polling pm_commands")
             await asyncio.sleep(0.5)
