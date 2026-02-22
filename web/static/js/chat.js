@@ -12,8 +12,9 @@ const MAX_FILE_SIZE = 200 * 1024 * 1024;  // 200 MB
 let isPopState = false;
 
 function parseConversationId(path) {
-  const match = path.match(/^\/explorations\/([a-f0-9-]+)$/);
-  return match ? match[1] : null;
+  const clean = path.split('?')[0].split('#')[0];
+  const match = clean.match(/^\/explorations\/([^/]+)$/);
+  return match && match[1] !== 'new' ? match[1] : null;
 }
 
 // Save scroll position before htmx request
@@ -25,20 +26,20 @@ document.body.addEventListener('htmx:beforeRequest', (e) => {
 });
 
 // htmx navigation handler
-document.body.addEventListener('htmx:afterSwap', (e) => {
+// Use afterSettle (not afterSwap) — URL is already pushed at this point.
+document.body.addEventListener('htmx:afterSettle', (e) => {
   if (e.detail.target.id !== 'main') return;
 
   const path = window.location.pathname;
   const convId = parseConversationId(path);
-  const navigatedAway = currentConversationId && convId !== currentConversationId;
 
-  if (navigatedAway) closeEventSource();
+  closeEventSource();
   currentConversationId = convId;
 
   initChat();
   initKnowledge();
 
-  if (convId && navigatedAway) {
+  if (convId) {
     loadConversation(convId);
   } else if (!isPopState) {
     window.scrollTo(0, 0);

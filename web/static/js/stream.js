@@ -459,6 +459,12 @@ async function loadConversation(convId, { autoStream = true } = {}) {
   // Reset actions sidebar state
   resetActionsState();
 
+  // Always clear the template loading spinner (even on error)
+  const loadingIndicator = document.getElementById('loadingConversation');
+  if (loadingIndicator) {
+    loadingIndicator.remove();
+  }
+
   try {
     const response = await fetch(`/api/conversations/${convId}`);
     if (!response.ok) {
@@ -468,12 +474,6 @@ async function loadConversation(convId, { autoStream = true } = {}) {
 
     const conv = await response.json();
     currentConversationId = conv.id;
-
-    // Clear loading indicator
-    const loadingIndicator = document.getElementById('loadingConversation');
-    if (loadingIndicator) {
-      loadingIndicator.remove();
-    }
 
     // Hide empty state
     hideEmptyState();
@@ -514,6 +514,12 @@ async function loadConversation(convId, { autoStream = true } = {}) {
       // Mark final answers
       markFinalAnswersInConversation();
 
+      // Render mermaid diagrams before scrolling (they change layout height)
+      const assistantBlocks = chatOutput.querySelectorAll('.event-assistant');
+      for (const block of assistantBlocks) {
+        await renderMermaid(block);
+      }
+
       // Reset streaming state after DB load — these are static events, not a live stream
       streamingBlock = null;
       streamingText = '';
@@ -523,13 +529,14 @@ async function loadConversation(convId, { autoStream = true } = {}) {
     const hash = window.location.hash;
     window.history.replaceState({}, '', `/explorations/${convId}${hash}`);
 
-    // Scroll after browser layout: hash anchor or bottom
+    // Scroll after layout settles (both main chat and actions sidebar)
     requestAnimationFrame(() => {
       if (hash) {
         const el = document.getElementById(hash.substring(1));
         if (el) { el.scrollIntoView({ block: 'start' }); return; }
       }
       scrollToBottom();
+      scrollActionsToBottom();
     });
 
     // If conversation is running, resume the stream (unless caller handles it)

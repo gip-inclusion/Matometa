@@ -454,10 +454,11 @@ function createAndAppendAction(toolUse, toolResult) {
     pill.classList.add('filtered-out');
   }
 
-  // Append to sidebar
+  // Append to sidebar and keep it anchored at the bottom
   const actionsContent = document.getElementById('actionsContent');
   if (actionsContent) {
     actionsContent.appendChild(pill);
+    scrollActionsToBottom();
   }
 
   // Also append to mobile offcanvas
@@ -878,6 +879,16 @@ function markFinalAnswersInConversation() {
 // =============================================================================
 // Reset & misc
 // =============================================================================
+
+/**
+ * Scroll the actions sidebar tab content to the bottom.
+ */
+function scrollActionsToBottom() {
+  const actionsContent = document.getElementById('actionsContent');
+  if (actionsContent) {
+    actionsContent.scrollTop = actionsContent.scrollHeight;
+  }
+}
 
 /**
  * Reset actions state for new conversation
