@@ -1748,11 +1748,10 @@ body.has-sidebar {
 }
 
 .conv-item-spinner {
-  position: absolute;
-  top: -4px;
-  right: -4px;
   font-size: 14px;
   color: #28a745;
+  margin-left: 0.25rem;
+  flex-shrink: 0;
 }
 
 .conv-item-author-icon {

@@ -202,14 +202,12 @@
                data-search="{{ item.search }}">
               <div class="conv-item-main">
                 <div class="conv-item-icon-wrapper">
-                  {% if conv.is_running %}
-                  <i class="ri-loader-4-line ri-spin conv-item-spinner"></i>
-                  {% endif %}
                   <i class="{{ item.icon }} conv-item-icon"></i>
                 </div>
                 <div class="conv-item-content">
                   <div class="conv-item-row">
                     <span class="conv-item-title">{{ conv.title or 'Sans titre' }}</span>
+                    {% if conv.is_running %}<i class="ri-loader-4-line ri-spin conv-item-spinner"></i>{% endif %}
                     <span class="conv-item-date">{{ item.formatted_date }}</span>
                   </div>
                   <div class="conv-item-author-row">
