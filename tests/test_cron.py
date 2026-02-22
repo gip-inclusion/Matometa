@@ -43,7 +43,7 @@ def db_setup(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "SQLITE_PATH", db_path)
     monkeypatch.setattr(config, "DATABASE_URL", None)
     # Re-import to pick up the new path
-    import web.database as db_mod
+    import web.db as db_mod
     monkeypatch.setattr(db_mod, "USE_POSTGRES", False)
     init_db()
     return db_path
