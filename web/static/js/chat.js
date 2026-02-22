@@ -858,22 +858,7 @@ function updatePendingFilesUI() {
 /**
  * Truncate a filename for display
  */
-function truncateFilename(name, maxLen = 25) {
-  if (name.length <= maxLen) return name;
-  const ext = name.includes('.') ? '.' + name.split('.').pop() : '';
-  const stem = name.slice(0, name.length - ext.length);
-  const truncated = stem.slice(0, maxLen - ext.length - 3) + '...';
-  return truncated + ext;
-}
-
-/**
- * Format file size for display
- */
-function formatFileSize(bytes) {
-  if (bytes < 1024) return bytes + ' o';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' Ko';
-  return (bytes / (1024 * 1024)).toFixed(1) + ' Mo';
-}
+// truncateFilename, formatFileSize → utils.js
 
 /**
  * Upload pending files to the conversation
@@ -925,13 +910,7 @@ function clearPendingFiles() {
   updatePendingFilesUI();
 }
 
-/**
- * Auto-grow textarea to fit content
- */
-function autoGrow(textarea) {
-  textarea.style.height = 'auto';
-  textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px';
-}
+// autoGrow → utils.js
 
 /**
  * Send a message to the agent
@@ -2225,11 +2204,7 @@ function toggleToolContent(header) {
 /**
  * Escape HTML to prevent XSS
  */
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
+// escapeHtml → utils.js
 
 /**
  * Show/hide streaming state
@@ -2298,15 +2273,7 @@ function hideEmptyState() {
  * Check if chat output is scrolled to (or near) the bottom
  * Used to decide whether to auto-scroll when new content arrives
  */
-function isAtBottom() {
-  const chatOutput = document.getElementById('chatOutput');
-  if (!chatOutput) return true;
-
-  // Consider "at bottom" if within 100px of the bottom
-  // This accounts for small variations and provides better UX
-  const threshold = 100;
-  return chatOutput.scrollHeight - chatOutput.scrollTop - chatOutput.clientHeight < threshold;
-}
+// isAtBottom → utils.js
 
 /**
  * Format user message content, converting file context blocks to pills
@@ -2385,13 +2352,7 @@ function showError(message) {
 /**
  * Scroll chat to bottom
  */
-function scrollToBottom() {
-  // Scroll container is .chat-main, not .chat-output
-  const chatMain = document.querySelector('.chat-main');
-  if (chatMain) {
-    chatMain.scrollTop = chatMain.scrollHeight;
-  }
-}
+// scrollToBottom → utils.js
 
 /**
  * Load an existing conversation by ID
