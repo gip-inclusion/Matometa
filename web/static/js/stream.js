@@ -236,10 +236,16 @@ function startStream(afterMsgId = 0) {
     retryCount++;
     await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * retryCount));
 
-    // Reload conversation to catch missed messages, then reconnect
+    // Reload conversation to catch missed messages, then reconnect if still running
     const reloaded = await loadConversation(currentConversationId, { autoStream: false });
-    if (reloaded) {
+    if (reloaded && reloaded.is_running) {
       startStream(lastLoadedMsgId(reloaded));
+    } else if (reloaded) {
+      // Conversation finished while we were reconnecting
+      setStreamingState(false);
+      hideLoading();
+      removeProgressIndicator();
+      markFinalAnswer();
     } else {
       setStreamingState(false);
       hideLoading();

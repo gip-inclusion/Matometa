@@ -291,6 +291,10 @@ function renderOptions(element) {
     const code = block.textContent.trim();
     const lines = code.split('\n').filter(line => line.trim());
 
+    // Sanity check: real options blocks are short lists of choices.
+    // If the block is too long, it's a malformed code fence — leave it as-is.
+    if (lines.length > 6 || lines.length === 0) continue;
+
     const container = document.createElement('div');
     container.className = 'options-buttons';
 
