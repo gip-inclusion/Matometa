@@ -89,6 +89,7 @@ class ProcessManager:
         history = payload.get("history", [])
         session_id = payload.get("session_id")
         user_email = payload.get("user_email")
+        project_workdir = payload.get("project_workdir")
 
         assistant_text_parts: list[str] = []
         assistant_msg_id: int | None = None
@@ -99,6 +100,7 @@ class ProcessManager:
                 message=prompt,
                 history=history,
                 session_id=session_id,
+                project_workdir=project_workdir,
             ):
                 if event.type == "assistant":
                     assistant_text_parts.append(str(event.content))

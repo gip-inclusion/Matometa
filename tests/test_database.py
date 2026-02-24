@@ -123,3 +123,16 @@ class TestCancelUnstick:
         assert resp.status_code == 200
         updated = store.get_conversation(conv.id, include_messages=False)
         assert updated.needs_response
+
+    def test_cancel_does_not_force_clear_when_pm_alive(self, client):
+        """Cancel should not clear active run state while PM heartbeat is fresh."""
+        conv = store.create_conversation(user_id="test@test.com")
+        store.update_conversation(conv.id, needs_response=True)
+        store.update_pm_heartbeat()
+
+        resp = client.post(f"/api/conversations/{conv.id}/cancel")
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "cancel_requested"
+        updated = store.get_conversation(conv.id, include_messages=False)
+        assert updated.needs_response

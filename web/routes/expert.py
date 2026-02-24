@@ -625,8 +625,20 @@ def expert_project_preview(slug, environment, subpath):
     if not upstream_base:
         return "Application non deployee pour cet environnement.", 404
 
-    target_url = urljoin(upstream_base.rstrip("/") + "/", subpath)
+    parsed_subpath = urlsplit(subpath)
+    if parsed_subpath.scheme or parsed_subpath.netloc:
+        abort(400)
+
+    safe_subpath = parsed_subpath.path.lstrip("/")
+    target_url = urljoin(upstream_base.rstrip("/") + "/", safe_subpath)
     target_url = _internal_proxy_url(target_url)
+
+    allowed_targets = {
+        urlsplit(upstream_base).netloc,
+        urlsplit(_internal_proxy_url(upstream_base)).netloc,
+    }
+    if urlsplit(target_url).netloc not in allowed_targets:
+        abort(400)
 
     hop_by_hop = {
         "connection",

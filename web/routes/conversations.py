@@ -432,12 +432,74 @@ User request: """
 
         prompt = knowledge_context + prompt
 
+    project_workdir = None
+
+    # Inject project context for expert-mode conversations
+    if conv.conv_type == "project" and conv.project_id:
+        project = store.get_project(conv.project_id)
+        if project:
+            workdir = config.PROJECTS_DIR / project.id
+            project_workdir = str(workdir)
+            try:
+                from lib.expert_git import ensure_project_branches
+                ensure_project_branches(project)
+            except Exception as exc:
+                logger.warning("Failed to prepare expert branches for project %s: %s", project.id, exc)
+
+            is_first_project_message = not any(m.type == "user" for m in conv.messages[:-1])
+
+            if project.status == "draft" and is_first_project_message:
+                project_context = f"""You are in MODE EXPERT — plan mode.
+
+IMPORTANT: Enter plan mode (/plan) to design the app spec with the user.
+
+Help the user describe what they want to build. In your plan, include:
+- App name and description
+- Architecture (backend framework, frontend, database)
+- API endpoints or pages
+- Data model
+- Docker setup
+
+Once the plan is approved, save it as the project spec and proceed to implementation.
+
+Project: {project.name}
+Working directory: {workdir}/
+
+User request: """
+            elif project.spec:
+                project_context = f"""You are in MODE EXPERT working on "{project.name}".
+
+Working directory: {workdir}/
+Gitea: {project.gitea_url or 'not yet created'}
+Deploy URL: {project.deploy_url or 'not yet deployed'}
+Status: {project.status}
+
+SPEC:
+---
+{project.spec}
+---
+
+All code goes in the working directory.
+Important: Matometa automatically commits and pushes code changes to the staging branch
+after each response. Do not run git commit/push yourself unless explicitly requested.
+
+User request: """
+            else:
+                project_context = f"""You are in MODE EXPERT working on "{project.name}".
+Working directory: {workdir}/
+Status: {project.status}
+
+User request: """
+
+            prompt = project_context + prompt
+
     # Enqueue the run command for the process manager
     store.enqueue_pm_command(conv_id, "run", {
         "prompt": prompt,
         "history": history,
         "session_id": conv.session_id,
         "user_email": user_email,
+        "project_workdir": project_workdir,
     })
 
     return {
@@ -598,18 +660,18 @@ def cancel_conversation(conv_id: str):
 
     store.enqueue_pm_command(conv_id, "cancel")
 
-    # If there's no pending run command, the PM either already finished
-    # (and failed to clear the flag) or crashed. Force-clear to unstick.
+    # Avoid races: only force-clear when PM is down and no run is pending.
     pending = store.get_pending_pm_commands()
     has_pending_run = any(
         cmd["conversation_id"] == conv_id and cmd["command"] == "run"
         for cmd in pending
     )
-    if not has_pending_run:
+    if not store.is_pm_alive() and not has_pending_run:
         store.update_conversation(conv_id, needs_response=False)
         store.add_message(conv_id, "assistant", "*Interrompu.*")
+        return {"status": "cancelled"}
 
-    return {"status": "cancelled"}
+    return {"status": "cancel_requested"}
 
 
 

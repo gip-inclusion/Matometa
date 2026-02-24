@@ -263,6 +263,55 @@ class TestExpertAPI:
         finally:
             config.EXPERT_MODE_ENABLED = original_enabled
 
+    def test_project_preview_rejects_absolute_target(self, app, client, project, monkeypatch):
+        from web import config
+        from web.storage import store
+
+        calls = {"count": 0}
+
+        def _unexpected_request(**kwargs):
+            calls["count"] += 1
+            raise AssertionError("requests.request should not be called for rejected targets")
+
+        original_enabled = config.EXPERT_MODE_ENABLED
+        config.EXPERT_MODE_ENABLED = True
+        try:
+            store.update_project(project.id, staging_deploy_url="http://localhost:18080")
+            monkeypatch.setattr("web.routes.expert.requests.request", _unexpected_request)
+
+            resp = client.get(
+                f"/expert/{project.slug}/preview/staging/https:%2F%2Fevil.example%2F",
+                headers={"X-Forwarded-Email": "dev@example.com"},
+            )
+            assert resp.status_code == 400
+            assert calls["count"] == 0
+        finally:
+            config.EXPERT_MODE_ENABLED = original_enabled
+
+    def test_project_message_enqueues_project_workdir(self, app, client, project):
+        from web import config
+        from web.storage import store
+
+        conv = store.create_conversation(
+            conv_type="project",
+            project_id=project.id,
+            user_id="dev@example.com",
+        )
+
+        resp = client.post(
+            f"/api/conversations/{conv.id}/messages",
+            json={"content": "Ajoute une page d'accueil"},
+            headers={"X-Forwarded-Email": "dev@example.com"},
+        )
+        assert resp.status_code == 200
+
+        pending = store.get_pending_pm_commands()
+        run_cmd = next(
+            c for c in pending
+            if c["conversation_id"] == conv.id and c["command"] == "run"
+        )
+        assert run_cmd["payload"]["project_workdir"] == str(config.PROJECTS_DIR / project.id)
+
     def test_deploy_project_api_promotes_and_deploys_production(self, app, client, project, monkeypatch):
         from web import config
         from web.storage import store
