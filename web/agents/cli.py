@@ -54,6 +54,7 @@ class CLIBackend(AgentBackend):
         message: str,
         history: list[dict],
         session_id: Optional[str] = None,
+        project_workdir: Optional[str] = None,
     ) -> AsyncIterator[AgentMessage]:
         """Spawn claude CLI and stream responses.
 
@@ -61,7 +62,7 @@ class CLIBackend(AgentBackend):
         automatically retries without session (using history instead).
         """
         if not session_id:
-            async for msg in self._run_cli(conversation_id, message, history, None):
+            async for msg in self._run_cli(conversation_id, message, history, None, project_workdir):
                 yield msg
             return
 
@@ -69,7 +70,7 @@ class CLIBackend(AgentBackend):
         retry_without_session = False
         had_useful_output = False
 
-        async for msg in self._run_cli(conversation_id, message, history, session_id):
+        async for msg in self._run_cli(conversation_id, message, history, session_id, project_workdir):
             if msg.type == "error":
                 error_str = str(msg.content)
                 if "tool_use ids must be unique" in error_str:
@@ -91,7 +92,7 @@ class CLIBackend(AgentBackend):
                 content="Session corrompue, redémarrage...",
                 raw={"retry": True},
             )
-            async for msg in self._run_cli(conversation_id, message, history, None):
+            async for msg in self._run_cli(conversation_id, message, history, None, project_workdir):
                 yield msg
 
     async def _run_cli(
@@ -100,6 +101,7 @@ class CLIBackend(AgentBackend):
         message: str,
         history: list[dict],
         session_id: Optional[str],
+        project_workdir: Optional[str] = None,
     ) -> AsyncIterator[AgentMessage]:
         """Internal: run the CLI process."""
         # When resuming a session, don't include history in prompt (session already has it)
@@ -144,16 +146,25 @@ class CLIBackend(AgentBackend):
 
         cmd.extend(self._extra_cmd_args())
 
+        # For expert-mode projects, add the project dir and use it as cwd
+        if project_workdir:
+            from pathlib import Path
+            Path(project_workdir).mkdir(parents=True, exist_ok=True)
+            cmd.extend(["--add-dir", project_workdir])
+
         logger.info(f"Starting claude CLI: {' '.join(cmd[:4])}... (prompt length: {len(prompt)}, session: {session_id or 'none'})")
 
         env = self._build_env(conversation_id)
+
+        # Determine working directory
+        cwd = project_workdir if project_workdir else str(config.BASE_DIR)
 
         # Spawn process (10 MB buffer to handle large tool results)
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=str(config.BASE_DIR),
+            cwd=cwd,
             env=env,
             limit=10 * 1024 * 1024,
         )

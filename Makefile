@@ -1,4 +1,4 @@
-.PHONY: dev dev-ollama up up-ollama up-eval down test
+.PHONY: dev dev-ollama up up-ollama up-eval down expert-up expert-down expert-logs expert-setup expert-run expert-bootstrap test
 
 # --- Local development (venv) ---
 
@@ -31,6 +31,35 @@ up-eval:
 ## Stop everything
 down:
 	docker compose --profile ollama down
+
+# --- Expert mode infrastructure ---
+
+## Start Gitea + Coolify for expert mode
+expert-up:
+	docker compose -f docker-compose.expert.yml up -d
+
+## Stop expert mode infrastructure
+expert-down:
+	docker compose -f docker-compose.expert.yml down
+
+## Follow expert mode logs
+expert-logs:
+	docker compose -f docker-compose.expert.yml logs -f
+
+## First-time expert mode setup (run after expert-up)
+expert-setup:
+	bash scripts/setup_expert_test.sh
+
+## Run full expert stack (matometa + gitea + coolify)
+expert-run:
+	docker compose up -d
+	docker compose -f docker-compose.expert.yml up -d
+
+## One-command bootstrap (start stack + configure tokens)
+expert-bootstrap:
+	$(MAKE) expert-run
+	bash scripts/setup_expert_test.sh
+	docker compose up -d --build
 
 # --- Tests ---
 

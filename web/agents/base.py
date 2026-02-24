@@ -38,6 +38,7 @@ class AgentBackend(ABC):
         message: str,
         history: list[dict],
         session_id: Optional[str] = None,
+        project_workdir: Optional[str] = None,
     ) -> AsyncIterator[AgentMessage]:
         """
         Send a message to the agent and yield streaming responses.
@@ -47,6 +48,7 @@ class AgentBackend(ABC):
             message: The user's message
             history: Previous messages in the conversation
             session_id: Optional session ID for agent resumption
+            project_workdir: Optional working directory for expert-mode projects
 
         Yields:
             AgentMessage objects as they arrive

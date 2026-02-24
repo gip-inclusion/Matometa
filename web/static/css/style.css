@@ -2629,6 +2629,7 @@ body.has-sidebar {
 
 /* Show tab content based on sidebar data-active-tab (single source of truth) */
 .actions-sidebar[data-active-tab="toc"] #tocContent,
+.actions-sidebar[data-active-tab="spec"] #specSidebarContent,
 .actions-sidebar[data-active-tab="actions"] #actionsContent {
   display: block;
 }
@@ -2642,8 +2643,8 @@ body.has-sidebar {
   justify-content: center;
 }
 
-/* Hide footer when TOC tab is active */
-.actions-sidebar[data-active-tab="toc"] .actions-sidebar-footer {
+/* Show filter toggle only on Actions tab */
+.actions-sidebar:not([data-active-tab="actions"]) .actions-sidebar-footer {
   display: none;
 }
 

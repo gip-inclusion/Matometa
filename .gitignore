@@ -8,6 +8,7 @@ __pycache__
 .matomo_cookie
 .venv
 .pytest_cache
+.code/
 /data/
 !/data/interactive/
 /data-remote/
@@ -16,6 +17,7 @@ reports/
 knowledge-drafts/
 claude-credentials/
 AGENTS.local.md
+CLAUDE.md
 knowledge/metabase/cards.db
 auth/allowed_emails.txt
 docker-compose.local.yml

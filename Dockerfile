@@ -47,9 +47,9 @@ RUN uv export --frozen --group embeddings --no-hashes | \
 # Copy application code
 COPY --chown=matometa:matometa . .
 
-# Create data directories for SQLite, uploads, and modified files
-RUN mkdir -p /app/data /app/data/uploads /app/data/modified \
-    && chown matometa:matometa /app/data /app/data/uploads /app/data/modified
+# Create data directories for SQLite, uploads, modified files, and projects
+RUN mkdir -p /app/data /app/data/uploads /app/data/modified /app/data/projects \
+    && chown -R matometa:matometa /app/data
 
 # Switch to non-root user
 USER matometa

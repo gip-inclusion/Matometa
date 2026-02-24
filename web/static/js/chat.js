@@ -17,6 +17,415 @@ function parseConversationId(path) {
   return match && match[1] !== 'new' ? match[1] : null;
 }
 
+/**
+ * Apply the current filter to all pills (visibility + label updates)
+ */
+function applyActionsFilter() {
+  const pills = document.querySelectorAll('.action-pill');
+  pills.forEach(pill => {
+    const idx = parseInt(pill.dataset.actionIndex);
+    const action = actionsMap.get(idx);
+    if (!action) return;
+
+    const isData = isDataAction(action.toolUse, action.toolResult);
+    if (actionsFilterMode === 'data' && !isData) {
+      pill.classList.add('filtered-out');
+    } else {
+      pill.classList.remove('filtered-out');
+    }
+
+    // Update label (main/sub may swap based on filter mode)
+    const label = extractPillLabel(action.toolUse, action.toolResult);
+    const labelEl = pill.querySelector('.action-pill-label');
+    if (labelEl) {
+      const mainLabel = typeof label === 'object' ? label.main : label;
+      const subLabel = typeof label === 'object' ? label.sub : null;
+      let labelHtml = `<span class="action-pill-label-main">${escapeHtml(mainLabel)}</span>`;
+      if (subLabel) {
+        labelHtml += `<span class="action-pill-label-sub">${escapeHtml(subLabel)}</span>`;
+      }
+      labelEl.innerHTML = labelHtml;
+    }
+  });
+}
+
+/**
+ * Initialize filter toggle listeners
+ */
+function initActionsFilterToggle() {
+  const toggle = document.getElementById('actionsFilterToggle');
+  if (!toggle) return;
+
+  // Remove existing listeners by cloning
+  const newToggle = toggle.cloneNode(true);
+  toggle.replaceWith(newToggle);
+
+  // Sync UI with current filter mode
+  newToggle.querySelectorAll('.actions-filter-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.filter === actionsFilterMode);
+  });
+
+  newToggle.addEventListener('click', (e) => {
+    const btn = e.target.closest('.actions-filter-btn');
+    if (!btn) return;
+
+    const filter = btn.dataset.filter;
+    if (filter === actionsFilterMode) return;
+
+    // Update active state
+    newToggle.querySelectorAll('.actions-filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    actionsFilterMode = filter;
+    localStorage.setItem('actionsFilterMode', filter);
+    applyActionsFilter();
+  });
+}
+
+/**
+ * Initialize sidebar tab toggle (TOC / Actions)
+ */
+function initSidebarTabToggle() {
+  const toggle = document.getElementById('sidebarTabToggle');
+  const sidebar = document.getElementById('actionsSidebar');
+  if (!toggle || !sidebar) return;
+
+  // Remove existing listeners by cloning
+  const newToggle = toggle.cloneNode(true);
+  toggle.replaceWith(newToggle);
+
+  // Sync UI with current tab (CSS uses data-active-tab for content visibility)
+  syncSidebarTabState();
+
+  newToggle.addEventListener('click', (e) => {
+    const btn = e.target.closest('.sidebar-tab-btn');
+    if (!btn) return;
+
+    const tab = btn.dataset.tab;
+    if (tab === currentSidebarTab) return;
+
+    currentSidebarTab = tab;
+    localStorage.setItem('sidebarTab', tab);
+    syncSidebarTabState();
+  });
+}
+
+/**
+ * Add a TOC entry for an <h2> heading from an assistant message
+ */
+function addTocEntry(headingElement, text) {
+  const tocContent = document.getElementById('tocContent');
+  if (!tocContent) return;
+
+  // Remove empty state if present
+  const emptyState = tocContent.querySelector('.toc-empty');
+  if (emptyState) emptyState.remove();
+
+  const entry = document.createElement('div');
+  entry.className = 'toc-entry';
+
+  entry.innerHTML = `
+    <div class="toc-entry-content">
+      <div class="toc-entry-text">${escapeHtml(text)}</div>
+    </div>
+  `;
+
+  // Click to scroll to the heading and update URL hash
+  entry.addEventListener('click', () => {
+    if (headingElement && headingElement.id) {
+      history.replaceState(null, '', `#${headingElement.id}`);
+      headingElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+
+  tocContent.appendChild(entry);
+  tocEntries.push({ headingElement, text, element: entry });
+}
+
+/**
+ * Scan an assistant message block for <h2> headings and add them to the TOC
+ */
+function scanHeadingsForToc(block) {
+  const headings = block.querySelectorAll('h2');
+  for (const h2 of headings) {
+    const text = h2.textContent.trim();
+    if (!text) continue;
+
+    const slug = generateSlug(text);
+    h2.id = ensureUniqueId(slug);
+    addTocEntry(h2, text);
+  }
+}
+
+/**
+ * Generate a URL-friendly slug from text
+ */
+function generateSlug(text) {
+  return text
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .substring(0, 60) || 'section';
+}
+
+/**
+ * Ensure an element ID is unique in the document
+ */
+function ensureUniqueId(baseId) {
+  if (!document.getElementById(baseId)) return baseId;
+  let counter = 2;
+  while (document.getElementById(`${baseId}-${counter}`)) {
+    counter++;
+  }
+  return `${baseId}-${counter}`;
+}
+
+/**
+ * Switch to a specific sidebar tab
+ */
+function switchSidebarTab(tab) {
+  if (tab === currentSidebarTab) return;
+
+  currentSidebarTab = tab;
+  localStorage.setItem('sidebarTab', tab);
+  syncSidebarTabState();
+}
+
+/**
+ * Force-sync sidebar tab visibility from localStorage.
+ * CSS uses [data-active-tab] on the sidebar as single source of truth for content visibility.
+ */
+function syncSidebarTabState() {
+  const sidebar = document.getElementById('actionsSidebar');
+  const toggle = document.getElementById('sidebarTabToggle');
+
+  // Keep current tab compatible with the current page.
+  // Exploration pages expose "toc/actions", expert pages expose "spec/actions".
+  if (toggle) {
+    const availableTabs = Array.from(toggle.querySelectorAll('.sidebar-tab-btn'))
+      .map(btn => btn.dataset.tab)
+      .filter(Boolean);
+
+    if (availableTabs.length && !availableTabs.includes(currentSidebarTab)) {
+      currentSidebarTab = availableTabs[0];
+      localStorage.setItem('sidebarTab', currentSidebarTab);
+    }
+  }
+
+  if (sidebar) sidebar.dataset.activeTab = currentSidebarTab;
+  if (toggle) {
+    toggle.querySelectorAll('.sidebar-tab-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === currentSidebarTab);
+    });
+  }
+}
+
+/**
+ * Scroll to URL hash section on page load
+ */
+function scrollToHashSection() {
+  const hash = window.location.hash;
+  if (!hash) return;
+
+  const element = document.getElementById(hash.substring(1));
+  if (element) {
+    // Delay to ensure DOM is ready
+    setTimeout(() => {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  }
+}
+
+/**
+ * Reset TOC state for new conversation
+ */
+function resetTocState() {
+  tocEntries = [];
+
+  const tocContent = document.getElementById('tocContent');
+  if (tocContent) {
+    tocContent.innerHTML = '<div class="toc-empty">Aucune section</div>';
+  }
+}
+
+/**
+ * Icon mapping for tool categories
+ */
+const CATEGORY_ICONS = {
+  'API:': 'ri-cloud-line',
+  'Read:': 'ri-file-text-line',
+  'Write:': 'ri-file-add-line',
+  'Edit:': 'ri-edit-line',
+  'Search:': 'ri-search-line',
+  'Execute:': 'ri-play-line',
+  'Query:': 'ri-database-2-line',
+  'Shell:': 'ri-terminal-line',
+  'Skill:': 'ri-magic-line',
+  'Thinking:': 'ri-lightbulb-line',
+  'System:': 'ri-settings-3-line',
+  'Web:': 'ri-global-line',
+  'Interaction:': 'ri-question-line',
+};
+
+/**
+ * French translations for tool categories
+ */
+const CATEGORY_TRANSLATIONS = {
+  // API
+  'API: Matomo': 'API Matomo',
+  'API: Metabase': 'API Metabase',
+  'API: Matomo + Metabase': 'API Matomo + Metabase',
+  'API: Matomo (curl)': 'API Matomo (curl)',
+  'API: GitHub': 'API GitHub',
+  'API: GitHub (clone)': 'API GitHub (clone)',
+  'API: curl': 'API curl',
+  // Read
+  'Read: knowledge': 'Lecture de la base de connaissances',
+  'Read: skill definition': 'Lecture d\'une définition de skill',
+  'Read: skill code': 'Lecture du code d\'un skill',
+  'Read: code': 'Lecture du code',
+  'Read: docs': 'Lecture de la documentation',
+  'Read: temp': 'Lecture d\'un fichier temporaire',
+  'Read: other': 'Lecture d\'un fichier',
+  // Write
+  'Write: temp': 'Écriture d\'un fichier temporaire',
+  'Write: interactive': 'Écriture d\'une appli',
+  'Write: script': 'Rédaction d\'un programme',
+  'Write: knowledge': 'Écriture dans la base de connaissances',
+  'Write: other': 'Écriture d\'un fichier',
+  // Edit
+  'Edit: knowledge': 'Modification de la base de connaissances',
+  'Edit: skill': 'Modification d\'un skill',
+  'Edit: code': 'Modification du code',
+  'Edit: other': 'Modification d\'un fichier',
+  // Execute
+  'Execute: script': 'Exécution d\'un programme',
+  // Query
+  'Query: SQLite': 'Requête SQLite',
+  // Search
+  'Search: codebase': 'Recherche dans le code',
+  // System
+  'Thinking: todo': 'Réflexion',
+  'System: task': 'Liste de tâches',
+  'Web: fetch': 'Requête web',
+  'Interaction: ask user': 'Interaction',
+};
+
+/**
+ * Translate a category to French
+ */
+function translateCategory(category) {
+  if (!category) return 'Action';
+  // Exact match
+  if (CATEGORY_TRANSLATIONS[category]) {
+    return CATEGORY_TRANSLATIONS[category];
+  }
+  // Shell, Skill, Other: keep as-is
+  if (category.startsWith('Shell: ') || category.startsWith('Skill: ') || category.startsWith('Other: ')) {
+    return category;
+  }
+  return category;
+}
+
+/**
+ * Get icon class for a category
+ */
+function getIconForCategory(category) {
+  if (!category) return 'ri-tools-line';
+  for (const [prefix, icon] of Object.entries(CATEGORY_ICONS)) {
+    if (category.startsWith(prefix)) return icon;
+  }
+  return 'ri-tools-line';
+}
+
+/**
+ * Extract a short label for a pill based on tool data
+ * Returns { main: string, sub?: string } for potential two-line display
+ */
+function extractPillLabel(toolUse, toolResult) {
+  const category = toolUse.category || '';
+  let main = translateCategory(category) || toolUse.tool || 'Action';
+  let sub = null;
+
+  // For Read operations, show the filename
+  if (category.startsWith('Read:') && toolUse.input?.file_path) {
+    const path = toolUse.input.file_path;
+    main = path.split('/').pop();
+  }
+
+  // For direct API calls, show the method
+  if (category.startsWith('API:') && toolResult?.api_calls?.length > 0) {
+    const call = toolResult.api_calls[0];
+    if (call.method) main = call.method;
+    else if (call.sql) main = 'Requête SQL';
+  }
+
+  // If there are API calls (from scripts, etc.), build the API count label
+  if (toolResult?.api_calls?.length > 0 && !category.startsWith('API:')) {
+    // Count calls by source
+    const counts = {};
+    for (const call of toolResult.api_calls) {
+      const source = call.source || 'API';
+      counts[source] = (counts[source] || 0) + 1;
+    }
+    // Format: "3 requêtes Matomo" or "16 requêtes Matomo, 2 requêtes Metabase"
+    const parts = Object.entries(counts).map(([source, count]) => {
+      const name = source.charAt(0).toUpperCase() + source.slice(1);
+      return `${count} requête${count > 1 ? 's' : ''} ${name}`;
+    });
+    const apiLabel = parts.join(', ');
+
+    // In data mode: API count is main, category is sub
+    // In detailed mode: category is main, API count is sub
+    if (actionsFilterMode === 'data') {
+      sub = main;
+      main = apiLabel;
+    } else {
+      sub = apiLabel;
+    }
+  }
+
+  return { main, sub };
+}
+
+/**
+ * Reset actions state for new conversation
+ */
+function resetActionsState() {
+  actionIndex = 0;
+  actionsMap.clear();
+  pendingToolUses = [];
+  lastAssistantBlock = null;
+  currentTurnActions = [];
+  streamingBlock = null;
+  streamingText = '';
+
+  // Reset TOC state
+  resetTocState();
+
+  // Clear sidebar content
+  const actionsContent = document.getElementById('actionsContent');
+  if (actionsContent) actionsContent.innerHTML = '';
+
+  const offcanvasContent = document.getElementById('actionsOffcanvasContent');
+  if (offcanvasContent) offcanvasContent.innerHTML = '';
+
+  // Reset expand data store
+  expandDataStore = [];
+
+  // Re-sync tab visibility from localStorage (fixes desync after htmx swap)
+  syncSidebarTabState();
+}
+
+// Hide public warning banner if previously dismissed - runs on every htmx load
+document.body.addEventListener('htmx:afterSettle', () => {
+  if (localStorage.getItem('publicWarningDismissed') === 'true') {
+    const warning = document.getElementById('publicWarning');
+    if (warning) warning.style.display = 'none';
+  }
+});
+
 // Save scroll position before htmx request
 document.body.addEventListener('htmx:beforeRequest', (e) => {
   if (e.detail.target.id === 'main' && !isPopState) {

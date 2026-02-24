@@ -16,6 +16,7 @@ from .db import (
 from .schema import init_db
 
 
+
 # =============================================================================
 # Data Classes
 # =============================================================================
@@ -41,6 +42,58 @@ class PinnedItem:
     item_id: str = ""
     label: str = ""
     pinned_at: Optional[datetime] = None
+
+
+@dataclass
+class Project:
+    """An expert-mode project (vibecoded app)."""
+    id: str = ""
+    user_id: Optional[str] = None
+    name: str = ""
+    slug: str = ""
+    description: Optional[str] = None
+    spec: Optional[str] = None
+    status: str = "draft"  # draft, active, deployed, archived
+    gitea_repo_id: Optional[int] = None
+    gitea_url: Optional[str] = None
+    coolify_app_uuid: Optional[str] = None
+    deploy_url: Optional[str] = None
+    staging_branch: str = "stagging"
+    production_branch: str = "prod"
+    staging_coolify_app_uuid: Optional[str] = None
+    staging_deploy_url: Optional[str] = None
+    production_coolify_app_uuid: Optional[str] = None
+    production_deploy_url: Optional[str] = None
+    tech_stack: Optional[dict] = None
+    boilerplate: Optional[str] = None
+    created_at: datetime = field(default_factory=datetime.now)
+    updated_at: datetime = field(default_factory=datetime.now)
+
+    def to_dict(self) -> dict:
+        """Convert to JSON-serializable dict."""
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "name": self.name,
+            "slug": self.slug,
+            "description": self.description,
+            "spec": self.spec,
+            "status": self.status,
+            "gitea_repo_id": self.gitea_repo_id,
+            "gitea_url": self.gitea_url,
+            "coolify_app_uuid": self.coolify_app_uuid,
+            "deploy_url": self.deploy_url,
+            "staging_branch": self.staging_branch,
+            "production_branch": self.production_branch,
+            "staging_coolify_app_uuid": self.staging_coolify_app_uuid,
+            "staging_deploy_url": self.staging_deploy_url,
+            "production_coolify_app_uuid": self.production_coolify_app_uuid,
+            "production_deploy_url": self.production_deploy_url,
+            "tech_stack": self.tech_stack,
+            "boilerplate": self.boilerplate,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+        }
 
 
 @dataclass
@@ -118,11 +171,12 @@ class Conversation:
     user_id: Optional[str] = None
     title: Optional[str] = None
     session_id: Optional[str] = None
-    conv_type: str = "exploration"  # 'exploration' or 'knowledge'
+    conv_type: str = "exploration"  # 'exploration', 'knowledge', or 'project'
     file_path: Optional[str] = None  # for knowledge conversations
     status: str = "active"  # 'active', 'committed', 'abandoned'
     pr_url: Optional[str] = None  # GitHub PR URL for knowledge conversations
     forked_from: Optional[str] = None  # ID of source conversation if forked
+    project_id: Optional[str] = None  # for project (expert mode) conversations
     messages: list[Message] = field(default_factory=list)
     report: Optional[Report] = None
     # Usage tracking (cumulative per conversation)
@@ -153,6 +207,7 @@ class Conversation:
             "file_path": self.file_path,
             "status": self.status,
             "pr_url": self.pr_url,
+            "project_id": self.project_id,
             "has_report": self.has_report,
             "usage_input_tokens": self.usage_input_tokens,
             "usage_output_tokens": self.usage_output_tokens,
@@ -203,6 +258,7 @@ class ConversationStore:
         user_id: Optional[str] = None,
         conv_type: str = "exploration",
         file_path: Optional[str] = None,
+        project_id: Optional[str] = None,
     ) -> Conversation:
         """Create a new conversation."""
         conv = Conversation(
@@ -210,14 +266,15 @@ class ConversationStore:
             user_id=user_id,
             conv_type=conv_type,
             file_path=file_path,
+            project_id=project_id,
         )
 
         with get_db() as conn:
             conn.execute(
-                """INSERT INTO conversations (id, user_id, title, session_id, conv_type, file_path, status, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                """INSERT INTO conversations (id, user_id, title, session_id, conv_type, file_path, status, project_id, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (conv.id, conv.user_id, conv.title, conv.session_id, conv.conv_type, conv.file_path, conv.status,
-                 conv.created_at.isoformat(), conv.updated_at.isoformat())
+                 conv.project_id, conv.created_at.isoformat(), conv.updated_at.isoformat())
             )
 
         return conv
@@ -302,6 +359,7 @@ class ConversationStore:
                 status=row["status"] or "active",
                 pr_url=row["pr_url"] if "pr_url" in row.keys() else None,
                 forked_from=row["forked_from"] if "forked_from" in row.keys() else None,
+                project_id=row["project_id"] if "project_id" in row.keys() else None,
                 messages=messages,
                 report=report,
                 usage_input_tokens=row["usage_input_tokens"] if "usage_input_tokens" in row.keys() else 0,
@@ -418,6 +476,199 @@ class ConversationStore:
                     needs_response=bool(row["needs_response"]) if row["needs_response"] else False,
                     messages=[],
                     report=Report(id=row["report_id"], title=row["report_title"] or "") if row["report_id"] else None,
+                    created_at=datetime.fromisoformat(row["created_at"]),
+                    updated_at=datetime.fromisoformat(row["updated_at"]),
+                )
+                for row in rows
+            ]
+
+    # -------------------------------------------------------------------------
+    # Projects (expert mode)
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _slugify(name: str) -> str:
+        """Generate a URL-safe slug from a project name."""
+        import re
+        slug = name.lower().strip()
+        slug = re.sub(r'[àáâãäå]', 'a', slug)
+        slug = re.sub(r'[èéêë]', 'e', slug)
+        slug = re.sub(r'[ìíîï]', 'i', slug)
+        slug = re.sub(r'[òóôõö]', 'o', slug)
+        slug = re.sub(r'[ùúûü]', 'u', slug)
+        slug = re.sub(r'[ç]', 'c', slug)
+        slug = re.sub(r'[^a-z0-9]+', '-', slug)
+        slug = slug.strip('-')
+        return slug or 'projet'
+
+    def create_project(self, name: str, user_id: Optional[str] = None, description: Optional[str] = None) -> Project:
+        """Create a new expert-mode project."""
+        project_id = str(uuid.uuid4())
+        base_slug = self._slugify(name)
+        slug = base_slug
+
+        now = datetime.now()
+        project = Project(
+            id=project_id,
+            user_id=user_id,
+            name=name,
+            slug=slug,
+            description=description,
+            created_at=now,
+            updated_at=now,
+        )
+
+        with get_db() as conn:
+            # Ensure slug uniqueness by appending suffix if needed
+            counter = 1
+            while True:
+                existing = conn.execute("SELECT id FROM projects WHERE slug = ?", (slug,)).fetchone()
+                if not existing:
+                    break
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+            project.slug = slug
+
+            conn.execute(
+                """INSERT INTO projects (id, user_id, name, slug, description, spec, status,
+                   gitea_repo_id, gitea_url, coolify_app_uuid, deploy_url,
+                   staging_branch, production_branch,
+                   staging_coolify_app_uuid, staging_deploy_url,
+                   production_coolify_app_uuid, production_deploy_url,
+                   tech_stack, boilerplate, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (project.id, project.user_id, project.name, project.slug,
+                 project.description, project.spec, project.status,
+                 project.gitea_repo_id, project.gitea_url,
+                 project.coolify_app_uuid, project.deploy_url,
+                 project.staging_branch, project.production_branch,
+                 project.staging_coolify_app_uuid, project.staging_deploy_url,
+                 project.production_coolify_app_uuid, project.production_deploy_url,
+                 json.dumps(project.tech_stack) if project.tech_stack else None,
+                 project.boilerplate,
+                 project.created_at.isoformat(), project.updated_at.isoformat())
+            )
+
+        return project
+
+    def get_project(self, project_id: str) -> Optional[Project]:
+        """Get a project by ID."""
+        with get_db() as conn:
+            row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+            if not row:
+                return None
+            return self._row_to_project(row)
+
+    def get_project_by_slug(self, slug: str) -> Optional[Project]:
+        """Get a project by slug."""
+        with get_db() as conn:
+            row = conn.execute("SELECT * FROM projects WHERE slug = ?", (slug,)).fetchone()
+            if not row:
+                return None
+            return self._row_to_project(row)
+
+    def update_project(self, project_id: str, **kwargs) -> bool:
+        """Update project fields."""
+        allowed = {"name", "slug", "description", "spec", "status",
+                   "gitea_repo_id", "gitea_url", "coolify_app_uuid",
+                   "deploy_url", "staging_branch", "production_branch",
+                   "staging_coolify_app_uuid", "staging_deploy_url",
+                   "production_coolify_app_uuid", "production_deploy_url",
+                   "tech_stack", "boilerplate"}
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return False
+
+        if "tech_stack" in updates and isinstance(updates["tech_stack"], dict):
+            updates["tech_stack"] = json.dumps(updates["tech_stack"])
+
+        updates["updated_at"] = datetime.now().isoformat()
+
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        values = list(updates.values())
+        values.append(project_id)
+
+        with get_db() as conn:
+            cursor = conn.execute(
+                f"UPDATE projects SET {set_clause} WHERE id = ?",
+                values
+            )
+            return cursor.rowcount > 0
+
+    def list_projects(self, user_id: Optional[str] = None, limit: int = 50) -> list[Project]:
+        """List projects, optionally filtered by user."""
+        with get_db() as conn:
+            if user_id:
+                rows = conn.execute(
+                    "SELECT * FROM projects WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?",
+                    (user_id, limit)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM projects ORDER BY updated_at DESC LIMIT ?",
+                    (limit,)
+                ).fetchall()
+            return [self._row_to_project(row) for row in rows]
+
+    def _row_to_project(self, row) -> Project:
+        """Convert a database row to a Project dataclass."""
+        tech_stack = None
+        if row["tech_stack"]:
+            try:
+                tech_stack = json.loads(row["tech_stack"])
+            except (json.JSONDecodeError, TypeError):
+                tech_stack = None
+
+        row_keys = set(row.keys())
+
+        staging_branch = row["staging_branch"] if "staging_branch" in row_keys and row["staging_branch"] else "stagging"
+        production_branch = row["production_branch"] if "production_branch" in row_keys and row["production_branch"] else "prod"
+        staging_coolify_app_uuid = row["staging_coolify_app_uuid"] if "staging_coolify_app_uuid" in row_keys else row["coolify_app_uuid"]
+        staging_deploy_url = row["staging_deploy_url"] if "staging_deploy_url" in row_keys else row["deploy_url"]
+        production_coolify_app_uuid = row["production_coolify_app_uuid"] if "production_coolify_app_uuid" in row_keys else None
+        production_deploy_url = row["production_deploy_url"] if "production_deploy_url" in row_keys else None
+
+        return Project(
+            id=row["id"],
+            user_id=row["user_id"],
+            name=row["name"],
+            slug=row["slug"],
+            description=row["description"],
+            spec=row["spec"],
+            status=row["status"] or "draft",
+            gitea_repo_id=row["gitea_repo_id"],
+            gitea_url=row["gitea_url"],
+            coolify_app_uuid=row["coolify_app_uuid"],
+            deploy_url=row["deploy_url"],
+            staging_branch=staging_branch,
+            production_branch=production_branch,
+            staging_coolify_app_uuid=staging_coolify_app_uuid,
+            staging_deploy_url=staging_deploy_url,
+            production_coolify_app_uuid=production_coolify_app_uuid,
+            production_deploy_url=production_deploy_url,
+            tech_stack=tech_stack,
+            boilerplate=row["boilerplate"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            updated_at=datetime.fromisoformat(row["updated_at"]),
+        )
+
+    def list_project_conversations(self, project_id: str) -> list[Conversation]:
+        """List all conversations for a project."""
+        with get_db() as conn:
+            rows = conn.execute(
+                """SELECT * FROM conversations WHERE project_id = ? ORDER BY updated_at DESC""",
+                (project_id,)
+            ).fetchall()
+            return [
+                Conversation(
+                    id=row["id"],
+                    user_id=row["user_id"],
+                    title=row["title"],
+                    session_id=row["session_id"],
+                    conv_type=row["conv_type"] or "project",
+                    status=row["status"] or "active",
+                    project_id=row["project_id"] if "project_id" in row.keys() else None,
+                    messages=[],
                     created_at=datetime.fromisoformat(row["created_at"]),
                     updated_at=datetime.fromisoformat(row["updated_at"]),
                 )
@@ -609,7 +860,7 @@ class ConversationStore:
 
     def update_conversation(self, conv_id: str, **kwargs) -> bool:
         """Update conversation fields."""
-        allowed = {"title", "session_id", "user_id", "status", "pr_url", "needs_response"}
+        allowed = {"title", "session_id", "user_id", "status", "pr_url", "needs_response", "project_id"}
         updates = {k: v for k, v in kwargs.items() if k in allowed}
         if not updates:
             return False

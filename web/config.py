@@ -37,7 +37,8 @@ ALLOWED_TOOLS = os.getenv("ALLOWED_TOOLS",
     "Bash(curl:*api.github.com*),"
     "Bash(jq:*),Bash(sqlite3:*),"
     "Bash(python:*),Bash(python3:*),"
-    "Bash(.venv/bin/python:*)"
+    "Bash(.venv/bin/python:*),"
+    "Bash(git:*)"
 )
 
 # Ollama settings (used by cli-ollama backend and LLM short-prompt helper)
@@ -122,6 +123,19 @@ ADDITIONAL_DIRS = ["/tmp"]
 # Research corpus (Notion "Connaissance du terrain")
 NOTION_RESEARCH_DB = DATA_DIR / "notion_research.db"
 DEEPINFRA_API_KEY = os.getenv("DEEPINFRA_API_KEY")
+
+# Mode expert (vibecoded apps via Gitea + Coolify)
+GITEA_URL = os.getenv("GITEA_URL", "http://localhost:3300")
+GITEA_API_TOKEN = os.getenv("GITEA_API_TOKEN")
+GITEA_ORG = os.getenv("GITEA_ORG", "apps")
+COOLIFY_URL = os.getenv("COOLIFY_URL", "http://localhost:8001")
+COOLIFY_API_TOKEN = os.getenv("COOLIFY_API_TOKEN")
+COOLIFY_INTERNAL_URL = os.getenv("COOLIFY_INTERNAL_URL", "http://coolify:8080")
+EXPERT_DEPLOY_PUBLIC_HOST = os.getenv("EXPERT_DEPLOY_PUBLIC_HOST", "").strip()
+EXPERT_STAGING_BRANCH = os.getenv("EXPERT_STAGING_BRANCH", "stagging")
+EXPERT_PRODUCTION_BRANCH = os.getenv("EXPERT_PRODUCTION_BRANCH", "prod")
+PROJECTS_DIR = DATA_DIR / "projects"
+EXPERT_MODE_ENABLED = bool(os.getenv("GITEA_API_TOKEN"))  # Auto-enable when configured
 
 # Feature flags
 FEATURE_KNOWLEDGE_CHAT = False  # Chat from Connaissance tab disabled (requires GitHub PAT)
