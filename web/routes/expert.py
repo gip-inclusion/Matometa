@@ -651,10 +651,22 @@ def expert_project_preview(slug, environment, subpath):
         "upgrade",
         "host",
     }
+    sensitive_headers = {
+        "authorization",
+        "cookie",
+        "x-forwarded-email",
+        "x-forwarded-user",
+        "x-forwarded-access-token",
+        "x-amzn-oidc-data",
+        "x-amzn-oidc-accesstoken",
+    }
     upstream_headers = {
         key: value
         for key, value in request.headers.items()
         if key.lower() not in hop_by_hop
+        and key.lower() not in sensitive_headers
+        and not key.lower().startswith("x-auth-request-")
+        and not key.lower().startswith("x-forwarded-")
     }
 
     try:

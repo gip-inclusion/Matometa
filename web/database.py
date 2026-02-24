@@ -1835,6 +1835,8 @@ class ConversationStore:
                 (now,)
             ).fetchall()
 
+            rows = sorted(rows, key=lambda row: row["id"])
+
             return [
                 {
                     "id": r["id"],

@@ -373,6 +373,59 @@ class TestExpertAPI:
         finally:
             config.EXPERT_MODE_ENABLED = original_enabled
 
+    def test_project_preview_strips_sensitive_headers(self, app, client, project, monkeypatch):
+        from web import config
+        from web.storage import store
+
+        captured = {}
+
+        class FakeResponse:
+            status_code = 200
+            headers = {"Content-Type": "text/plain; charset=utf-8"}
+            content = b"ok"
+            encoding = "utf-8"
+
+        def _fake_request(**kwargs):
+            captured["headers"] = kwargs.get("headers", {})
+            return FakeResponse()
+
+        original_enabled = config.EXPERT_MODE_ENABLED
+        config.EXPERT_MODE_ENABLED = True
+        try:
+            store.update_project(project.id, staging_deploy_url="http://localhost:18080")
+            monkeypatch.setattr("web.routes.expert.requests.request", _fake_request)
+
+            resp = client.get(
+                f"/expert/{project.slug}/preview/staging/",
+                headers={
+                    "X-Forwarded-Email": "dev@example.com",
+                    "Authorization": "Bearer secret-token",
+                    "Cookie": "session=top-secret",
+                    "X-Correlation-ID": "abc-123",
+                },
+            )
+            assert resp.status_code == 200
+
+            forwarded = {k.lower(): v for k, v in captured["headers"].items()}
+            assert "authorization" not in forwarded
+            assert "cookie" not in forwarded
+            assert "x-forwarded-email" not in forwarded
+            assert forwarded.get("x-correlation-id") == "abc-123"
+        finally:
+            config.EXPERT_MODE_ENABLED = original_enabled
+
+    def test_fastapi_templates_receive_config(self, client):
+        from web import config
+
+        original = config.EXPERT_MODE_ENABLED
+        config.EXPERT_MODE_ENABLED = True
+        try:
+            resp = client.get("/rechercher")
+            assert resp.status_code == 200
+            assert b'href="/expert"' in resp.data
+        finally:
+            config.EXPERT_MODE_ENABLED = original
+
     def test_project_message_enqueues_project_workdir(self, app, client, project):
         from web import config
         from web.storage import store

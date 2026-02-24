@@ -76,6 +76,7 @@ def _static_url(path: str) -> str:
 
 
 templates.env.globals["static_url"] = _static_url
+templates.env.globals["config"] = config
 
 
 def _format_relative_date_global(dt):

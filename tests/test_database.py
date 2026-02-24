@@ -136,3 +136,17 @@ class TestCancelUnstick:
         assert resp.json()["status"] == "cancel_requested"
         updated = store.get_conversation(conv.id, include_messages=False)
         assert updated.needs_response
+
+
+class TestPMCommandOrdering:
+    """Tests for deterministic ordering of claimed PM commands."""
+
+    def test_claim_pending_pm_commands_returns_fifo(self, client):
+        conv = store.create_conversation(user_id="test@test.com")
+        run_id = store.enqueue_pm_command(conv.id, "run", {"prompt": "hello"})
+        cancel_id = store.enqueue_pm_command(conv.id, "cancel")
+
+        claimed = store.claim_pending_pm_commands()
+
+        assert [c["id"] for c in claimed] == [run_id, cancel_id]
+        assert [c["command"] for c in claimed] == ["run", "cancel"]
