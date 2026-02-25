@@ -1,5 +1,6 @@
 """Matometa web application - FastAPI server with SSE streaming."""
 
+import asyncio
 import logging
 import mimetypes
 from contextlib import asynccontextmanager
@@ -30,7 +31,18 @@ async def lifespan(app: FastAPI):
     from . import sync_to_s3
     sync_to_s3.start_sync_watcher()
 
+    # Run process manager in-process (no separate container needed)
+    from .pm import ProcessManager
+    pm = ProcessManager()
+    pm_task = asyncio.create_task(pm.run())
+
     yield
+
+    pm_task.cancel()
+    try:
+        await pm_task
+    except asyncio.CancelledError:
+        pass
 
 
 # Create FastAPI app
