@@ -309,9 +309,8 @@ def _try_create_gitea_repo(project):
     try:
         from lib.gitea import GiteaClient
         gitea = GiteaClient()
-        repo_name = project.project_key or project.slug
         repo = gitea.create_repo(
-            name=repo_name,
+            name=project.slug,
             description=project.description or "",
         )
         gitea_id = repo.get("id")
@@ -399,69 +398,6 @@ def _setup_gitea_webhook(project, app_uuid, coolify, branch_filter: str | None =
         logger.exception("Failed to set up Gitea webhook for project %s", project.id)
 
 
-def _ensure_postgres_for_app(
-    *,
-    coolify,
-    project,
-    app_uuid: str,
-    environment: str,
-    db_uuid_field: str,
-) -> str | None:
-    """Ensure a Postgres database exists for an app and inject DATABASE_URL.
-
-    Returns the database UUID, or None if stack_profile is not web_postgres.
-    Raises RuntimeError on failure when strict_db is True (default).
-    """
-    if project.stack_profile != "web_postgres":
-        return None
-
-    existing_uuid = getattr(project, db_uuid_field, None)
-    if existing_uuid:
-        # DB already provisioned — just ensure env var is set
-        try:
-            db_url = coolify.get_database_connection_url(existing_uuid)
-            if db_url:
-                coolify.set_environment_variable(app_uuid, "DATABASE_URL", db_url)
-            return existing_uuid
-        except Exception:
-            logger.warning("Could not refresh DATABASE_URL for %s db %s", environment, existing_uuid)
-            return existing_uuid
-
-    # Create new database
-    try:
-        servers = coolify.list_servers()
-        if not servers:
-            raise RuntimeError("No Coolify server available for DB provisioning")
-        server_uuid = servers[0]["uuid"]
-
-        infra_name = project.project_key or project.slug
-        db_name = f"{infra_name}-{environment}-db"
-
-        coolify_proj = coolify.create_project(name=db_name, description=f"PostgreSQL for {infra_name} {environment}")
-
-        db_result = coolify.create_postgres_database(
-            name=db_name,
-            server_uuid=server_uuid,
-            project_uuid=coolify_proj["uuid"],
-            postgres_db=infra_name.replace("-", "_"),
-            postgres_user=infra_name.replace("-", "_"),
-        )
-        db_uuid = db_result.get("uuid", "")
-
-        if db_uuid:
-            db_url = coolify.get_database_connection_url(db_uuid)
-            if db_url:
-                coolify.set_environment_variable(app_uuid, "DATABASE_URL", db_url)
-
-            store.update_project(project.id, **{db_uuid_field: db_uuid})
-            logger.info("Provisioned Postgres %s for %s/%s", db_uuid, project.id, environment)
-
-        return db_uuid
-    except Exception as exc:
-        logger.exception("DB provisioning failed for %s/%s", project.id, environment)
-        raise RuntimeError(f"Database provisioning failed for {environment}: {exc}") from exc
-
-
 def _sync_legacy_deploy_fields(project_id: str, *, app_uuid: str | None, deploy_url: str | None):
     """Keep legacy single-deploy fields populated for backwards compatibility."""
     updates = {}
@@ -538,11 +474,10 @@ def _ensure_staging_application(project, coolify):
                 coolify.set_ports_mapping(app_uuid, f"{mapped_port}:5000")
             deploy_url = _local_deploy_url(mapped_port)
     else:
-        infra_name = project.project_key or project.slug
         app_uuid, deploy_url = _create_coolify_application(
             coolify=coolify,
             project=project,
-            app_name=f"{infra_name}-staging",
+            app_name=f"{project.slug}-staging",
             git_branch=staging_branch,
             local_port_start=18080,
         )
@@ -557,19 +492,6 @@ def _ensure_staging_application(project, coolify):
 
     if app_uuid:
         _setup_gitea_webhook(project, app_uuid, coolify, branch_filter=staging_branch)
-
-        # Provision Postgres if stack_profile requires it
-        try:
-            refreshed = store.get_project(project.id) or project
-            _ensure_postgres_for_app(
-                coolify=coolify,
-                project=refreshed,
-                app_uuid=app_uuid,
-                environment="staging",
-                db_uuid_field="staging_postgres_uuid",
-            )
-        except RuntimeError:
-            logger.warning("Staging DB provisioning failed for project %s (non-fatal)", project.id)
 
     return app_uuid, deploy_url
 
@@ -591,11 +513,10 @@ def _ensure_production_application(project, coolify):
                 coolify.set_ports_mapping(app_uuid, f"{mapped_port}:5000")
             deploy_url = _local_deploy_url(mapped_port)
     else:
-        infra_name = project.project_key or project.slug
         app_uuid, deploy_url = _create_coolify_application(
             coolify=coolify,
             project=project,
-            app_name=f"{infra_name}-prod",
+            app_name=f"{project.slug}-prod",
             git_branch=production_branch,
             local_port_start=28080,
         )
@@ -607,22 +528,6 @@ def _ensure_production_application(project, coolify):
         status="deployed" if deploy_url else project.status,
     )
     _sync_legacy_deploy_fields(project.id, app_uuid=app_uuid, deploy_url=deploy_url)
-
-    if app_uuid:
-        # Provision Postgres if stack_profile requires it (strict for production)
-        try:
-            refreshed = store.get_project(project.id) or project
-            _ensure_postgres_for_app(
-                coolify=coolify,
-                project=refreshed,
-                app_uuid=app_uuid,
-                environment="production",
-                db_uuid_field="production_postgres_uuid",
-            )
-        except RuntimeError:
-            logger.exception("Production DB provisioning failed for project %s", project.id)
-            raise
-
     return app_uuid, deploy_url
 
 
@@ -746,22 +651,10 @@ def expert_project_preview(slug, environment, subpath):
         "upgrade",
         "host",
     }
-    sensitive_headers = {
-        "authorization",
-        "cookie",
-        "x-forwarded-email",
-        "x-forwarded-user",
-        "x-forwarded-access-token",
-        "x-amzn-oidc-data",
-        "x-amzn-oidc-accesstoken",
-    }
     upstream_headers = {
         key: value
         for key, value in request.headers.items()
         if key.lower() not in hop_by_hop
-        and key.lower() not in sensitive_headers
-        and not key.lower().startswith("x-auth-request-")
-        and not key.lower().startswith("x-forwarded-")
     }
 
     try:
@@ -851,10 +744,9 @@ def api_create_project():
     data = request.get_json() or {}
     name = data.get("name", "Nouveau projet")
     description = data.get("description")
-    stack_profile = data.get("stack_profile", "web_postgres")
     user_email = getattr(g, "user_email", None)
 
-    project = store.create_project(name=name, user_id=user_email, description=description, stack_profile=stack_profile)
+    project = store.create_project(name=name, user_id=user_email, description=description)
     _try_create_gitea_repo(project)
     # Re-fetch so gitea fields are included in response
     project = store.get_project(project.id) or project
@@ -871,7 +763,7 @@ def api_create_project():
 
 @bp.route("/api/expert/projects/<project_id>", methods=["PATCH"])
 def api_update_project(project_id):
-    """Update project fields (name, spec, status). project_key is immutable."""
+    """Update project fields (name, spec, status)."""
     if not config.EXPERT_MODE_ENABLED:
         return jsonify({"error": "Expert mode not enabled"}), 403
 
@@ -880,17 +772,11 @@ def api_update_project(project_id):
         return jsonify({"error": "Project not found"}), 404
 
     data = request.get_json() or {}
-
-    # Reject project_key mutation
-    if "project_key" in data:
-        return jsonify({"error": "project_key is immutable and cannot be changed"}), 400
-
     allowed_fields = {
         "name",
         "description",
         "spec",
         "status",
-        "stack_profile",
         "staging_branch",
         "production_branch",
     }
@@ -900,88 +786,6 @@ def api_update_project(project_id):
         return jsonify({"error": "No valid fields to update"}), 400
 
     store.update_project(project_id, **updates)
-    updated = store.get_project(project_id)
-    return jsonify(_project_to_public_dict(updated))
-
-
-@bp.route("/api/expert/projects/<project_id>/plan-draft", methods=["PUT"])
-def api_save_plan_draft(project_id):
-    """Save a plan draft and transition to awaiting_approval if currently planning."""
-    if not config.EXPERT_MODE_ENABLED:
-        return jsonify({"error": "Expert mode not enabled"}), 403
-
-    project = store.get_project(project_id)
-    if not project:
-        return jsonify({"error": "Project not found"}), 404
-
-    data = request.get_json() or {}
-    content = data.get("content", "")
-    if not content:
-        return jsonify({"error": "content is required"}), 400
-
-    updates = {"plan_draft": content}
-    if project.workflow_phase == "planning":
-        updates["workflow_phase"] = "awaiting_approval"
-
-    store.update_project(project_id, **updates)
-    updated = store.get_project(project_id)
-    return jsonify(_project_to_public_dict(updated))
-
-
-@bp.route("/api/expert/projects/<project_id>/plan-approve", methods=["POST"])
-def api_approve_plan(project_id):
-    """Approve the plan draft and transition to implementing."""
-    if not config.EXPERT_MODE_ENABLED:
-        return jsonify({"error": "Expert mode not enabled"}), 403
-
-    project = store.get_project(project_id)
-    if not project:
-        return jsonify({"error": "Project not found"}), 404
-
-    if project.workflow_phase != "awaiting_approval":
-        return jsonify({
-            "error": f"Cannot approve plan from phase '{project.workflow_phase}'. Must be in 'awaiting_approval'."
-        }), 409
-
-    if not project.plan_draft:
-        return jsonify({"error": "No plan draft to approve"}), 400
-
-    from datetime import datetime
-    user_email = getattr(g, "user_email", None)
-    data = request.get_json() or {}
-
-    store.update_project(project_id,
-        plan_approved=project.plan_draft,
-        plan_version=(project.plan_version or 0) + 1,
-        plan_approved_at=datetime.now().isoformat(),
-        plan_approved_by=user_email,
-        plan_source_conversation_id=data.get("conversation_id"),
-        spec=project.plan_draft,  # backwards compat
-        workflow_phase="implementing",
-    )
-    updated = store.get_project(project_id)
-    return jsonify(_project_to_public_dict(updated))
-
-
-@bp.route("/api/expert/projects/<project_id>/return-to-planning", methods=["POST"])
-def api_return_to_planning(project_id):
-    """Return from implementing to planning phase."""
-    if not config.EXPERT_MODE_ENABLED:
-        return jsonify({"error": "Expert mode not enabled"}), 403
-
-    project = store.get_project(project_id)
-    if not project:
-        return jsonify({"error": "Project not found"}), 404
-
-    if project.workflow_phase != "implementing":
-        return jsonify({
-            "error": f"Cannot return to planning from phase '{project.workflow_phase}'. Must be in 'implementing'."
-        }), 409
-
-    store.update_project(project_id,
-        workflow_phase="planning",
-        plan_draft=None,
-    )
     updated = store.get_project(project_id)
     return jsonify(_project_to_public_dict(updated))
 
@@ -1023,9 +827,6 @@ def api_deploy_project(project_id):
     if not config.COOLIFY_API_TOKEN:
         return jsonify({"error": "Coolify not configured"}), 503
 
-    user_email = getattr(g, "user_email", None)
-    user_name = getattr(g, "user_name", None) or user_email
-
     try:
         from lib.coolify import CoolifyClient
         coolify = CoolifyClient()
@@ -1035,7 +836,7 @@ def api_deploy_project(project_id):
 
         # Guarantee the repository is deployable on first deploy.
         _ensure_deployable_repo(project)
-        commit_and_push_staging_if_changed(project, author_name=user_name, author_email=user_email)
+        commit_and_push_staging_if_changed(project)
 
         # Ensure staging infra is always alive and webhook-driven.
         staging_app_uuid, staging_url = _ensure_staging_application(project, coolify)
@@ -1045,7 +846,7 @@ def api_deploy_project(project_id):
         refreshed = store.get_project(project_id) or project
 
         # Promote staging branch to production branch before production deploy.
-        promotion = promote_staging_to_production(refreshed, author_name=user_name, author_email=user_email)
+        promotion = promote_staging_to_production(refreshed)
 
         refreshed = store.get_project(project_id) or refreshed
         production_app_uuid, production_url = _ensure_production_application(refreshed, coolify)

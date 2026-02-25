@@ -205,7 +205,7 @@ class TestFrontmatterExtraction:
     def test_frontmatter_query_overrides_db_field(self):
         """Frontmatter original_query should take priority over DB value."""
         from web.notion import publish_report
-        with patch("web.notion.is_configured", return_value=True), patch("web.notion._notion_request") as mock_req:
+        with patch("web.notion._notion_request") as mock_req:
             mock_req.return_value = {"id": "abc", "url": "https://notion.so/page"}
             publish_report(
                 title="Test",
@@ -220,7 +220,7 @@ class TestFrontmatterExtraction:
 
     def test_frontmatter_date_overrides_argument(self):
         from web.notion import publish_report
-        with patch("web.notion.is_configured", return_value=True), patch("web.notion._notion_request") as mock_req:
+        with patch("web.notion._notion_request") as mock_req:
             mock_req.return_value = {"id": "abc", "url": "https://notion.so/page"}
             publish_report(
                 title="Test",
@@ -234,7 +234,7 @@ class TestFrontmatterExtraction:
     def test_db_field_used_when_no_frontmatter(self):
         from web.notion import publish_report
         content_no_fm = "# Just a heading\n\nSome text.\n"
-        with patch("web.notion.is_configured", return_value=True), patch("web.notion._notion_request") as mock_req:
+        with patch("web.notion._notion_request") as mock_req:
             mock_req.return_value = {"id": "abc", "url": "https://notion.so/page"}
             publish_report(
                 title="Test",

@@ -16,25 +16,14 @@
             <span class="badge {% if project.status == 'deployed' %}bg-success{% elif project.status == 'active' %}bg-primary{% elif project.status == 'archived' %}bg-secondary{% else %}bg-warning text-dark{% endif %} ms-1">
               {{ project.status }}
             </span>
-            {% if project.project_key %}
-            <code class="ms-1 text-muted" style="font-size: 0.75em; user-select: all;" title="Identifiant technique (immuable)">{{ project.project_key }}</code>
-            {% endif %}
             {% if project.production_deploy_url %}
             · <a href="{{ project.production_preview_url }}" target="_blank" class="text-muted"><i class="ri-external-link-line"></i> Ouvrir production</a>
             {% elif project.staging_deploy_url %}
             · <a href="{{ project.staging_preview_url }}" target="_blank" class="text-muted"><i class="ri-external-link-line"></i> Ouvrir staging</a>
             {% endif %}
           </p>
-          <div class="conv-title-display" id="projectTitleDisplay">
-            <h1 class="mb-0" id="projectNameText" style="cursor: pointer;" title="Cliquer pour renommer">
-              <i class="ri-code-s-slash-line ri-2x text-primary me-2" style="vertical-align: middle;"></i>{{ project.name }}
-              <i class="ri-pencil-line text-muted" style="font-size: 0.5em; vertical-align: middle;"></i>
-            </h1>
-          </div>
-          <div id="projectNameEdit" style="display: none;" class="d-flex align-items-center gap-2 mt-1">
-            <input type="text" id="projectNameInput" class="form-control form-control-sm" value="{{ project.name }}" style="max-width: 300px;">
-            <button class="btn btn-sm btn-primary" id="projectNameSaveBtn"><i class="ri-check-line"></i></button>
-            <button class="btn btn-sm btn-outline-secondary" id="projectNameCancelBtn"><i class="ri-close-line"></i></button>
+          <div class="conv-title-display">
+            <h1 class="mb-0"><i class="ri-code-s-slash-line ri-2x text-primary me-2" style="vertical-align: middle;"></i>{{ project.name }}</h1>
           </div>
         </div>
       </div>
@@ -43,44 +32,16 @@
 
   <div class="section-body">
     <div class="container py-4">
-
-      <!-- Workflow Stepper -->
-      <div class="workflow-stepper mb-4" id="workflowStepper">
-        <div class="stepper-step {% if project.workflow_phase == 'planning' %}stepper-active{% elif project.workflow_phase in ('awaiting_approval', 'implementing') %}stepper-done{% endif %}">
-          <div class="stepper-circle">1</div>
-          <div class="stepper-label">
-            <strong>Planning</strong>
-            <small class="text-muted d-block">Définir le cahier des charges</small>
-          </div>
-        </div>
-        <div class="stepper-connector {% if project.workflow_phase in ('awaiting_approval', 'implementing') %}stepper-connector-done{% endif %}"></div>
-        <div class="stepper-step {% if project.workflow_phase == 'awaiting_approval' %}stepper-active{% elif project.workflow_phase == 'implementing' %}stepper-done{% endif %}">
-          <div class="stepper-circle">2</div>
-          <div class="stepper-label">
-            <strong>Validation</strong>
-            <small class="text-muted d-block">Approuver le plan</small>
-          </div>
-        </div>
-        <div class="stepper-connector {% if project.workflow_phase == 'implementing' %}stepper-connector-done{% endif %}"></div>
-        <div class="stepper-step {% if project.workflow_phase == 'implementing' %}stepper-active{% endif %}">
-          <div class="stepper-circle">3</div>
-          <div class="stepper-label">
-            <strong>Implémentation</strong>
-            <small class="text-muted d-block">Développer et déployer</small>
-          </div>
-        </div>
-      </div>
-
       <!-- Nav tabs -->
       <ul class="nav nav-tabs mb-4" role="tablist">
         <li class="nav-item" role="presentation">
-          <button class="nav-link {% if not project.plan_approved and not project.spec %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-conversations" type="button" role="tab">
+          <button class="nav-link {% if not project.spec %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-conversations" type="button" role="tab">
             <i class="ri-chat-3-line"></i> Conversations
           </button>
         </li>
         <li class="nav-item" role="presentation">
-          <button class="nav-link {% if project.plan_approved or project.spec %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-plan" type="button" role="tab">
-            <i class="ri-file-text-line"></i> Plan
+          <button class="nav-link {% if project.spec %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-spec" type="button" role="tab">
+            <i class="ri-file-text-line"></i> Spec
           </button>
         </li>
         <li class="nav-item" role="presentation">
@@ -93,7 +54,7 @@
       <!-- Tab content -->
       <div class="tab-content">
         <!-- Conversations tab -->
-        <div class="tab-pane fade {% if not project.plan_approved and not project.spec %}show active{% endif %}" id="tab-conversations" role="tabpanel">
+        <div class="tab-pane fade {% if not project.spec %}show active{% endif %}" id="tab-conversations" role="tabpanel">
           <div class="d-flex justify-content-between align-items-center mb-3">
             <h5 class="mb-0">Conversations</h5>
             <a href="/api/expert/projects/{{ project.id }}/conversations" class="btn btn-sm btn-outline-primary" id="newConvBtn">
@@ -119,58 +80,18 @@
           {% endif %}
         </div>
 
-        <!-- Plan tab (previously Spec) -->
-        <div class="tab-pane fade {% if project.plan_approved or project.spec %}show active{% endif %}" id="tab-plan" role="tabpanel">
-
-          {% if project.plan_approved %}
-          <!-- Approved plan section -->
-          <div class="card mb-3">
-            <div class="card-header d-flex justify-content-between align-items-center">
-              <div>
-                <i class="ri-check-double-line text-success"></i>
-                <strong>Plan approuvé (v{{ project.plan_version }})</strong>
-              </div>
-              {% if project.workflow_phase == 'implementing' %}
-              <button class="btn btn-sm btn-outline-warning" id="returnToPlanningBtn" data-project-id="{{ project.id }}">
-                <i class="ri-arrow-go-back-line"></i> Revenir en planning
-              </button>
-              {% endif %}
-            </div>
+        <!-- Spec tab -->
+        <div class="tab-pane fade {% if project.spec %}show active{% endif %}" id="tab-spec" role="tabpanel">
+          {% if project.spec %}
+          <div class="card">
             <div class="card-body">
-              {% if project.plan_approved_by or project.plan_approved_at %}
-              <p class="text-muted small mb-2">
-                {% if project.plan_approved_by %}Approuvé par {{ project.plan_approved_by }}{% endif %}
-                {% if project.plan_approved_at %} le {{ project.plan_approved_at[:10] }}{% endif %}
-              </p>
-              {% endif %}
-              <div id="approvedPlanContent" class="markdown-body">{{ project.plan_approved }}</div>
+              <div id="specContent" class="markdown-body">{{ project.spec }}</div>
             </div>
           </div>
-          {% endif %}
-
-          {% if project.plan_draft and project.workflow_phase != 'implementing' %}
-          <!-- Draft section -->
-          <div class="card mb-3 border-warning">
-            <div class="card-header bg-warning bg-opacity-10 d-flex justify-content-between align-items-center">
-              <div>
-                <i class="ri-draft-line"></i>
-                <strong>Brouillon du plan</strong>
-              </div>
-              <button class="btn btn-sm btn-success" id="approvePlanBtn" data-project-id="{{ project.id }}">
-                <i class="ri-check-line"></i> Approuver le plan
-              </button>
-            </div>
-            <div class="card-body">
-              <div id="draftPlanContent" class="markdown-body">{{ project.plan_draft }}</div>
-            </div>
-          </div>
-          {% endif %}
-
-          {% if not project.plan_approved and not project.plan_draft and not project.spec %}
-          <!-- Empty state -->
+          {% else %}
           <div class="text-center py-4">
             <i class="ri-file-text-line ri-3x text-disabled mb-3"></i>
-            <p class="text-muted">Le plan sera généré lors de la conversation. Commencez par décrire votre application.</p>
+            <p class="text-muted">La spec sera générée lors de la première conversation.</p>
             {% if project_conversations %}
             <a href="/expert/{{ project.slug }}/{{ project_conversations[0].id }}" class="btn btn-primary">
               <i class="ri-chat-3-line"></i> Commencer
@@ -181,22 +102,7 @@
             </a>
             {% endif %}
           </div>
-          {% elif not project.plan_approved and not project.plan_draft and project.spec %}
-          <!-- Legacy spec display (before plan workflow existed) -->
-          <div class="card">
-            <div class="card-body">
-              <div id="specContent" class="markdown-body">{{ project.spec }}</div>
-            </div>
-          </div>
           {% endif %}
-
-          <!-- Stack profile info -->
-          <div class="mt-3">
-            <small class="text-muted">
-              <i class="ri-stack-line"></i> Profil : <strong>{{ project.stack_profile }}</strong>
-              {% if project.stack_profile == 'web_postgres' %}(Web + PostgreSQL){% else %}(Web seul){% endif %}
-            </small>
-          </div>
         </div>
 
         <!-- Deploy tab -->
@@ -297,93 +203,14 @@
 
 {% block scripts %}
 <script>
+  // Render spec markdown
   document.addEventListener('DOMContentLoaded', () => {
-    // Render markdown content
-    const renderMarkdown = (el) => {
-      if (el && typeof marked !== 'undefined') {
-        el.innerHTML = marked.parse(el.textContent);
-      }
-    };
-    renderMarkdown(document.getElementById('approvedPlanContent'));
-    renderMarkdown(document.getElementById('draftPlanContent'));
-    renderMarkdown(document.getElementById('specContent'));
-
-    // --- Inline project name editing ---
-    const nameText = document.getElementById('projectNameText');
-    const nameEdit = document.getElementById('projectNameEdit');
-    const nameInput = document.getElementById('projectNameInput');
-    const nameSaveBtn = document.getElementById('projectNameSaveBtn');
-    const nameCancelBtn = document.getElementById('projectNameCancelBtn');
-
-    if (nameText && nameEdit) {
-      nameText.addEventListener('click', () => {
-        nameText.parentElement.style.display = 'none';
-        nameEdit.style.display = 'flex';
-        nameInput.focus();
-        nameInput.select();
-      });
-
-      nameCancelBtn.addEventListener('click', () => {
-        nameEdit.style.display = 'none';
-        nameText.parentElement.style.display = 'block';
-      });
-
-      const saveName = async () => {
-        const newName = nameInput.value.trim();
-        if (!newName) return;
-        const res = await fetch('/api/expert/projects/{{ project.id }}', {
-          method: 'PATCH',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({name: newName}),
-        });
-        if (res.ok) {
-          nameText.childNodes[nameText.childNodes.length - 3].textContent = newName;
-          nameEdit.style.display = 'none';
-          nameText.parentElement.style.display = 'block';
-        }
-      };
-      nameSaveBtn.addEventListener('click', saveName);
-      nameInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') saveName();
-        if (e.key === 'Escape') nameCancelBtn.click();
-      });
+    const specEl = document.getElementById('specContent');
+    if (specEl && typeof marked !== 'undefined') {
+      specEl.innerHTML = marked.parse(specEl.textContent);
     }
 
-    // --- Plan lifecycle actions ---
-    const approvePlanBtn = document.getElementById('approvePlanBtn');
-    if (approvePlanBtn) {
-      approvePlanBtn.addEventListener('click', async () => {
-        approvePlanBtn.disabled = true;
-        approvePlanBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Approbation...';
-        const res = await fetch(`/api/expert/projects/${approvePlanBtn.dataset.projectId}/plan-approve`, { method: 'POST' });
-        if (res.ok) {
-          window.location.reload();
-        } else {
-          const data = await res.json();
-          alert(data.error || 'Erreur');
-          approvePlanBtn.disabled = false;
-          approvePlanBtn.innerHTML = '<i class="ri-check-line"></i> Approuver le plan';
-        }
-      });
-    }
-
-    const returnToPlanningBtn = document.getElementById('returnToPlanningBtn');
-    if (returnToPlanningBtn) {
-      returnToPlanningBtn.addEventListener('click', async () => {
-        if (!confirm('Revenir en phase de planning ? Le plan approuvé sera conservé.')) return;
-        returnToPlanningBtn.disabled = true;
-        const res = await fetch(`/api/expert/projects/${returnToPlanningBtn.dataset.projectId}/return-to-planning`, { method: 'POST' });
-        if (res.ok) {
-          window.location.reload();
-        } else {
-          const data = await res.json();
-          alert(data.error || 'Erreur');
-          returnToPlanningBtn.disabled = false;
-        }
-      });
-    }
-
-    // --- New conversation button: POST then redirect ---
+    // New conversation button: POST then redirect
     const newConvBtn = document.getElementById('newConvBtn');
     if (newConvBtn) {
       newConvBtn.addEventListener('click', async (e) => {
@@ -408,7 +235,6 @@
       });
     }
 
-    // --- Deploy tab logic ---
     const deployStatusText = document.getElementById('deployStatusText');
     const deployStatusMeta = document.getElementById('deployStatusMeta');
     const deployBtn = document.getElementById('deployBtn');
@@ -469,7 +295,7 @@
 
     const deployStaging = async (projectId) => {
       setDeployBusy(true);
-      setStagingStatus('Déploiement staging en cours...', 'Création/mise à jour de l\'application staging');
+      setStagingStatus('Déploiement staging en cours...', 'Création/mise à jour de l’application staging');
 
       try {
         const res = await fetch(`/api/expert/projects/${projectId}/deploy-staging`, { method: 'POST' });

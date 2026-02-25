@@ -53,34 +53,6 @@ def run_git(workdir: Path, *args: str, timeout: int = 40) -> str:
     return result.stdout.strip()
 
 
-def run_git_as_user(
-    workdir: Path,
-    *args: str,
-    author_name: str | None = None,
-    author_email: str | None = None,
-    timeout: int = 40,
-) -> str:
-    """Run a git command with user-specific author/committer identity via env vars."""
-    import os
-    env = dict(os.environ)
-    if author_email:
-        env["GIT_AUTHOR_EMAIL"] = author_email
-        env["GIT_COMMITTER_EMAIL"] = author_email
-    if author_name:
-        env["GIT_AUTHOR_NAME"] = author_name
-        env["GIT_COMMITTER_NAME"] = author_name
-    result = subprocess.run(
-        ["git", *args],
-        cwd=workdir,
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        env=env,
-    )
-    return result.stdout.strip()
-
-
 def ensure_local_git_repo(project) -> bool:
     """Ensure project working directory is a valid local clone of its Gitea repository."""
     workdir = config.PROJECTS_DIR / project.id
@@ -206,12 +178,7 @@ def ensure_project_branches(project):
     ensure_branch(workdir, staging)
 
 
-def commit_and_push_staging_if_changed(
-    project,
-    conversation_id: str | None = None,
-    author_name: str | None = None,
-    author_email: str | None = None,
-) -> dict | None:
+def commit_and_push_staging_if_changed(project, conversation_id: str | None = None) -> dict | None:
     """Commit and push all local changes to the staging branch if needed."""
     workdir = config.PROJECTS_DIR / project.id
     if not (workdir / ".git").exists():
@@ -239,15 +206,7 @@ def commit_and_push_staging_if_changed(
     suffix = conversation_id[:8] if conversation_id else "manual"
     message = f"chore(expert): update via conversation {suffix}"
 
-    # Use user identity for the commit if available
-    if author_email or author_name:
-        run_git_as_user(
-            workdir, "commit", "-m", message,
-            author_name=author_name, author_email=author_email,
-        )
-    else:
-        run_git(workdir, "commit", "-m", message)
-
+    run_git(workdir, "commit", "-m", message)
     run_git(workdir, "push", "origin", staging)
     commit_hash = run_git(workdir, "rev-parse", "--short", "HEAD")
 
@@ -258,11 +217,7 @@ def commit_and_push_staging_if_changed(
     }
 
 
-def promote_staging_to_production(
-    project,
-    author_name: str | None = None,
-    author_email: str | None = None,
-) -> dict:
+def promote_staging_to_production(project) -> dict:
     """Merge staging into production branch and push production."""
     workdir = config.PROJECTS_DIR / project.id
     if not (workdir / ".git").exists():
@@ -275,16 +230,7 @@ def promote_staging_to_production(
     run_git(workdir, "fetch", "origin")
 
     ensure_branch(workdir, production)
-
-    # Use user identity for the merge commit if available
-    if author_email or author_name:
-        run_git_as_user(
-            workdir, "merge", "--no-edit", f"origin/{staging}",
-            author_name=author_name, author_email=author_email,
-        )
-    else:
-        run_git(workdir, "merge", "--no-edit", f"origin/{staging}")
-
+    run_git(workdir, "merge", "--no-edit", f"origin/{staging}")
     run_git(workdir, "push", "origin", production)
     commit_hash = run_git(workdir, "rev-parse", "--short", "HEAD")
 

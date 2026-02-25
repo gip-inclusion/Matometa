@@ -4,9 +4,7 @@ import asyncio
 import json
 import logging
 import os
-import shutil
 import signal
-from pathlib import Path
 from typing import AsyncIterator, Optional
 
 from .. import config
@@ -28,30 +26,6 @@ class CLIBackend(AgentBackend):
         env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
         env["MATOMETA_CONVERSATION_ID"] = conversation_id
         return env
-
-    def _ensure_claude_config_file(self) -> None:
-        """Restore ~/.claude.json from the latest backup when missing.
-
-        Claude CLI can fail hard when this file is absent even if credentials exist.
-        """
-        config_path = Path.home() / ".claude.json"
-        if config_path.exists():
-            return
-
-        backups_dir = Path.home() / ".claude" / "backups"
-        if not backups_dir.exists():
-            return
-
-        backups = sorted(backups_dir.glob(".claude.json.backup.*"), key=lambda p: p.stat().st_mtime, reverse=True)
-        if not backups:
-            return
-
-        latest_backup = backups[0]
-        try:
-            shutil.copy2(latest_backup, config_path)
-            logger.info("Restored missing Claude config from backup: %s", latest_backup)
-        except Exception as exc:
-            logger.warning("Failed to restore Claude config from %s: %s", latest_backup, exc)
 
     def _extra_cmd_args(self) -> list[str]:
         """Extra CLI arguments appended before -p. Override in subclasses."""
@@ -132,8 +106,6 @@ class CLIBackend(AgentBackend):
         """Internal: run the CLI process."""
         # When resuming a session, don't include history in prompt (session already has it)
         # This prevents duplicate tool_use IDs which cause API errors
-        self._ensure_claude_config_file()
-
         if session_id:
             prompt = message
         else:

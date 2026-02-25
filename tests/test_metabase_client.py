@@ -48,6 +48,9 @@ class TestBuildSqlUrl:
         assert decoded["dataset_query"]["native"]["query"] == sql
 
 
+# All tests below are integration tests
+pytestmark = pytest.mark.integration
+
 # Known collection IDs
 COLLECTION_452 = 452
 COLLECTION_453 = 453
@@ -59,13 +62,9 @@ KNOWN_CARD_ID = 4413
 @pytest.fixture(scope="module")
 def api():
     """Create API client for all tests."""
-    try:
-        return get_metabase(instance="stats")
-    except ValueError as exc:
-        pytest.skip(f"Metabase integration not configured: {exc}")
+    return get_metabase(instance="stats")
 
 
-@pytest.mark.integration
 class TestConnection:
     """Test basic connectivity."""
 
@@ -77,7 +76,6 @@ class TestConnection:
         assert "email" in user or "common_name" in user
 
 
-@pytest.mark.integration
 class TestExecuteSQL:
     """Test raw SQL execution."""
 
@@ -116,7 +114,6 @@ class TestExecuteSQL:
             api.execute_sql("SELECT * FROM nonexistent_table_xyz")
 
 
-@pytest.mark.integration
 class TestExecuteCard:
     """Test saved card/question execution."""
 
@@ -132,7 +129,6 @@ class TestExecuteCard:
             api.execute_card(999999999)
 
 
-@pytest.mark.integration
 class TestGetCard:
     """Test card metadata retrieval."""
 
@@ -150,7 +146,6 @@ class TestGetCard:
             api.get_card(999999999)
 
 
-@pytest.mark.integration
 class TestListCards:
     """Test listing cards in collections."""
 
@@ -166,7 +161,6 @@ class TestListCards:
             assert "name" in card
 
 
-@pytest.mark.integration
 class TestSearchCards:
     """Test card search functionality."""
 
@@ -184,7 +178,6 @@ class TestSearchCards:
         assert len(cards) == 0
 
 
-@pytest.mark.integration
 class TestGetCardSQL:
     """Test SQL extraction from cards."""
 
@@ -197,7 +190,6 @@ class TestGetCardSQL:
         # (empty string is valid for cards that fail extraction)
 
 
-@pytest.mark.integration
 class TestDashboards:
     """Test dashboard methods."""
 

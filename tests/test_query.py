@@ -6,7 +6,6 @@ Integration tests (require .env): pytest tests/test_query.py -v -m integration
 """
 
 import json
-import os
 import sqlite3
 import tempfile
 from datetime import datetime, timezone
@@ -397,10 +396,6 @@ class TestConversationIdFromEnv:
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(
-    not os.environ.get("METABASE_STATS_API_KEY") or not os.environ.get("MATOMO_API_KEY"),
-    reason="Integration tests require METABASE_STATS_API_KEY and MATOMO_API_KEY",
-)
 class TestQueryIntegration:
     """Integration tests against real APIs (requires .env)."""
 

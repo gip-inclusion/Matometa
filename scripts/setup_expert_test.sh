@@ -20,39 +20,6 @@ EXPERT_ADMIN_USER="${EXPERT_ADMIN_USER:-matometa}"
 EXPERT_ADMIN_EMAIL="${EXPERT_ADMIN_EMAIL:-admin@matometa.dev}"
 EXPERT_ADMIN_PASS="${EXPERT_ADMIN_PASS:-$(openssl rand -hex 18)}"
 
-pick_reachable_url() {
-    local preferred_url="$1"
-    local probe_path="$2"
-    local valid_regex="$3"
-
-    if [[ "$preferred_url" != *"host.docker.internal"* ]]; then
-        echo "$preferred_url"
-        return
-    fi
-
-    local preferred_code
-    preferred_code=$(curl -s -o /dev/null -w "%{http_code}" "${preferred_url}${probe_path}" --max-time 3 2>/dev/null || echo "000")
-    if [[ "$preferred_code" =~ $valid_regex ]]; then
-        echo "$preferred_url"
-        return
-    fi
-
-    local localhost_url
-    localhost_url="${preferred_url/host.docker.internal/localhost}"
-    local localhost_code
-    localhost_code=$(curl -s -o /dev/null -w "%{http_code}" "${localhost_url}${probe_path}" --max-time 3 2>/dev/null || echo "000")
-    if [[ "$localhost_code" =~ $valid_regex ]]; then
-        echo "Using localhost fallback for bootstrap: $localhost_url" >&2
-        echo "$localhost_url"
-        return
-    fi
-
-    echo "$preferred_url"
-}
-
-GITEA_URL="$(pick_reachable_url "$GITEA_URL" "/api/v1/version" "^200$")"
-COOLIFY_URL="$(pick_reachable_url "$COOLIFY_URL" "/" "^(200|302)$")"
-
 echo "=== Expert mode test setup ==="
 echo "Gitea URL:   $GITEA_URL"
 echo "Coolify URL: $COOLIFY_URL"

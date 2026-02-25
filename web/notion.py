@@ -7,19 +7,12 @@ import urllib.request
 
 from . import config
 
-
-def _notion_token() -> str:
-    """Read Notion token from environment at call time."""
-    return os.getenv("NOTION_TOKEN", "")
-
-
-def _notion_reports_db() -> str:
-    """Read Notion reports database id from environment at call time."""
-    return os.getenv("NOTION_REPORTS_DB", "")
+NOTION_TOKEN = os.getenv("NOTION_TOKEN")
+NOTION_REPORTS_DB = os.getenv("NOTION_REPORTS_DB")
 
 
 def is_configured() -> bool:
-    return bool(_notion_token() and _notion_reports_db())
+    return bool(NOTION_TOKEN and NOTION_REPORTS_DB)
 
 
 # --- Rich text parsing ---
@@ -229,9 +222,8 @@ def markdown_to_blocks(md: str) -> list[dict]:
 
 
 def _notion_request(method: str, endpoint: str, payload: dict = None) -> dict:
-    notion_token = _notion_token()
     headers = {
-        "Authorization": f"Bearer {notion_token}",
+        "Authorization": f"Bearer {NOTION_TOKEN}",
         "Notion-Version": "2022-06-28",
         "Content-Type": "application/json",
     }
@@ -255,8 +247,6 @@ def publish_report(
     """
     if not is_configured():
         raise RuntimeError("Notion not configured (NOTION_TOKEN / NOTION_REPORTS_DB)")
-
-    notion_reports_db = _notion_reports_db()
 
     # Extract from frontmatter (authoritative source, overrides DB fields)
     fm_date = None
@@ -290,7 +280,7 @@ def publish_report(
     result = _notion_request(
         "POST",
         "pages",
-        {"parent": {"database_id": notion_reports_db}, "properties": properties},
+        {"parent": {"database_id": NOTION_REPORTS_DB}, "properties": properties},
     )
     page_id = result["id"]
     page_url = result["url"]

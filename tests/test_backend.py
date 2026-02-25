@@ -11,7 +11,6 @@ class TestGetAgent:
     @pytest.mark.parametrize("name,cls_name", [
         ("cli", "CLIBackend"),
         ("cli-ollama", "CLIOllamaBackend"),
-        ("sdk", "CLIBackend"),
     ])
     def test_get_agent_returns_correct_class(self, name, cls_name):
         from web.agents import get_agent
@@ -40,16 +39,6 @@ class TestLLMRouting:
     def test_routes_to_correct_generator(self, backend, expected_fn):
         with patch("web.llm._get_llm_backend", return_value=backend), \
              patch(f"web.llm.{expected_fn}", return_value="ok") as mock_gen:
-            from web.llm import generate_text
-            result = generate_text("test")
-
-        mock_gen.assert_called_once()
-        assert result == "ok"
-
-    def test_sdk_backend_maps_to_cli_generator(self):
-        with patch("web.config.LLM_BACKEND", "sdk"), \
-             patch("web.config.AGENT_BACKEND", "sdk"), \
-             patch("web.llm._claude_cli_generate", return_value="ok") as mock_gen:
             from web.llm import generate_text
             result = generate_text("test")
 

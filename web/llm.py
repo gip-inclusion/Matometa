@@ -19,8 +19,6 @@ class LLMError(RuntimeError):
 
 def _get_llm_backend() -> str:
     backend = (config.LLM_BACKEND or config.AGENT_BACKEND).lower()
-    if backend == "sdk":
-        return "cli"
     return backend
 
 

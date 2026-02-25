@@ -55,7 +55,7 @@ RUN mkdir -p /app/data /app/data/uploads /app/data/modified /app/data/projects \
 USER matometa
 
 # Environment variables
-ENV AGENT_BACKEND=cli \
+ENV AGENT_BACKEND=sdk \
     WEB_HOST=0.0.0.0 \
     WEB_PORT=5000 \
     WEB_DEBUG=false

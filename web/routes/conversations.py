@@ -8,7 +8,7 @@ import threading
 from fastapi import APIRouter, Depends, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
-from ..deps import get_current_user, get_current_user_name
+from ..deps import get_current_user
 from ..storage import store
 from .. import config
 from .. import llm
@@ -606,7 +606,6 @@ async def trigger_planning_welcome(conv_id: str, user_email: str = Depends(get_c
         "Confirm you are ready to start plan mode, ask what they want to build, "
         "and mention you will draft a specification before implementation."
     )
-
     prompt = _build_project_prompt(
         project=project,
         content=welcome_prompt,
@@ -638,7 +637,6 @@ async def stream_conversation(
     conv_id: str,
     after: int = Query(default=0),
     user_email: str = Depends(get_current_user),
-    user_name: str | None = Depends(get_current_user_name),
 ):
     """Stream agent responses via Server-Sent Events.
 
@@ -714,8 +712,6 @@ async def stream_conversation(
                                 commit_and_push_staging_if_changed,
                                 project,
                                 conv_id,
-                                author_name=user_name or user_email,
-                                author_email=user_email,
                             )
                             deploy_triggered = False
                             # Staging is expected to auto-redeploy on push via Gitea webhook.

@@ -21,19 +21,13 @@ from typing import Optional, Union
 import pytest
 
 from lib.query import get_metabase
-from skills.metabase_query.scripts.cards_db import DB_PATH, load_cards_db
+from skills.metabase_query.scripts.cards_db import load_cards_db
 
 # Check if we have credentials for integration tests
 _HAS_CREDENTIALS = bool(os.environ.get("METABASE_STATS_API_KEY"))
-_HAS_CARDS_DB = DB_PATH.exists()
-
 requires_credentials = pytest.mark.skipif(
     not _HAS_CREDENTIALS,
     reason="Integration test requires METABASE_STATS_API_KEY"
-)
-requires_cards_db = pytest.mark.skipif(
-    not _HAS_CARDS_DB,
-    reason=f"Card inventory database not found at {DB_PATH}. Run sync_inventory --sqlite.",
 )
 
 
@@ -98,7 +92,6 @@ def api():
     return get_metabase(instance="stats")
 
 
-@pytest.mark.integration
 @requires_credentials
 class TestKnownAnswers:
     """Test that cards return expected results."""
@@ -136,8 +129,6 @@ class TestKnownAnswers:
                 )
 
 
-@pytest.mark.integration
-@requires_cards_db
 class TestCardDiscovery:
     """Test that we can find cards for common questions."""
 
@@ -160,9 +151,7 @@ class TestCardDiscovery:
         assert len(cards) > 0, "Should find cards using this table"
 
 
-@pytest.mark.integration
 @requires_credentials
-@requires_cards_db
 class TestEndToEnd:
     """
     End-to-end tests simulating agent workflow.

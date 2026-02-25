@@ -139,61 +139,6 @@ class CoolifyClient:
         resp.raise_for_status()
         return resp.json()
 
-    def create_postgres_database(
-        self,
-        name: str,
-        server_uuid: str,
-        project_uuid: str,
-        environment_name: str = "production",
-        postgres_user: str = "app",
-        postgres_db: str = "app",
-    ) -> dict:
-        """Create a PostgreSQL database resource on Coolify."""
-        payload = {
-            "name": name,
-            "server_uuid": server_uuid,
-            "project_uuid": project_uuid,
-            "environment_name": environment_name,
-            "type": "postgresql",
-            "postgres_user": postgres_user,
-            "postgres_db": postgres_db,
-        }
-        resp = self._session.post(self._url("/databases"), json=payload)
-        resp.raise_for_status()
-        return resp.json()
-
-    def get_database_status(self, db_uuid: str) -> dict:
-        """Get database resource status."""
-        resp = self._session.get(self._url(f"/databases/{db_uuid}"))
-        resp.raise_for_status()
-        return resp.json()
-
-    def get_database_connection_url(self, db_uuid: str) -> str:
-        """Get the internal connection URL for a database resource."""
-        data = self.get_database_status(db_uuid)
-        # Coolify exposes the internal URL in the resource data
-        return data.get("internal_db_url", "") or data.get("database_url", "")
-
-    def set_environment_variable(
-        self,
-        app_uuid: str,
-        key: str,
-        value: str,
-        is_preview: bool = False,
-    ) -> dict:
-        """Set an environment variable on a Coolify application."""
-        payload = {
-            "key": key,
-            "value": value,
-            "is_preview": is_preview,
-        }
-        resp = self._session.post(
-            self._url(f"/applications/{app_uuid}/envs"),
-            json=payload,
-        )
-        resp.raise_for_status()
-        return resp.json()
-
     def version(self) -> str:
         """Get Coolify version."""
         resp = self._session.get(self._url("/version"))

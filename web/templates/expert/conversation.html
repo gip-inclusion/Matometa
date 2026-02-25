@@ -14,8 +14,8 @@
         <div class="conv-title-wrapper">
           <p class="conv-meta-row text-muted mb-0 small">
             <a href="/expert" class="text-muted">Expert</a> · <a href="/expert/{{ project.slug }}" class="text-muted">{{ project.name }}</a>
-            <span class="badge {% if project.workflow_phase == 'implementing' %}bg-success{% elif project.workflow_phase == 'awaiting_approval' %}bg-warning text-dark{% else %}bg-info text-dark{% endif %} ms-1">
-              {% if project.workflow_phase == 'planning' %}Planning{% elif project.workflow_phase == 'awaiting_approval' %}Validation{% else %}Implémentation{% endif %}
+            <span class="badge {% if project.status == 'deployed' %}bg-success{% elif project.status == 'active' %}bg-primary{% elif project.status == 'archived' %}bg-secondary{% else %}bg-warning text-dark{% endif %} ms-1">
+              {{ project.status }}
             </span>
             {% if project.deploy_url %}
             · <a href="{{ project.deploy_url }}" target="_blank" class="text-muted"><i class="ri-external-link-line"></i> App</a>
@@ -64,13 +64,10 @@
         </div>
         <div class="actions-sidebar-body">
           <div class="sidebar-tab-content" id="specSidebarContent">
-            {% if project.plan_approved %}
-            <div class="small p-2 mb-1"><span class="badge bg-success">Plan v{{ project.plan_version }}</span></div>
-            <div class="sidebar-spec-content small" id="sidebarSpec">{{ project.plan_approved }}</div>
-            {% elif project.spec %}
+            {% if project.spec %}
             <div class="sidebar-spec-content small" id="sidebarSpec">{{ project.spec }}</div>
             {% else %}
-            <p class="text-muted small p-2">Le plan apparaîtra ici une fois défini.</p>
+            <p class="text-muted small p-2">La spec apparaîtra ici une fois définie.</p>
             {% endif %}
           </div>
           <div class="sidebar-tab-content" id="actionsContent">
@@ -168,8 +165,8 @@
       return conv;
     }
 
-    // Defensive fallback: if loadConversation implementation changes and stops
-    // returning the payload, fetch state directly to keep auto-welcome working.
+    // Defensive fallback: if loadConversation stops returning payload,
+    // keep the planning auto-welcome behavior intact.
     try {
       const res = await fetch(`/api/conversations/${convId}`);
       if (res.ok) {
@@ -199,9 +196,15 @@
 
     {% if current_conv %}
     const conv = await getConversationState('{{ current_conv.id }}');
+    const isPlanningPhase =
+      {% if project.workflow_phase is defined %}
+      '{{ project.workflow_phase }}' === 'planning';
+      {% else %}
+      '{{ project.status }}' === 'draft';
+      {% endif %}
 
     const shouldAutoWelcome =
-      '{{ project.workflow_phase }}' === 'planning' &&
+      isPlanningPhase &&
       conv &&
       Array.isArray(conv.messages) &&
       conv.messages.length === 0 &&
