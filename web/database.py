@@ -1133,6 +1133,27 @@ class ConversationStore:
                 for row in rows
             ]
 
+    def get_conversation_tags_batch(self, conv_ids: list[str]) -> dict[str, list[Tag]]:
+        """Get tags for multiple conversations in a single query."""
+        if not conv_ids:
+            return {}
+        with get_db() as conn:
+            placeholders = ",".join("?" * len(conv_ids))
+            rows = conn.execute(
+                f"""SELECT ct.conversation_id, t.id, t.name, t.type, t.label
+                   FROM tags t
+                   JOIN conversation_tags ct ON t.id = ct.tag_id
+                   WHERE ct.conversation_id IN ({placeholders})
+                   ORDER BY t.type, t.label""",
+                tuple(conv_ids)
+            ).fetchall()
+            result: dict[str, list[Tag]] = {cid: [] for cid in conv_ids}
+            for row in rows:
+                result[row["conversation_id"]].append(
+                    Tag(id=row["id"], name=row["name"], type=row["type"], label=row["label"])
+                )
+            return result
+
     def set_report_tags(self, report_id: int, tag_names: list[str], update_timestamp: bool = True) -> bool:
         """Set tags for a report (replaces existing tags)."""
         with get_db() as conn:
@@ -1173,6 +1194,27 @@ class ConversationStore:
                 Tag(id=row["id"], name=row["name"], type=row["type"], label=row["label"])
                 for row in rows
             ]
+
+    def get_report_tags_batch(self, report_ids: list[int]) -> dict[int, list[Tag]]:
+        """Get tags for multiple reports in a single query."""
+        if not report_ids:
+            return {}
+        with get_db() as conn:
+            placeholders = ",".join("?" * len(report_ids))
+            rows = conn.execute(
+                f"""SELECT rt.report_id, t.id, t.name, t.type, t.label
+                   FROM tags t
+                   JOIN report_tags rt ON t.id = rt.tag_id
+                   WHERE rt.report_id IN ({placeholders})
+                   ORDER BY t.type, t.label""",
+                tuple(report_ids)
+            ).fetchall()
+            result: dict[int, list[Tag]] = {rid: [] for rid in report_ids}
+            for row in rows:
+                result[row["report_id"]].append(
+                    Tag(id=row["id"], name=row["name"], type=row["type"], label=row["label"])
+                )
+            return result
 
     def list_conversations_with_tags(
         self,
@@ -1215,6 +1257,24 @@ class ConversationStore:
 
             rows = conn.execute(query, params).fetchall()
 
+            # Batch fetch tags for all conversations (1 query instead of N)
+            conv_ids = [row["id"] for row in rows]
+            tags_by_conv: dict[str, list[Tag]] = {cid: [] for cid in conv_ids}
+            if conv_ids:
+                tag_ph = ",".join("?" * len(conv_ids))
+                tag_rows = conn.execute(
+                    f"""SELECT ct.conversation_id, t.id, t.name, t.type, t.label
+                       FROM tags t
+                       JOIN conversation_tags ct ON t.id = ct.tag_id
+                       WHERE ct.conversation_id IN ({tag_ph})
+                       ORDER BY t.type, t.label""",
+                    tuple(conv_ids)
+                ).fetchall()
+                for tr in tag_rows:
+                    tags_by_conv[tr["conversation_id"]].append(
+                        Tag(id=tr["id"], name=tr["name"], type=tr["type"], label=tr["label"])
+                    )
+
             results = []
             for row in rows:
                 conv = Conversation(
@@ -1231,8 +1291,7 @@ class ConversationStore:
                     created_at=datetime.fromisoformat(row["created_at"]),
                     updated_at=datetime.fromisoformat(row["updated_at"]),
                 )
-                tags = self.get_conversation_tags(row["id"])
-                results.append((conv, tags))
+                results.append((conv, tags_by_conv.get(row["id"], [])))
 
             return results
 
@@ -1275,6 +1334,24 @@ class ConversationStore:
 
             rows = conn.execute(query, params).fetchall()
 
+            # Batch fetch tags for all reports (1 query instead of N)
+            report_ids = [row["id"] for row in rows]
+            tags_by_report: dict[int, list[Tag]] = {rid: [] for rid in report_ids}
+            if report_ids:
+                tag_ph = ",".join("?" * len(report_ids))
+                tag_rows = conn.execute(
+                    f"""SELECT rt.report_id, t.id, t.name, t.type, t.label
+                       FROM tags t
+                       JOIN report_tags rt ON t.id = rt.tag_id
+                       WHERE rt.report_id IN ({tag_ph})
+                       ORDER BY t.type, t.label""",
+                    tuple(report_ids)
+                ).fetchall()
+                for tr in tag_rows:
+                    tags_by_report[tr["report_id"]].append(
+                        Tag(id=tr["id"], name=tr["name"], type=tr["type"], label=tr["label"])
+                    )
+
             results = []
             for row in rows:
                 report = Report(
@@ -1293,8 +1370,7 @@ class ConversationStore:
                     conversation_id=row["conversation_id"],
                     message_id=row["message_id"],
                 )
-                tags = self.get_report_tags(row["id"])
-                results.append((report, tags))
+                results.append((report, tags_by_report.get(row["id"], [])))
 
             return results
 

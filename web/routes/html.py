@@ -69,6 +69,10 @@ def get_sidebar_data(user_email: str | None):
     """Get data for sidebar (recent conversations for current user)."""
     conversations = store.list_conversations(limit=20, user_id=user_email)
 
+    # Batch fetch tags for all conversations (1 query instead of 20)
+    conv_ids = [conv.id for conv in conversations]
+    tags_batch = store.get_conversation_tags_batch(conv_ids)
+
     running_ids = []
     for conv in conversations:
         if conv.title:
@@ -77,8 +81,8 @@ def get_sidebar_data(user_email: str | None):
         if conv.is_running:
             running_ids.append(conv.id)
 
-        # Get tags and determine icon
-        tags = store.get_conversation_tags(conv.id)
+        # Determine icon from tags
+        tags = tags_batch.get(conv.id, [])
         conv.icon = "ri-chat-3-fill"  # Default
         for tag in tags:
             if tag.name == "extraction":
