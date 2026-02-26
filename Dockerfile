@@ -1,5 +1,4 @@
 # Matometa - Analytics assistant web app
-# Uses Claude Agent SDK for AI-powered analytics queries
 
 FROM python:3.11-slim
 
@@ -27,15 +26,23 @@ RUN useradd -m -s /bin/bash -u 1004 matometa
 # Set up app directory
 WORKDIR /app
 
-# Copy requirements first for caching
-COPY requirements.txt .
+# Install uv (fast Python package manager)
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+ENV UV_SYSTEM_PYTHON=1 UV_COMPILE_BYTECODE=1
+
+# Copy dependency files first for layer caching
+COPY pyproject.toml uv.lock .python-version ./
 
 # Install CPU-only PyTorch (server has no GPU).
 # Avoids pulling ~7GB of CUDA/nvidia libraries.
 # Local dev on macOS gets MPS support from the default torch wheel.
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+RUN uv pip install --no-cache torch --index-url https://download.pytorch.org/whl/cpu
 
-RUN pip install --no-cache-dir -r requirements.txt
+# Install all dependencies including embeddings group.
+# Filter out torch/nvidia (CPU-only torch already installed above).
+RUN uv export --frozen --group embeddings --no-hashes | \
+    grep -v '^\(torch\|nvidia-\|cuda-\)' | \
+    uv pip install --no-cache -r -
 
 # Copy application code
 COPY --chown=matometa:matometa . .
