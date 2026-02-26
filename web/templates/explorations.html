@@ -202,11 +202,22 @@
   <div class="chat-bar-container">
     <div class="container">
       {% if is_shared %}
+      {% if can_relaunch %}
+      <!-- Admin relaunch button for stuck shared conversations -->
+      <div class="chat-bar chat-bar-readonly">
+        <button type="button" class="btn btn-primary btn-sm" id="relaunchBtn"
+                onclick="relaunchConversation('{{ current_conv.id }}')">
+          <i class="ri-restart-line"></i> Relancer
+        </button>
+        <span class="text-muted">La dernière réponse n'a pas abouti</span>
+      </div>
+      {% else %}
       <!-- Read-only notice for shared conversations -->
       <div class="chat-bar chat-bar-readonly">
         <i class="ri-lock-line text-muted"></i>
         <span class="text-muted">Consultation seule — cette conversation appartient à {{ owner_email }}</span>
       </div>
+      {% endif %}
       {% else %}
       <!-- Public conversations warning -->
       <div class="chat-bar-warning" id="publicWarning">
@@ -257,6 +268,25 @@
     if (warning) {
       warning.style.display = 'none';
       localStorage.setItem('publicWarningDismissed', 'true');
+    }
+  }
+
+  // Relaunch a stuck conversation (admin only)
+  async function relaunchConversation(convId) {
+    const btn = document.getElementById('relaunchBtn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Relance...'; }
+    try {
+      const resp = await fetch(`/api/conversations/${convId}/relaunch`, { method: 'POST' });
+      const data = await resp.json();
+      if (resp.ok) {
+        startStream(data.after_id);
+      } else {
+        alert(data.error || 'Erreur');
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ri-restart-line"></i> Relancer'; }
+      }
+    } catch (e) {
+      alert('Erreur réseau');
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ri-restart-line"></i> Relancer'; }
     }
   }
 

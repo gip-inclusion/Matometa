@@ -1548,6 +1548,16 @@ class ConversationStore:
                 for m in rows
             ]
 
+    def get_last_message_role(self, conversation_id: str) -> Optional[str]:
+        """Get the role/type of the last message in a conversation."""
+        with get_db() as conn:
+            row = conn.execute(
+                """SELECT COALESCE(type, role) as type FROM messages
+                   WHERE conversation_id = ? ORDER BY id DESC LIMIT 1""",
+                (conversation_id,)
+            ).fetchone()
+            return row["type"] if row else None
+
     def enqueue_pm_command(self, conversation_id: str, command: str, payload: Optional[dict] = None) -> int:
         """Queue a command for the process manager. Returns the command ID."""
         with get_db() as conn:

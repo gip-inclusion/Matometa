@@ -156,6 +156,86 @@ class TestSharedConversationAPI:
         assert data["messages"][1]["content"] == "Hello! I'm here to help."
 
 
+class TestRelaunchConversation:
+    """Test admin relaunch of stuck shared conversations."""
+
+    @pytest.fixture
+    def stuck_conversation(self, app):
+        """Create a conversation stuck on a user message (no agent response)."""
+        from web.storage import store
+        conv = store.create_conversation(user_id="owner@example.com")
+        store.add_message(conv.id, "user", "Hello")
+        store.add_message(conv.id, "assistant", "Hi there!")
+        store.add_message(conv.id, "user", "Do the thing please")
+        return conv
+
+    def test_admin_sees_relaunch_button(self, app, guest_client, stuck_conversation):
+        """Admin viewing a stuck shared conversation sees the Relancer button."""
+        response = guest_client.get(
+            f"/explorations/{stuck_conversation.id}",
+            headers={"X-Forwarded-Email": "admin@localhost"},
+        )
+        assert response.status_code == 200
+        assert "Relancer" in response.text
+
+    def test_non_admin_does_not_see_relaunch(self, app, guest_client, stuck_conversation):
+        """Non-admin guest does not see the Relancer button."""
+        response = guest_client.get(
+            f"/explorations/{stuck_conversation.id}",
+            headers={"X-Forwarded-Email": "guest@example.com"},
+        )
+        assert response.status_code == 200
+        assert 'id="relaunchBtn"' not in response.text
+        assert "Consultation seule" in response.text
+
+    def test_owner_does_not_see_relaunch(self, app, owner_client, stuck_conversation):
+        """Owner sees the normal chat input, not the relaunch button."""
+        response = owner_client.get(
+            f"/explorations/{stuck_conversation.id}",
+            headers={"X-Forwarded-Email": "owner@example.com"},
+        )
+        assert response.status_code == 200
+        assert 'id="relaunchBtn"' not in response.text
+        assert b'id="chatInput"' in response.content
+
+    def test_no_relaunch_when_last_message_is_assistant(self, app, guest_client, conversation):
+        """No relaunch button when last message is from assistant (conversation completed)."""
+        response = guest_client.get(
+            f"/explorations/{conversation.id}",
+            headers={"X-Forwarded-Email": "admin@localhost"},
+        )
+        assert response.status_code == 200
+        assert 'id="relaunchBtn"' not in response.text
+
+    def test_relaunch_api_works_for_admin(self, app, guest_client, stuck_conversation):
+        """Admin can relaunch via API."""
+        response = guest_client.post(
+            f"/api/conversations/{stuck_conversation.id}/relaunch",
+            headers={"X-Forwarded-Email": "admin@localhost"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "relaunched"
+
+    def test_relaunch_api_denied_for_non_admin(self, app, guest_client, stuck_conversation):
+        """Non-admin cannot relaunch via API."""
+        response = guest_client.post(
+            f"/api/conversations/{stuck_conversation.id}/relaunch",
+            headers={"X-Forwarded-Email": "guest@example.com"},
+        )
+        assert response.status_code == 403
+
+    def test_relaunch_api_denied_if_already_running(self, app, guest_client, stuck_conversation):
+        """Cannot relaunch if conversation is already running."""
+        from web.storage import store
+        store.update_conversation(stuck_conversation.id, needs_response=True)
+        response = guest_client.post(
+            f"/api/conversations/{stuck_conversation.id}/relaunch",
+            headers={"X-Forwarded-Email": "admin@localhost"},
+        )
+        assert response.status_code == 409
+
+
 class TestSharedConversationEditing:
     """Test that guests cannot edit shared conversations."""
 

@@ -450,6 +450,46 @@ User request: """
     }
 
 
+@router.post("/{conv_id}/relaunch")
+async def relaunch_conversation(conv_id: str, user_email: str = Depends(get_current_user)):
+    """Admin-only: relaunch a stuck conversation by re-sending the last user message."""
+    if user_email not in config.ADMIN_USERS:
+        return JSONResponse({"error": "Admin only"}, status_code=403)
+
+    conv = store.get_conversation(conv_id)
+    if not conv:
+        return JSONResponse({"error": "Conversation not found"}, status_code=404)
+    if conv.needs_response:
+        return JSONResponse({"error": "Conversation already running"}, status_code=409)
+
+    # Find the last user message
+    last_user_msg = None
+    for msg in reversed(conv.messages):
+        if msg.type == "user":
+            last_user_msg = msg
+            break
+    if not last_user_msg:
+        return JSONResponse({"error": "No user message found"}, status_code=400)
+
+    # Build history (all messages before the last user message)
+    history = []
+    for msg in conv.messages:
+        if msg.id >= last_user_msg.id:
+            break
+        if msg.type in ("user", "assistant"):
+            history.append({"role": msg.type, "content": msg.content})
+
+    store.update_conversation(conv_id, needs_response=True)
+    store.enqueue_pm_command(conv_id, "run", {
+        "prompt": last_user_msg.content,
+        "history": history,
+        "session_id": conv.session_id,
+        "user_email": conv.user_id,
+    })
+
+    return {"status": "relaunched", "after_id": last_user_msg.id}
+
+
 @router.get("/{conv_id}/stream")
 async def stream_conversation(
     conv_id: str,

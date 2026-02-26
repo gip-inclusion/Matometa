@@ -428,6 +428,14 @@ def explorations_conversation(conv_id: str, request: Request, user_email: str = 
         current_conv.conv_type in ('exploration', None)
     )
 
+    # Admin can relaunch shared conversations stuck on a user message
+    can_relaunch = (
+        is_shared
+        and user_email in ADMIN_USERS
+        and not current_conv.needs_response
+        and store.get_last_message_role(conv_id) == "user"
+    )
+
     data = get_sidebar_data(user_email)
     return templates.TemplateResponse(request, "explorations.html", {
         "section": "explorations",
@@ -435,6 +443,7 @@ def explorations_conversation(conv_id: str, request: Request, user_email: str = 
         "is_shared": is_shared,
         "owner_email": owner_email,
         "can_upload": can_upload,
+        "can_relaunch": can_relaunch,
         **data,
     })
 
