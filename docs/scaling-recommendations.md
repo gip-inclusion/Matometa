@@ -282,15 +282,15 @@ external sharing. Presigned URLs (4.1) give 90% of the benefit.
 
 | # | Item | Impact | Effort | Status |
 |---|------|--------|--------|--------|
-| 1 | WEB_CONCURRENCY=1 | High | 1 min | **DONE** |
-| 2 | DB connection pooling | High | 30 min | **DONE** |
-| 3 | Compound indexes | Medium | 15 min | **DONE** |
-| 4 | CLI retry on crash | High | 30 min | **DONE** |
-| 5 | Concurrent agent limit | High | 30 min | **DONE** |
-| 6 | Presigned URL redirect | Medium | 1h | Planned |
-| 7 | Message pagination | Medium | 1-2 days | Planned |
-| 8 | Static cache headers | Low | 30 min | Planned |
-| 9 | LISTEN/NOTIFY for SSE | Medium | 1 day | Exploration |
-| 10 | Lighter agent (SDK) | High | 1 week | Needs API key |
-| 11 | Separate PM worker | Medium | 2h | Deferred |
-| 12 | CDN | Low | 2h | Not needed |
+| 1 | WEB_CONCURRENCY=1 | High | S | **DONE** |
+| 2 | DB connection pooling | High | S | **DONE** |
+| 3 | Compound indexes | Medium | S | **DONE** |
+| 4 | CLI retry on crash | High | S | **DONE** |
+| 5 | Concurrent agent limit | High | S | **DONE** |
+| 6 | Presigned URL redirect | Medium | M | Planned |
+| 7 | Message pagination | Medium | L | Planned |
+| 8 | Static cache headers | Low | S | Planned |
+| 9 | LISTEN/NOTIFY for SSE | Medium | L | Exploration |
+| 10 | Lighter agent (SDK) | High | XL | Needs API key |
+| 11 | Separate PM worker | Medium | M | Deferred |
+| 12 | CDN | Low | M | Not needed |
