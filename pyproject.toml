@@ -9,9 +9,8 @@ dependencies = [
     "sse-starlette>=3.1.2",
     "python-multipart>=0.0.21",
 
-    # Claude Agent SDK
+    # Claude API
     "anthropic>=0.75.0",
-    "claude-agent-sdk>=0.1.18",
 
     # HTTP client (used directly in llm.py)
     "httpx>=0.28.1",
