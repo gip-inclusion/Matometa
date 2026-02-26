@@ -57,28 +57,40 @@ class CLIBackend(AgentBackend):
     ) -> AsyncIterator[AgentMessage]:
         """Spawn claude CLI and stream responses.
 
-        If session resume fails with 'tool_use ids must be unique' error,
+        If session resume fails (corruption, crash with no output, etc.),
         automatically retries without session (using history instead).
         """
-        # Try with session first, retry without if it fails with duplicate ID error
+        if not session_id:
+            async for msg in self._run_cli(conversation_id, message, history, None):
+                yield msg
+            return
+
+        # Try with session first, retry without on failure
         retry_without_session = False
+        had_useful_output = False
 
         async for msg in self._run_cli(conversation_id, message, history, session_id):
-            # Detect session corruption error
-            if msg.type == "error" and "tool_use ids must be unique" in str(msg.content):
-                logger.warning(f"Session {session_id} corrupted, retrying without resume")
-                retry_without_session = True
-                # Emit a system message about the retry
-                yield AgentMessage(
-                    type="system",
-                    content="Session corrompue, redémarrage...",
-                    raw={"retry": True},
-                )
-                break
+            if msg.type == "error":
+                error_str = str(msg.content)
+                if "tool_use ids must be unique" in error_str:
+                    logger.warning(f"Session {session_id} corrupted (duplicate IDs), retrying without resume")
+                    retry_without_session = True
+                    break
+                # CLI crashed with no useful output — likely session corruption
+                if not had_useful_output:
+                    logger.warning(f"Session {session_id} failed (exit with no output), retrying without resume")
+                    retry_without_session = True
+                    break
+            if msg.type in ("assistant", "tool_use"):
+                had_useful_output = True
             yield msg
 
-        # Retry without session if needed
         if retry_without_session:
+            yield AgentMessage(
+                type="system",
+                content="Session corrompue, redémarrage...",
+                raw={"retry": True},
+            )
             async for msg in self._run_cli(conversation_id, message, history, None):
                 yield msg
 

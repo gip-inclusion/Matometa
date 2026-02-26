@@ -7,6 +7,7 @@ and messages table (output). The web SSE handler tails the messages table.
 import asyncio
 import json
 import logging
+import os
 
 from . import config
 from .agents import get_agent
@@ -19,10 +20,14 @@ from lib.api_signals import parse_api_signals
 logger = logging.getLogger(__name__)
 
 
+MAX_CONCURRENT_AGENTS = int(os.environ.get("MAX_CONCURRENT_AGENTS", "2"))
+
+
 class ProcessManager:
     def __init__(self):
         self.backend: AgentBackend = get_agent()
         self.running: dict[str, asyncio.Task] = {}
+        self._queued: list[tuple[str, dict]] = []  # (conv_id, payload) waiting for a slot
 
     async def run(self):
         """Main loop: poll for commands, execute them."""
@@ -31,26 +36,52 @@ class ProcessManager:
             for conv_id in cleared_ids:
                 store.add_message(conv_id, "assistant", "*Interrompu (redémarrage serveur).*")
             logger.info(f"Cleared {len(cleared_ids)} stuck needs_response flags on startup")
-        logger.info("Process manager started")
+        logger.info(f"Process manager started (max_concurrent={MAX_CONCURRENT_AGENTS})")
         while True:
             try:
                 await asyncio.to_thread(store.update_pm_heartbeat)
+
+                # Drain finished tasks and start queued ones
+                self._reap_finished()
+                self._start_queued()
+
                 commands = await asyncio.to_thread(store.claim_pending_pm_commands)
                 for cmd in commands:
                     if cmd["command"] == "run":
                         conv_id = cmd["conversation_id"]
                         if conv_id in self.running:
                             logger.warning(f"Agent already running for {conv_id}, skipping")
+                        elif len(self.running) < MAX_CONCURRENT_AGENTS:
+                            self._start_agent(conv_id, cmd["payload"])
                         else:
-                            task = asyncio.create_task(
-                                self._run_agent(conv_id, cmd["payload"])
-                            )
-                            self.running[conv_id] = task
+                            logger.info(f"Agent queued for {conv_id} ({len(self.running)} running, {len(self._queued)} queued)")
+                            self._queued.append((conv_id, cmd["payload"]))
                     elif cmd["command"] == "cancel":
+                        # Also remove from queue if waiting
+                        self._queued = [(c, p) for c, p in self._queued if c != cmd["conversation_id"]]
                         await self._cancel_agent(cmd["conversation_id"])
             except Exception:
                 logger.exception("Error polling pm_commands")
             await asyncio.sleep(0.5)
+
+    def _start_agent(self, conv_id: str, payload: dict):
+        task = asyncio.create_task(self._run_agent(conv_id, payload))
+        self.running[conv_id] = task
+
+    def _reap_finished(self):
+        """Remove completed tasks from running dict."""
+        done = [cid for cid, t in self.running.items() if t.done()]
+        for cid in done:
+            self.running.pop(cid, None)
+
+    def _start_queued(self):
+        """Start queued agents if slots are available."""
+        while self._queued and len(self.running) < MAX_CONCURRENT_AGENTS:
+            conv_id, payload = self._queued.pop(0)
+            if conv_id in self.running:
+                continue
+            logger.info(f"Starting queued agent for {conv_id}")
+            self._start_agent(conv_id, payload)
 
     async def _run_agent(self, conversation_id: str, payload: dict):
         """Run agent for a conversation, persist all events to DB."""
