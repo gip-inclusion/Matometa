@@ -647,7 +647,7 @@ body.has-sidebar {
 }
 
 .event-user::before {
-  content: "Vous";
+  content: var(--user-label, "Vous");
   display: block;
   font-size: 0.65rem;
   font-weight: 600;

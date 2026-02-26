@@ -81,7 +81,7 @@
     <!-- Conversation detail view with sidebar -->
     <div class="chat-with-sidebar" id="chatWithSidebar">
       <div class="chat-main">
-        <div class="chat-output" id="chatOutput">
+        <div class="chat-output" id="chatOutput"{% if is_shared %} style="--user-label: '{{ owner_email.split('@')[0] }}'"{% endif %}>
           <div class="loading-indicator" id="loadingConversation">
             <div class="spinner"></div> Chargement...
           </div>
