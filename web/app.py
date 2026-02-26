@@ -73,14 +73,35 @@ def serve_interactive(request: Request, filename: str = ""):
 
     When S3 is enabled, tries S3 first then falls back to local filesystem.
     Content is proxied (not redirected) to avoid exposing internal S3 endpoints.
+
+    File state matrix (USE_S3=True):
+      S3 hit            → proxy with Cache-Control (common case)
+      S3 miss, local hit → FileResponse (file just created, not yet synced)
+      S3 miss, local dir → 301 redirect to trailing slash
+      both miss          → 404
     """
-    # Block .py files from being served (cron scripts, etc.)
+    # Block .py files from being served
     if filename.endswith(".py"):
         raise HTTPException(status_code=404)
 
-    # Handle directory requests - try index.html
+    # Handle directory requests — try index.html
     if not filename or filename.endswith("/"):
         filename = filename + "index.html"
+
+    # Path traversal protection
+    interactive_root = config.INTERACTIVE_DIR.resolve()
+    try:
+        resolved = (config.INTERACTIVE_DIR / filename).resolve()
+    except (ValueError, OSError):
+        raise HTTPException(status_code=404)
+    if not resolved.is_relative_to(interactive_root):
+        raise HTTPException(status_code=404)
+
+    # MIME type and cache policy
+    mime_type, _ = mimetypes.guess_type(filename)
+    mime_type = mime_type or "application/octet-stream"
+    # HTML revalidates every time; assets cache for 1 hour
+    cache_control = "no-cache" if mime_type == "text/html" else "public, max-age=3600"
 
     # Try S3 first if configured
     if config.USE_S3:
@@ -88,25 +109,21 @@ def serve_interactive(request: Request, filename: str = ""):
 
         content = s3.download_file(filename)
         if content is not None:
-            mime_type, _ = mimetypes.guess_type(filename)
             return Response(
                 content=content,
-                media_type=mime_type or "application/octet-stream",
+                media_type=mime_type,
+                headers={"Cache-Control": cache_control},
             )
 
-    # Fallback to local filesystem (always, even when S3 is enabled)
-    if not config.INTERACTIVE_DIR.exists():
-        config.INTERACTIVE_DIR.mkdir(parents=True, exist_ok=True)
-
-    full_path = config.INTERACTIVE_DIR / filename
-    if full_path.is_dir():
+    # Fallback to local filesystem (always, even when S3 is enabled —
+    # covers the ≤2s window before sync_to_s3 uploads a new file)
+    if resolved.is_dir():
         if not str(request.url.path).endswith("/"):
             return RedirectResponse(str(request.url.path) + "/", status_code=301)
-        filename = str((full_path / "index.html").relative_to(config.INTERACTIVE_DIR))
+        resolved = resolved / "index.html"
 
-    local_file = config.INTERACTIVE_DIR / filename
-    if local_file.exists():
-        return FileResponse(local_file)
+    if resolved.is_file():
+        return FileResponse(resolved, headers={"Cache-Control": cache_control})
 
     raise HTTPException(status_code=404)
 
