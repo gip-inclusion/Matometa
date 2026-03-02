@@ -4,7 +4,7 @@ import json
 import os
 import textwrap
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -351,3 +351,235 @@ class TestSetCronEnabled:
         set_cron_enabled("rt-app", True)
         tasks = discover_cron_tasks()
         assert tasks[0]["enabled"] is True
+
+
+# =============================================================================
+# S3 discovery tests
+# =============================================================================
+
+@pytest.fixture
+def s3_cron_env(tmp_path, monkeypatch):
+    """Simulate an S3-backed server: no local interactive dir, USE_S3=True."""
+    cron_dir = tmp_path / "cron"
+    cron_dir.mkdir()
+    interactive_dir = tmp_path / "interactive"
+    # Intentionally NOT creating interactive_dir — mimics the server
+    monkeypatch.setattr(config, "INTERACTIVE_DIR", interactive_dir)
+    monkeypatch.setattr(config, "CRON_DIR", cron_dir)
+    monkeypatch.setattr(config, "BASE_DIR", tmp_path)
+    monkeypatch.setattr(config, "USE_S3", True)
+    return {"cron_dir": cron_dir, "interactive_dir": interactive_dir}
+
+
+def _mock_s3_app(slug, cron_script="print('hello')", app_md=None):
+    """Build a dict representing an app stored in S3."""
+    if app_md is None:
+        app_md = f"---\ntitle: {slug}\n---\n"
+    return {
+        "slug": slug,
+        "files": {
+            f"{slug}/cron.py": cron_script.encode(),
+            f"{slug}/APP.md": app_md.encode(),
+        },
+    }
+
+
+def _make_s3_mocks(apps: list[dict]):
+    """Create mock functions for web.s3 that serve the given apps.
+
+    Returns a dict of {function_name: mock} to use with patch.
+    """
+    all_files = {}
+    for app in apps:
+        all_files.update(app["files"])
+    slugs = [app["slug"] for app in apps]
+
+    def mock_list_directories(prefix=""):
+        return sorted(slugs)
+
+    def mock_file_exists(path):
+        return path in all_files
+
+    def mock_download_file(path):
+        return all_files.get(path)
+
+    def mock_list_files(prefix=""):
+        results = []
+        for key, content in all_files.items():
+            if key.startswith(prefix):
+                results.append({"path": key, "size": len(content), "last_modified": None})
+        return results
+
+    def mock_upload_file(path, content, content_type=None):
+        all_files[path] = content
+        return True
+
+    return {
+        "list_directories": mock_list_directories,
+        "file_exists": mock_file_exists,
+        "download_file": mock_download_file,
+        "list_files": mock_list_files,
+        "upload_file": mock_upload_file,
+        "_all_files": all_files,  # for assertions
+    }
+
+
+class TestDiscoverS3:
+    def test_discovers_s3_apps(self, s3_cron_env):
+        """When USE_S3 is True and S3 has apps with cron.py, they're discovered."""
+        mocks = _make_s3_mocks([_mock_s3_app("my-s3-app")])
+        with patch("web.cron.s3.list_directories", side_effect=mocks["list_directories"]), \
+             patch("web.cron.s3.file_exists", side_effect=mocks["file_exists"]), \
+             patch("web.cron.s3.download_file", side_effect=mocks["download_file"]):
+            tasks = discover_cron_tasks()
+        assert len(tasks) == 1
+        assert tasks[0]["slug"] == "my-s3-app"
+        assert tasks[0]["tier"] == "app"
+
+    def test_s3_app_skipped_without_cron_py(self, s3_cron_env):
+        """S3 directories without cron.py are not discovered."""
+        app = _mock_s3_app("no-cron-app")
+        # Remove the cron.py file
+        del app["files"]["no-cron-app/cron.py"]
+        mocks = _make_s3_mocks([app])
+        with patch("web.cron.s3.list_directories", side_effect=mocks["list_directories"]), \
+             patch("web.cron.s3.file_exists", side_effect=mocks["file_exists"]), \
+             patch("web.cron.s3.download_file", side_effect=mocks["download_file"]):
+            tasks = discover_cron_tasks()
+        assert len(tasks) == 0
+
+    def test_s3_app_metadata_parsed(self, s3_cron_env):
+        """APP.md front-matter is parsed from S3."""
+        app = _mock_s3_app(
+            "titled-app",
+            app_md="---\ntitle: My S3 App\ntimeout: 600\nschedule: weekly\n---\n",
+        )
+        mocks = _make_s3_mocks([app])
+        with patch("web.cron.s3.list_directories", side_effect=mocks["list_directories"]), \
+             patch("web.cron.s3.file_exists", side_effect=mocks["file_exists"]), \
+             patch("web.cron.s3.download_file", side_effect=mocks["download_file"]):
+            tasks = discover_cron_tasks()
+        assert tasks[0]["title"] == "My S3 App"
+        assert tasks[0]["timeout"] == 600
+        assert tasks[0]["schedule"] == "weekly"
+
+    def test_s3_disabled_app(self, s3_cron_env):
+        """Apps with cron: false in S3 APP.md are marked disabled."""
+        app = _mock_s3_app(
+            "off-app",
+            app_md="---\ntitle: Off\ncron: false\n---\n",
+        )
+        mocks = _make_s3_mocks([app])
+        with patch("web.cron.s3.list_directories", side_effect=mocks["list_directories"]), \
+             patch("web.cron.s3.file_exists", side_effect=mocks["file_exists"]), \
+             patch("web.cron.s3.download_file", side_effect=mocks["download_file"]):
+            tasks = discover_cron_tasks()
+        assert tasks[0]["enabled"] is False
+
+    def test_s3_and_system_crons_merged(self, s3_cron_env):
+        """System crons from filesystem + S3 app crons all appear."""
+        # Create a system cron on the filesystem
+        sys_dir = s3_cron_env["cron_dir"] / "sys-task"
+        sys_dir.mkdir()
+        (sys_dir / "cron.py").write_text("pass")
+        (sys_dir / "CRON.md").write_text("---\ntitle: System\n---\n")
+
+        mocks = _make_s3_mocks([_mock_s3_app("s3-app")])
+        with patch("web.cron.s3.list_directories", side_effect=mocks["list_directories"]), \
+             patch("web.cron.s3.file_exists", side_effect=mocks["file_exists"]), \
+             patch("web.cron.s3.download_file", side_effect=mocks["download_file"]):
+            tasks = discover_cron_tasks()
+        assert len(tasks) == 2
+        assert tasks[0]["tier"] == "system"
+        assert tasks[0]["slug"] == "sys-task"
+        assert tasks[1]["tier"] == "app"
+        assert tasks[1]["slug"] == "s3-app"
+
+    def test_s3_multiple_apps_sorted(self, s3_cron_env):
+        """S3 apps are returned in sorted order."""
+        mocks = _make_s3_mocks([
+            _mock_s3_app("zeta-app"),
+            _mock_s3_app("alpha-app"),
+        ])
+        with patch("web.cron.s3.list_directories", side_effect=mocks["list_directories"]), \
+             patch("web.cron.s3.file_exists", side_effect=mocks["file_exists"]), \
+             patch("web.cron.s3.download_file", side_effect=mocks["download_file"]):
+            tasks = discover_cron_tasks()
+        assert [t["slug"] for t in tasks] == ["alpha-app", "zeta-app"]
+
+    def test_no_s3_discovery_when_use_s3_false(self, interactive_dir, monkeypatch):
+        """When USE_S3 is False, S3 is not queried (local-only discovery)."""
+        monkeypatch.setattr(config, "USE_S3", False)
+        # If S3 were queried, this would blow up because s3 module isn't mocked
+        tasks = discover_cron_tasks()
+        assert tasks == []
+
+
+# =============================================================================
+# S3 execution tests
+# =============================================================================
+
+class TestRunS3CronTask:
+    def test_executes_s3_script(self, s3_cron_env, db_setup):
+        """S3 cron script is downloaded, executed, and output captured."""
+        app = _mock_s3_app("s3-runner", cron_script="print('s3 hello')")
+        mocks = _make_s3_mocks([app])
+        with patch("web.cron.s3.list_directories", side_effect=mocks["list_directories"]), \
+             patch("web.cron.s3.file_exists", side_effect=mocks["file_exists"]), \
+             patch("web.cron.s3.download_file", side_effect=mocks["download_file"]), \
+             patch("web.cron.s3.list_files", side_effect=mocks["list_files"]), \
+             patch("web.cron.s3.upload_file", side_effect=mocks["upload_file"]):
+            result = run_cron_task("s3-runner", trigger="manual")
+        assert result["status"] == "success"
+        assert "s3 hello" in result["output"]
+
+    def test_s3_script_failure(self, s3_cron_env, db_setup):
+        """S3 cron script failure is captured."""
+        app = _mock_s3_app("s3-fail", cron_script="import sys; sys.exit(1)")
+        mocks = _make_s3_mocks([app])
+        with patch("web.cron.s3.list_directories", side_effect=mocks["list_directories"]), \
+             patch("web.cron.s3.file_exists", side_effect=mocks["file_exists"]), \
+             patch("web.cron.s3.download_file", side_effect=mocks["download_file"]), \
+             patch("web.cron.s3.list_files", side_effect=mocks["list_files"]), \
+             patch("web.cron.s3.upload_file", side_effect=mocks["upload_file"]):
+            result = run_cron_task("s3-fail", trigger="manual")
+        assert result["status"] == "failure"
+
+    def test_s3_script_uploads_output(self, s3_cron_env, db_setup):
+        """Files written by S3 cron script are uploaded back to S3."""
+        script = textwrap.dedent("""\
+            import json
+            from pathlib import Path
+            Path("data.json").write_text(json.dumps({"updated": True}))
+            print("done")
+        """)
+        app = _mock_s3_app("s3-writer", cron_script=script)
+        mocks = _make_s3_mocks([app])
+        with patch("web.cron.s3.list_directories", side_effect=mocks["list_directories"]), \
+             patch("web.cron.s3.file_exists", side_effect=mocks["file_exists"]), \
+             patch("web.cron.s3.download_file", side_effect=mocks["download_file"]), \
+             patch("web.cron.s3.list_files", side_effect=mocks["list_files"]), \
+             patch("web.cron.s3.upload_file", side_effect=mocks["upload_file"]):
+            result = run_cron_task("s3-writer", trigger="manual")
+        assert result["status"] == "success"
+        # The data.json should have been uploaded back to S3
+        assert "s3-writer/data.json" in mocks["_all_files"]
+        uploaded = json.loads(mocks["_all_files"]["s3-writer/data.json"])
+        assert uploaded["updated"] is True
+
+    def test_s3_script_has_pythonpath(self, s3_cron_env, db_setup):
+        """S3 cron script has PYTHONPATH set to project root."""
+        script = textwrap.dedent("""\
+            import sys
+            print(sys.path)
+        """)
+        app = _mock_s3_app("s3-path", cron_script=script)
+        mocks = _make_s3_mocks([app])
+        with patch("web.cron.s3.list_directories", side_effect=mocks["list_directories"]), \
+             patch("web.cron.s3.file_exists", side_effect=mocks["file_exists"]), \
+             patch("web.cron.s3.download_file", side_effect=mocks["download_file"]), \
+             patch("web.cron.s3.list_files", side_effect=mocks["list_files"]), \
+             patch("web.cron.s3.upload_file", side_effect=mocks["upload_file"]):
+            result = run_cron_task("s3-path", trigger="manual")
+        assert result["status"] == "success"
+        assert str(config.BASE_DIR) in result["output"]

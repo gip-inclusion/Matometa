@@ -1,8 +1,9 @@
 """Cron runner for data refresh scripts.
 
-Two-tier discovery:
+Three-tier discovery:
 - System tasks: checked into repo under cron/*/cron.py (CRON.md for metadata)
-- App tasks: per-deployment in data/interactive/*/cron.py (APP.md for metadata)
+- App tasks (local): per-deployment in data/interactive/*/cron.py (APP.md)
+- App tasks (S3): when USE_S3 is True, apps stored in S3 are also discovered
 
 Metadata fields (in CRON.md or APP.md front-matter):
 - cron: true/false (default: true)
@@ -19,13 +20,16 @@ Usage:
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
 
 from . import config
+from . import s3
 from .database import get_db
 
 # Defaults
@@ -33,16 +37,11 @@ DEFAULT_TIMEOUT = 300  # 5 minutes
 MAX_OUTPUT_SIZE = 50_000
 
 
-def _parse_frontmatter(md_path: Path) -> dict:
-    """Parse YAML front-matter from a markdown file.
+def _parse_frontmatter_text(content: str) -> dict:
+    """Parse YAML front-matter from a string.
 
     Returns dict of key-value pairs. Returns {} if no front-matter.
     """
-    try:
-        content = md_path.read_text()
-    except OSError:
-        return {}
-
     if not content.startswith("---"):
         return {}
 
@@ -56,6 +55,19 @@ def _parse_frontmatter(md_path: Path) -> dict:
             key, value = line.split(":", 1)
             meta[key.strip().lower()] = value.strip()
     return meta
+
+
+def _parse_frontmatter(md_path: Path) -> dict:
+    """Parse YAML front-matter from a markdown file.
+
+    Returns dict of key-value pairs. Returns {} if no front-matter.
+    """
+    try:
+        content = md_path.read_text()
+    except OSError:
+        return {}
+
+    return _parse_frontmatter_text(content)
 
 
 def _is_enabled(meta: dict) -> bool:
@@ -163,13 +175,42 @@ def _discover_from_dir(base_dir: Path, md_name: str, tier: str) -> list[dict]:
     return tasks
 
 
-def discover_cron_tasks() -> list[dict]:
-    """Discover all cron tasks from both tiers.
+def _discover_from_s3() -> list[dict]:
+    """Discover cron tasks from S3-stored interactive apps."""
+    tasks = []
+    for slug in s3.list_directories():
+        if not s3.file_exists(f"{slug}/cron.py"):
+            continue
 
-    System tasks (cron/) come first, then app tasks (data/interactive/).
+        # Parse APP.md metadata from S3
+        md_bytes = s3.download_file(f"{slug}/APP.md")
+        meta = _parse_frontmatter_text(md_bytes.decode()) if md_bytes else {}
+
+        tasks.append({
+            "slug": slug,
+            "title": meta.get("title", slug),
+            "tier": "app",
+            "source": "s3",
+            "path": slug,  # S3 prefix, not a local path
+            "cron_path": f"{slug}/cron.py",
+            "enabled": _is_enabled(meta),
+            "timeout": _get_timeout(meta),
+            "schedule": _get_schedule(meta),
+        })
+
+    return tasks
+
+
+def discover_cron_tasks() -> list[dict]:
+    """Discover all cron tasks from all tiers.
+
+    System tasks (cron/) come first, then app tasks (data/interactive/ or S3).
     """
     tasks = _discover_from_dir(config.CRON_DIR, "CRON.md", "system")
-    tasks += _discover_from_dir(config.INTERACTIVE_DIR, "APP.md", "app")
+    if config.USE_S3:
+        tasks += _discover_from_s3()
+    else:
+        tasks += _discover_from_dir(config.INTERACTIVE_DIR, "APP.md", "app")
     return tasks
 
 
@@ -179,6 +220,33 @@ def find_task(slug: str) -> dict | None:
         if task["slug"] == slug:
             return task
     return None
+
+
+def _prepare_s3_workdir(slug: str) -> Path:
+    """Download all files for an S3 app into a temporary directory."""
+    workdir = Path(tempfile.mkdtemp(prefix=f"cron-{slug}-"))
+    for entry in s3.list_files(f"{slug}/"):
+        rel_path = entry["path"]
+        # rel_path is like "slug/cron.py" — strip the slug prefix
+        local_name = rel_path[len(slug) + 1:]
+        if not local_name:
+            continue
+        content = s3.download_file(rel_path)
+        if content is not None:
+            local_file = workdir / local_name
+            local_file.parent.mkdir(parents=True, exist_ok=True)
+            local_file.write_bytes(content)
+    return workdir
+
+
+def _upload_s3_results(slug: str, workdir: Path):
+    """Upload new/modified files from workdir back to S3."""
+    for path in workdir.rglob("*"):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(workdir)
+        s3_key = f"{slug}/{rel}"
+        s3.upload_file(s3_key, path.read_bytes())
 
 
 def run_cron_task(slug: str, trigger: str = "scheduled") -> dict:
@@ -197,8 +265,9 @@ def run_cron_task(slug: str, trigger: str = "scheduled") -> dict:
             "finished_at": datetime.now().isoformat(),
         }
 
+    is_s3 = task.get("source") == "s3"
     timeout = task["timeout"]
-    cron_script = task["cron_path"]
+    workdir = None
 
     started_at = datetime.now()
     start_time = time.monotonic()
@@ -209,9 +278,17 @@ def run_cron_task(slug: str, trigger: str = "scheduled") -> dict:
     }
 
     try:
+        if is_s3:
+            workdir = _prepare_s3_workdir(slug)
+            cron_script = str(workdir / "cron.py")
+            cwd = str(workdir)
+        else:
+            cron_script = task["cron_path"]
+            cwd = task["path"]
+
         result = subprocess.run(
             [sys.executable, cron_script],
-            cwd=task["path"],
+            cwd=cwd,
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -227,6 +304,9 @@ def run_cron_task(slug: str, trigger: str = "scheduled") -> dict:
 
         status = "success" if result.returncode == 0 else "failure"
 
+        if is_s3 and status == "success" and workdir:
+            _upload_s3_results(slug, workdir)
+
     except subprocess.TimeoutExpired:
         elapsed_ms = int((time.monotonic() - start_time) * 1000)
         finished_at = datetime.now()
@@ -238,6 +318,10 @@ def run_cron_task(slug: str, trigger: str = "scheduled") -> dict:
         finished_at = datetime.now()
         status = "failure"
         output = f"Error running script: {e}"
+
+    finally:
+        if workdir and workdir.exists():
+            shutil.rmtree(workdir, ignore_errors=True)
 
     run_result = {
         "slug": slug,
