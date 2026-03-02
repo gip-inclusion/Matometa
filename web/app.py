@@ -14,10 +14,24 @@ from . import config
 from .deps import get_current_user
 
 # Extensions safe to serve via presigned URL redirect (no sensitive data)
-_STATIC_ASSET_EXTS = frozenset({
-    ".css", ".js", ".mjs", ".png", ".jpg", ".jpeg", ".gif",
-    ".svg", ".ico", ".woff", ".woff2", ".ttf", ".eot", ".map",
-})
+_STATIC_ASSET_EXTS = frozenset(
+    {
+        ".css",
+        ".js",
+        ".mjs",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".svg",
+        ".ico",
+        ".woff",
+        ".woff2",
+        ".ttf",
+        ".eot",
+        ".map",
+    }
+)
 
 # Configure logging (stdout only) with injection-safe formatter
 from .logging_utils import setup_logging
@@ -134,10 +148,14 @@ def serve_interactive(
         if suffix in _STATIC_ASSET_EXTS and s3.file_exists(filename):
             url = s3.get_file_url(filename, expires_in=300)
             if url is not None:
-                return RedirectResponse(url, status_code=307, headers={
-                    "Cache-Control": "private, max-age=300",
-                    "Referrer-Policy": "no-referrer",
-                })
+                return RedirectResponse(
+                    url,
+                    status_code=307,
+                    headers={
+                        "Cache-Control": "private, max-age=300",
+                        "Referrer-Policy": "no-referrer",
+                    },
+                )
 
         # HTML, CSV, JSON, etc.: stream chunks (bounded memory, S3 not exposed)
         stream = s3.stream_file(filename)
