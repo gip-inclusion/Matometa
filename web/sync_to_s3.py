@@ -1,7 +1,7 @@
 """Watch local interactive directory and sync new/modified files to S3.
 
 Runs as a background thread when S3 is configured.
-Uses watchdog to detect file changes and uploads them to S3.
+Uses polling to detect file changes and uploads them to S3.
 """
 
 import logging
@@ -54,18 +54,18 @@ def _watch_loop():
 
     known_files: dict[Path, float] = {}  # path -> mtime
 
-    # Initial sync: upload all existing local files to S3 (if not already there)
+    # Initial sync: single list_objects call instead of N head_object calls
+    s3_keys = {entry["path"] for entry in s3.list_files()}
     initial_count = 0
     for path in config.INTERACTIVE_DIR.rglob("*"):
         if path.is_file():
             initial_count += 1
-            relative_path = path.relative_to(config.INTERACTIVE_DIR)
-            # Upload if not in S3
-            if not s3.file_exists(str(relative_path)):
+            relative_path = str(path.relative_to(config.INTERACTIVE_DIR))
+            if relative_path not in s3_keys:
                 _upload_file(path, s3)
             known_files[path] = path.stat().st_mtime
 
-    logger.debug(f"Initial scan found {initial_count} files")
+    logger.debug(f"Initial scan: {initial_count} local files, {len(s3_keys)} in S3")
 
     while not _stop_event.is_set():
         try:
@@ -85,8 +85,9 @@ def _watch_loop():
         except Exception as e:
             logger.error(f"Error in sync watch loop: {e}")
 
-        # Poll every 2 seconds
-        _stop_event.wait(2)
+        # Poll every 5 seconds (catches agent-written local files;
+        # web app uploads directly to S3)
+        _stop_event.wait(5)
 
 
 def _upload_file(local_path: Path, s3_module):
