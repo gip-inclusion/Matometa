@@ -189,7 +189,7 @@ class Conversation:
 # =============================================================================
 
 class ConversationStore:
-    """SQLite-backed conversation and report store."""
+    """PostgreSQL-backed conversation and report store."""
 
     def __init__(self):
         init_db()
@@ -215,7 +215,7 @@ class ConversationStore:
         with get_db() as conn:
             conn.execute(
                 """INSERT INTO conversations (id, user_id, title, session_id, conv_type, file_path, status, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (conv.id, conv.user_id, conv.title, conv.session_id, conv.conv_type, conv.file_path, conv.status,
                  conv.created_at.isoformat(), conv.updated_at.isoformat())
             )
@@ -230,14 +230,14 @@ class ConversationStore:
                     """SELECT c.*, p.pinned_at AS p_pinned_at, p.label AS p_label
                        FROM conversations c
                        LEFT JOIN pinned_items p ON p.item_id = c.id AND p.item_type = 'conversation'
-                       WHERE c.id = ? AND c.user_id = ?""", (conv_id, user_id)
+                       WHERE c.id = %s AND c.user_id = %s""", (conv_id, user_id)
                 ).fetchone()
             else:
                 row = conn.execute(
                     """SELECT c.*, p.pinned_at AS p_pinned_at, p.label AS p_label
                        FROM conversations c
                        LEFT JOIN pinned_items p ON p.item_id = c.id AND p.item_type = 'conversation'
-                       WHERE c.id = ?""", (conv_id,)
+                       WHERE c.id = %s""", (conv_id,)
                 ).fetchone()
 
             if not row:
@@ -247,7 +247,7 @@ class ConversationStore:
             if include_messages:
                 msg_rows = conn.execute(
                     """SELECT id, conversation_id, COALESCE(type, role) as type, content, timestamp
-                       FROM messages WHERE conversation_id = ? ORDER BY timestamp""",
+                       FROM messages WHERE conversation_id = %s ORDER BY timestamp""",
                     (conv_id,)
                 ).fetchall()
 
@@ -264,7 +264,7 @@ class ConversationStore:
 
             # Load report if exists
             report_row = conn.execute(
-                "SELECT * FROM reports WHERE conversation_id = ?", (conv_id,)
+                "SELECT * FROM reports WHERE conversation_id = %s", (conv_id,)
             ).fetchone()
 
             report = None
@@ -338,7 +338,7 @@ class ConversationStore:
             conn.execute(
                 """INSERT INTO conversations
                    (id, user_id, title, session_id, conv_type, file_path, status, forked_from, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (
                     new_id,
                     new_user_id,
@@ -357,7 +357,7 @@ class ConversationStore:
             for msg in source.messages:
                 conn.execute(
                     """INSERT INTO messages (conversation_id, type, role, content, timestamp)
-                       VALUES (?, ?, ?, ?, ?)""",
+                       VALUES (%s, %s, %s, %s, %s)""",
                     (new_id, msg.type, msg.type, msg.content, msg.created_at.isoformat())
                 )
 
@@ -378,11 +378,11 @@ class ConversationStore:
             params = []
 
             if user_id:
-                conditions.append("c.user_id = ?")
+                conditions.append("c.user_id = %s")
                 params.append(user_id)
 
             if conv_type:
-                conditions.append("c.conv_type = ?")
+                conditions.append("c.conv_type = %s")
                 params.append(conv_type)
             else:
                 # By default, only show exploration conversations
@@ -401,7 +401,7 @@ class ConversationStore:
                 LEFT JOIN reports r ON r.conversation_id = c.id
                 {where}
                 ORDER BY c.updated_at DESC
-                LIMIT ?
+                LIMIT %s
             """
 
             rows = conn.execute(query, params).fetchall()
@@ -431,8 +431,8 @@ class ConversationStore:
         with get_db() as conn:
             conn.execute(
                 """INSERT INTO pinned_items (item_type, item_id, label, pinned_at)
-                   VALUES (?, ?, ?, ?)
-                   ON CONFLICT(item_type, item_id) DO UPDATE SET label = ?, pinned_at = ?""",
+                   VALUES (%s, %s, %s, %s)
+                   ON CONFLICT(item_type, item_id) DO UPDATE SET label = %s, pinned_at = %s""",
                 (item_type, str(item_id), label, datetime.now().isoformat(),
                  label, datetime.now().isoformat())
             )
@@ -442,7 +442,7 @@ class ConversationStore:
         """Unpin an item."""
         with get_db() as conn:
             cursor = conn.execute(
-                "DELETE FROM pinned_items WHERE item_type = ? AND item_id = ?",
+                "DELETE FROM pinned_items WHERE item_type = %s AND item_id = %s",
                 (item_type, str(item_id))
             )
             return cursor.rowcount > 0
@@ -452,7 +452,7 @@ class ConversationStore:
         with get_db() as conn:
             if item_type:
                 rows = conn.execute(
-                    "SELECT * FROM pinned_items WHERE item_type = ? ORDER BY pinned_at",
+                    "SELECT * FROM pinned_items WHERE item_type = %s ORDER BY pinned_at",
                     (item_type,)
                 ).fetchall()
             else:
@@ -511,14 +511,14 @@ class ConversationStore:
             if user_id:
                 row = conn.execute(
                     """SELECT * FROM conversations
-                       WHERE conv_type = 'knowledge' AND file_path = ? AND status = 'active' AND user_id = ?
+                       WHERE conv_type = 'knowledge' AND file_path = %s AND status = 'active' AND user_id = %s
                        ORDER BY updated_at DESC LIMIT 1""",
                     (file_path, user_id)
                 ).fetchone()
             else:
                 row = conn.execute(
                     """SELECT * FROM conversations
-                       WHERE conv_type = 'knowledge' AND file_path = ? AND status = 'active'
+                       WHERE conv_type = 'knowledge' AND file_path = %s AND status = 'active'
                        ORDER BY updated_at DESC LIMIT 1""",
                     (file_path,)
                 ).fetchone()
@@ -586,17 +586,11 @@ class ConversationStore:
         """Update the PM heartbeat timestamp. Called each PM poll loop iteration."""
         now = datetime.now().isoformat()
         with get_db() as conn:
-            if conn.is_postgres:
-                conn.execute(
-                    "INSERT INTO pm_heartbeat (id, last_seen) VALUES (1, %s) "
-                    "ON CONFLICT (id) DO UPDATE SET last_seen = %s",
-                    (now, now)
-                )
-            else:
-                conn.execute(
-                    "INSERT OR REPLACE INTO pm_heartbeat (id, last_seen) VALUES (1, ?)",
-                    (now,)
-                )
+            conn.execute(
+                "INSERT INTO pm_heartbeat (id, last_seen) VALUES (1, %s) "
+                "ON CONFLICT (id) DO UPDATE SET last_seen = %s",
+                (now, now)
+            )
 
     def is_pm_alive(self, max_age_seconds: int = 15) -> bool:
         """Check if the PM has sent a heartbeat recently."""
@@ -621,7 +615,7 @@ class ConversationStore:
 
         with get_db() as conn:
             cursor = conn.execute(
-                f"UPDATE conversations SET {set_clause} WHERE id = ?",
+                f"UPDATE conversations SET {set_clause} WHERE id = %s",
                 values
             )
             return cursor.rowcount > 0
@@ -641,14 +635,14 @@ class ConversationStore:
         with get_db() as conn:
             cursor = conn.execute(
                 """UPDATE conversations
-                   SET usage_input_tokens = ?,
-                       usage_output_tokens = ?,
-                       usage_cache_creation_tokens = ?,
-                       usage_cache_read_tokens = ?,
-                       usage_backend = COALESCE(?, usage_backend),
-                       usage_extra = ?,
-                       updated_at = ?
-                   WHERE id = ?""",
+                   SET usage_input_tokens = %s,
+                       usage_output_tokens = %s,
+                       usage_cache_creation_tokens = %s,
+                       usage_cache_read_tokens = %s,
+                       usage_backend = COALESCE(%s, usage_backend),
+                       usage_extra = %s,
+                       updated_at = %s
+                   WHERE id = %s""",
                 (input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
                  backend, extra_json, datetime.now().isoformat(), conv_id)
             )
@@ -672,14 +666,14 @@ class ConversationStore:
         with get_db() as conn:
             cursor = conn.execute(
                 """UPDATE conversations
-                   SET usage_input_tokens = COALESCE(usage_input_tokens, 0) + ?,
-                       usage_output_tokens = COALESCE(usage_output_tokens, 0) + ?,
-                       usage_cache_creation_tokens = COALESCE(usage_cache_creation_tokens, 0) + ?,
-                       usage_cache_read_tokens = COALESCE(usage_cache_read_tokens, 0) + ?,
-                       usage_backend = COALESCE(?, usage_backend),
-                       usage_extra = COALESCE(?, usage_extra),
-                       updated_at = ?
-                   WHERE id = ?""",
+                   SET usage_input_tokens = COALESCE(usage_input_tokens, 0) + %s,
+                       usage_output_tokens = COALESCE(usage_output_tokens, 0) + %s,
+                       usage_cache_creation_tokens = COALESCE(usage_cache_creation_tokens, 0) + %s,
+                       usage_cache_read_tokens = COALESCE(usage_cache_read_tokens, 0) + %s,
+                       usage_backend = COALESCE(%s, usage_backend),
+                       usage_extra = COALESCE(%s, usage_extra),
+                       updated_at = %s
+                   WHERE id = %s""",
                 (input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
                  backend, extra_json, datetime.now().isoformat(), conv_id)
             )
@@ -688,9 +682,9 @@ class ConversationStore:
     def delete_conversation(self, conv_id: str) -> bool:
         """Delete a conversation and all related data."""
         with get_db() as conn:
-            conn.execute("DELETE FROM reports WHERE conversation_id = ?", (conv_id,))
-            conn.execute("DELETE FROM messages WHERE conversation_id = ?", (conv_id,))
-            cursor = conn.execute("DELETE FROM conversations WHERE id = ?", (conv_id,))
+            conn.execute("DELETE FROM reports WHERE conversation_id = %s", (conv_id,))
+            conn.execute("DELETE FROM messages WHERE conversation_id = %s", (conv_id,))
+            cursor = conn.execute("DELETE FROM conversations WHERE id = %s", (conv_id,))
             return cursor.rowcount > 0
 
     # -------------------------------------------------------------------------
@@ -713,7 +707,7 @@ class ConversationStore:
         with get_db() as conn:
             # Check conversation exists
             row = conn.execute(
-                "SELECT id, title FROM conversations WHERE id = ?", (conv_id,)
+                "SELECT id, title FROM conversations WHERE id = %s", (conv_id,)
             ).fetchone()
             if not row:
                 return None
@@ -721,7 +715,7 @@ class ConversationStore:
             # Insert message
             msg.id = conn.insert_and_get_id(
                 """INSERT INTO messages (conversation_id, type, role, content, timestamp)
-                   VALUES (?, ?, ?, ?, ?)""",
+                   VALUES (%s, %s, %s, %s, %s)""",
                 (conv_id, type, type, content, msg.created_at.isoformat())
             )
 
@@ -732,12 +726,12 @@ class ConversationStore:
             if row["title"] is None and type == "user":
                 title = content[:80] + ("..." if len(content) > 80 else "")
                 conn.execute(
-                    "UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?",
+                    "UPDATE conversations SET title = %s, updated_at = %s WHERE id = %s",
                     (title, now, conv_id)
                 )
             else:
                 conn.execute(
-                    "UPDATE conversations SET updated_at = ? WHERE id = ?",
+                    "UPDATE conversations SET updated_at = %s WHERE id = %s",
                     (now, conv_id)
                 )
 
@@ -747,7 +741,7 @@ class ConversationStore:
         """Update a message's content. Returns True if updated."""
         with get_db() as conn:
             cursor = conn.execute(
-                "UPDATE messages SET content = ? WHERE id = ?",
+                "UPDATE messages SET content = %s WHERE id = %s",
                 (content, message_id)
             )
             return cursor.rowcount > 0
@@ -761,18 +755,18 @@ class ConversationStore:
         """Get messages for a conversation, optionally filtered by type."""
         with get_db() as conn:
             query = """SELECT id, conversation_id, COALESCE(type, role) as type, content, timestamp
-                       FROM messages WHERE conversation_id = ?"""
+                       FROM messages WHERE conversation_id = %s"""
             params = [conv_id]
 
             if types:
-                placeholders = ",".join("?" * len(types))
+                placeholders = ",".join(["%s"] * len(types))
                 query += f" AND COALESCE(type, role) IN ({placeholders})"
                 params.extend(types)
 
             query += " ORDER BY timestamp"
 
             if limit:
-                query += " LIMIT ?"
+                query += " LIMIT %s"
                 params.append(limit)
 
             rows = conn.execute(query, params).fetchall()
@@ -820,7 +814,7 @@ class ConversationStore:
                 """INSERT INTO reports
                    (title, content, website, category, tags, original_query,
                     source_conversation_id, user_id, version, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (title, content, website, category,
                  json.dumps(tags) if tags else None, original_query,
                  source_conversation_id, user_id,
@@ -833,7 +827,7 @@ class ConversationStore:
         """Get a report by ID."""
         with get_db() as conn:
             row = conn.execute(
-                "SELECT * FROM reports WHERE id = ?", (report_id,)
+                "SELECT * FROM reports WHERE id = %s", (report_id,)
             ).fetchone()
 
             if not row:
@@ -844,7 +838,7 @@ class ConversationStore:
             if not content and row["message_id"]:
                 # Legacy: fetch from messages
                 msg = conn.execute(
-                    "SELECT content FROM messages WHERE id = ?",
+                    "SELECT content FROM messages WHERE id = %s",
                     (row["message_id"],)
                 ).fetchone()
                 content = msg["content"] if msg else None
@@ -885,14 +879,14 @@ class ConversationStore:
                 query += " AND (archived = 0 OR archived IS NULL)"
 
             if website:
-                query += " AND website = ?"
+                query += " AND website = %s"
                 params.append(website)
 
             if category:
-                query += " AND category = ?"
+                query += " AND category = %s"
                 params.append(category)
 
-            query += " ORDER BY updated_at DESC LIMIT ?"
+            query += " ORDER BY updated_at DESC LIMIT %s"
             params.append(limit)
 
             rows = conn.execute(query, params).fetchall()
@@ -923,7 +917,7 @@ class ConversationStore:
         """Archive a report (soft delete)."""
         with get_db() as conn:
             cursor = conn.execute(
-                "UPDATE reports SET archived = 1, updated_at = ? WHERE id = ?",
+                "UPDATE reports SET archived = 1, updated_at = %s WHERE id = %s",
                 (datetime.now().isoformat(), report_id)
             )
             return cursor.rowcount > 0
@@ -947,12 +941,12 @@ class ConversationStore:
         with get_db() as conn:
             # Increment version
             conn.execute(
-                "UPDATE reports SET version = version + 1 WHERE id = ?",
+                "UPDATE reports SET version = version + 1 WHERE id = %s",
                 (report_id,)
             )
 
             cursor = conn.execute(
-                f"UPDATE reports SET {set_clause} WHERE id = ?",
+                f"UPDATE reports SET {set_clause} WHERE id = %s",
                 values
             )
             return cursor.rowcount > 0
@@ -960,7 +954,7 @@ class ConversationStore:
     def delete_report(self, report_id: int) -> bool:
         """Delete a report."""
         with get_db() as conn:
-            cursor = conn.execute("DELETE FROM reports WHERE id = ?", (report_id,))
+            cursor = conn.execute("DELETE FROM reports WHERE id = %s", (report_id,))
             return cursor.rowcount > 0
 
     # -------------------------------------------------------------------------
@@ -972,7 +966,7 @@ class ConversationStore:
         with get_db() as conn:
             if tag_type:
                 rows = conn.execute(
-                    "SELECT * FROM tags WHERE type = ? ORDER BY label",
+                    "SELECT * FROM tags WHERE type = %s ORDER BY label",
                     (tag_type,)
                 ).fetchall()
             else:
@@ -1014,19 +1008,19 @@ class ConversationStore:
             conv_filter = "(c.conv_type = 'exploration' OR c.conv_type IS NULL)"
 
             if user_id:
-                conv_filter += " AND c.user_id = ?"
+                conv_filter += " AND c.user_id = %s"
                 params.append(user_id)
 
             if active_tag_names:
                 # Find conversations that have all active tags
-                placeholders = ','.join('?' * len(active_tag_names))
+                placeholders = ','.join(['%s'] * len(active_tag_names))
                 conv_filter += f"""
                     AND c.id IN (
                         SELECT conversation_id FROM conversation_tags ct2
                         JOIN tags t2 ON ct2.tag_id = t2.id
                         WHERE t2.name IN ({placeholders})
                         GROUP BY conversation_id
-                        HAVING COUNT(DISTINCT t2.name) = ?
+                        HAVING COUNT(DISTINCT t2.name) = %s
                     )
                 """
                 params.extend(active_tag_names)
@@ -1086,7 +1080,7 @@ class ConversationStore:
         """Get a tag by its name."""
         with get_db() as conn:
             row = conn.execute(
-                "SELECT * FROM tags WHERE name = ?", (name,)
+                "SELECT * FROM tags WHERE name = %s", (name,)
             ).fetchone()
             if row:
                 return Tag(id=row["id"], name=row["name"], type=row["type"], label=row["label"])
@@ -1096,12 +1090,12 @@ class ConversationStore:
         """Set tags for a conversation (replaces existing tags)."""
         with get_db() as conn:
             # Clear existing tags
-            conn.execute("DELETE FROM conversation_tags WHERE conversation_id = ?", (conv_id,))
+            conn.execute("DELETE FROM conversation_tags WHERE conversation_id = %s", (conv_id,))
 
             # Add new tags
             for tag_name in tag_names:
                 tag_row = conn.execute(
-                    "SELECT id FROM tags WHERE name = ?", (tag_name,)
+                    "SELECT id FROM tags WHERE name = %s", (tag_name,)
                 ).fetchone()
                 if tag_row:
                     conn.insert_ignore(
@@ -1113,7 +1107,7 @@ class ConversationStore:
             # Update conversation timestamp
             if update_timestamp:
                 conn.execute(
-                    "UPDATE conversations SET updated_at = ? WHERE id = ?",
+                    "UPDATE conversations SET updated_at = %s WHERE id = %s",
                     (datetime.now().isoformat(), conv_id)
                 )
             return True
@@ -1124,7 +1118,7 @@ class ConversationStore:
             rows = conn.execute(
                 """SELECT t.* FROM tags t
                    JOIN conversation_tags ct ON t.id = ct.tag_id
-                   WHERE ct.conversation_id = ?
+                   WHERE ct.conversation_id = %s
                    ORDER BY t.type, t.label""",
                 (conv_id,)
             ).fetchall()
@@ -1138,7 +1132,7 @@ class ConversationStore:
         if not conv_ids:
             return {}
         with get_db() as conn:
-            placeholders = ",".join("?" * len(conv_ids))
+            placeholders = ",".join(["%s"] * len(conv_ids))
             rows = conn.execute(
                 f"""SELECT ct.conversation_id, t.id, t.name, t.type, t.label
                    FROM tags t
@@ -1158,12 +1152,12 @@ class ConversationStore:
         """Set tags for a report (replaces existing tags)."""
         with get_db() as conn:
             # Clear existing tags
-            conn.execute("DELETE FROM report_tags WHERE report_id = ?", (report_id,))
+            conn.execute("DELETE FROM report_tags WHERE report_id = %s", (report_id,))
 
             # Add new tags
             for tag_name in tag_names:
                 tag_row = conn.execute(
-                    "SELECT id FROM tags WHERE name = ?", (tag_name,)
+                    "SELECT id FROM tags WHERE name = %s", (tag_name,)
                 ).fetchone()
                 if tag_row:
                     conn.insert_ignore(
@@ -1175,7 +1169,7 @@ class ConversationStore:
             # Update report timestamp
             if update_timestamp:
                 conn.execute(
-                    "UPDATE reports SET updated_at = ? WHERE id = ?",
+                    "UPDATE reports SET updated_at = %s WHERE id = %s",
                     (datetime.now().isoformat(), report_id)
                 )
             return True
@@ -1186,7 +1180,7 @@ class ConversationStore:
             rows = conn.execute(
                 """SELECT t.* FROM tags t
                    JOIN report_tags rt ON t.id = rt.tag_id
-                   WHERE rt.report_id = ?
+                   WHERE rt.report_id = %s
                    ORDER BY t.type, t.label""",
                 (report_id,)
             ).fetchall()
@@ -1200,7 +1194,7 @@ class ConversationStore:
         if not report_ids:
             return {}
         with get_db() as conn:
-            placeholders = ",".join("?" * len(report_ids))
+            placeholders = ",".join(["%s"] * len(report_ids))
             rows = conn.execute(
                 f"""SELECT rt.report_id, t.id, t.name, t.type, t.label
                    FROM tags t
@@ -1228,7 +1222,7 @@ class ConversationStore:
             params: list = []
 
             if user_id:
-                conditions.append("c.user_id = ?")
+                conditions.append("c.user_id = %s")
                 params.append(user_id)
 
             # Filter by tags (AND logic - must have all specified tags)
@@ -1238,7 +1232,7 @@ class ConversationStore:
                         EXISTS (
                             SELECT 1 FROM conversation_tags ct
                             JOIN tags t ON ct.tag_id = t.id
-                            WHERE ct.conversation_id = c.id AND t.name = ?
+                            WHERE ct.conversation_id = c.id AND t.name = %s
                         )
                     """)
                     params.append(tag_name)
@@ -1252,7 +1246,7 @@ class ConversationStore:
                 LEFT JOIN reports r ON r.conversation_id = c.id AND r.id IS NULL
                 {where}
                 ORDER BY c.updated_at DESC
-                LIMIT ?
+                LIMIT %s
             """
 
             rows = conn.execute(query, params).fetchall()
@@ -1261,7 +1255,7 @@ class ConversationStore:
             conv_ids = [row["id"] for row in rows]
             tags_by_conv: dict[str, list[Tag]] = {cid: [] for cid in conv_ids}
             if conv_ids:
-                tag_ph = ",".join("?" * len(conv_ids))
+                tag_ph = ",".join(["%s"] * len(conv_ids))
                 tag_rows = conn.execute(
                     f"""SELECT ct.conversation_id, t.id, t.name, t.type, t.label
                        FROM tags t
@@ -1316,7 +1310,7 @@ class ConversationStore:
                         EXISTS (
                             SELECT 1 FROM report_tags rt
                             JOIN tags t ON rt.tag_id = t.id
-                            WHERE rt.report_id = r.id AND t.name = ?
+                            WHERE rt.report_id = r.id AND t.name = %s
                         )
                     """)
                     params.append(tag_name)
@@ -1329,7 +1323,7 @@ class ConversationStore:
                 FROM reports r
                 {where}
                 ORDER BY r.updated_at DESC
-                LIMIT ?
+                LIMIT %s
             """
 
             rows = conn.execute(query, params).fetchall()
@@ -1338,7 +1332,7 @@ class ConversationStore:
             report_ids = [row["id"] for row in rows]
             tags_by_report: dict[int, list[Tag]] = {rid: [] for rid in report_ids}
             if report_ids:
-                tag_ph = ",".join("?" * len(report_ids))
+                tag_ph = ",".join(["%s"] * len(report_ids))
                 tag_rows = conn.execute(
                     f"""SELECT rt.report_id, t.id, t.name, t.type, t.label
                        FROM tags t
@@ -1413,7 +1407,7 @@ class ConversationStore:
                    (conversation_id, user_id, original_filename, stored_filename,
                     storage_path, file_size, mime_type, sha256_hash, is_text,
                     av_scanned, av_clean, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (conversation_id, user_id, original_filename, stored_filename,
                  storage_path, file_size, mime_type, sha256_hash, is_text,
                  av_scanned, av_clean, uploaded_file.created_at.isoformat())
@@ -1425,7 +1419,7 @@ class ConversationStore:
         """Get an uploaded file by ID."""
         with get_db() as conn:
             row = conn.execute(
-                "SELECT * FROM uploaded_files WHERE id = ?", (file_id,)
+                "SELECT * FROM uploaded_files WHERE id = %s", (file_id,)
             ).fetchone()
 
             if not row:
@@ -1451,7 +1445,7 @@ class ConversationStore:
         """Get an uploaded file by its SHA256 hash (for deduplication)."""
         with get_db() as conn:
             row = conn.execute(
-                "SELECT * FROM uploaded_files WHERE sha256_hash = ? LIMIT 1", (sha256_hash,)
+                "SELECT * FROM uploaded_files WHERE sha256_hash = %s LIMIT 1", (sha256_hash,)
             ).fetchone()
 
             if not row:
@@ -1478,7 +1472,7 @@ class ConversationStore:
         with get_db() as conn:
             rows = conn.execute(
                 """SELECT * FROM uploaded_files
-                   WHERE conversation_id = ?
+                   WHERE conversation_id = %s
                    ORDER BY created_at""",
                 (conversation_id,)
             ).fetchall()
@@ -1508,7 +1502,7 @@ class ConversationStore:
         """Update the AV scan status of an uploaded file."""
         with get_db() as conn:
             cursor = conn.execute(
-                "UPDATE uploaded_files SET av_scanned = ?, av_clean = ? WHERE id = ?",
+                "UPDATE uploaded_files SET av_scanned = %s, av_clean = %s WHERE id = %s",
                 (av_scanned, av_clean, file_id)
             )
             return cursor.rowcount > 0
@@ -1517,7 +1511,7 @@ class ConversationStore:
         """Delete an uploaded file record."""
         with get_db() as conn:
             cursor = conn.execute(
-                "DELETE FROM uploaded_files WHERE id = ?", (file_id,)
+                "DELETE FROM uploaded_files WHERE id = %s", (file_id,)
             )
             return cursor.rowcount > 0
 
@@ -1532,7 +1526,7 @@ class ConversationStore:
             rows = conn.execute(
                 """SELECT id, conversation_id, COALESCE(type, role) as type, content, timestamp
                    FROM messages
-                   WHERE conversation_id = ? AND id > ?
+                   WHERE conversation_id = %s AND id > %s
                    ORDER BY id""",
                 (conv_id, after_id)
             ).fetchall()
@@ -1553,7 +1547,7 @@ class ConversationStore:
         with get_db() as conn:
             row = conn.execute(
                 """SELECT COALESCE(type, role) as type FROM messages
-                   WHERE conversation_id = ? ORDER BY id DESC LIMIT 1""",
+                   WHERE conversation_id = %s ORDER BY id DESC LIMIT 1""",
                 (conversation_id,)
             ).fetchone()
             return row["type"] if row else None
@@ -1563,7 +1557,7 @@ class ConversationStore:
         with get_db() as conn:
             return conn.insert_and_get_id(
                 """INSERT INTO pm_commands (conversation_id, command, payload, created_at)
-                   VALUES (?, ?, ?, ?)""",
+                   VALUES (%s, %s, %s, %s)""",
                 (conversation_id, command, json.dumps(payload) if payload else None,
                  datetime.now().isoformat())
             )
@@ -1578,7 +1572,7 @@ class ConversationStore:
         with get_db() as conn:
             rows = conn.execute(
                 """UPDATE pm_commands
-                   SET processed_at = ?
+                   SET processed_at = %s
                    WHERE processed_at IS NULL
                    RETURNING id, conversation_id, command, payload, created_at""",
                 (now,)

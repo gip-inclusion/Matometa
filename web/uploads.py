@@ -458,7 +458,7 @@ def delete_file(uploaded_file: UploadedFile) -> bool:
     from .database import get_db
     with get_db() as conn:
         count = conn.execute(
-            "SELECT COUNT(*) as cnt FROM uploaded_files WHERE stored_filename = ?",
+            "SELECT COUNT(*) as cnt FROM uploaded_files WHERE stored_filename = %s",
             (uploaded_file.stored_filename,)
         ).fetchone()["cnt"]
 

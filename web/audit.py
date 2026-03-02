@@ -20,7 +20,7 @@ def get_audit_db():
 def init_audit_db():
     """Initialize the audit database schema."""
     with get_audit_db() as conn:
-        conn.executescript("""
+        conn.execute_raw("""
             CREATE TABLE IF NOT EXISTS tool_invocations (
                 id SERIAL PRIMARY KEY,
                 timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -68,7 +68,7 @@ def audit_log(
             conn.execute(
                 """INSERT INTO tool_invocations
                    (conversation_id, user_email, tool_name, tool_input, success)
-                   VALUES (?, ?, ?, ?, ?)""",
+                   VALUES (%s, %s, %s, %s, %s)""",
                 (conversation_id, user_email, tool_name, input_json,
                  1 if success else 0),
             )
@@ -82,7 +82,7 @@ def get_recent_audit_logs(limit: int = 100) -> list[dict]:
         rows = conn.execute(
             """SELECT * FROM tool_invocations
                ORDER BY timestamp DESC
-               LIMIT ?""",
+               LIMIT %s""",
             (limit,)
         ).fetchall()
 
@@ -105,7 +105,7 @@ def get_audit_logs_for_conversation(conversation_id: str) -> list[dict]:
     with get_audit_db() as conn:
         rows = conn.execute(
             """SELECT * FROM tool_invocations
-               WHERE conversation_id = ?
+               WHERE conversation_id = %s
                ORDER BY timestamp ASC""",
             (conversation_id,)
         ).fetchall()
