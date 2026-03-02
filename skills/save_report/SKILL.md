@@ -5,7 +5,7 @@ description: Save or update a report in the database (project)
 
 # Save Report Skill
 
-Create, update, or append reports to the SQLite database.
+Create, update, or append reports to the PostgreSQL database.
 
 ## Recommended: CLI with File (avoids escaping issues)
 

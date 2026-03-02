@@ -16,14 +16,14 @@ class TestBuildUpdateClause:
     def test_builds_valid_clause_single_column(self):
         """Single valid column produces correct clause."""
         clause, values = _build_update_clause({"title": "test"}, VALID_CONVERSATION_COLUMNS)
-        assert clause == "title = ?"
+        assert clause == "title = %s"
         assert values == ["test"]
 
     def test_builds_valid_clause_multiple_columns(self):
         """Multiple valid columns produce correct clause."""
         clause, values = _build_update_clause({"title": "test", "status": "active"}, VALID_CONVERSATION_COLUMNS)
-        assert "title = ?" in clause
-        assert "status = ?" in clause
+        assert "title = %s" in clause
+        assert "status = %s" in clause
         assert len(values) == 2
         assert "test" in values
         assert "active" in values
@@ -47,13 +47,13 @@ class TestBuildUpdateClause:
         """All conversation columns in the frozenset work."""
         for col in VALID_CONVERSATION_COLUMNS:
             clause, values = _build_update_clause({col: "test"}, VALID_CONVERSATION_COLUMNS)
-            assert f"{col} = ?" in clause
+            assert f"{col} = %s" in clause
 
     def test_report_columns_are_valid(self):
         """All report columns in the frozenset work."""
         for col in VALID_REPORT_COLUMNS:
             clause, values = _build_update_clause({col: "test"}, VALID_REPORT_COLUMNS)
-            assert f"{col} = ?" in clause
+            assert f"{col} = %s" in clause
 
     def test_empty_updates_produces_empty_clause(self):
         """Empty dict produces empty clause."""

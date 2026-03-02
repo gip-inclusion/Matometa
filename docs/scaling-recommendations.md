@@ -169,7 +169,7 @@ LISTEN new_message
 **Considerations:**
 - Needs a dedicated connection per SSE stream (doesn't go through the pool)
 - `LISTEN` connections are long-lived, need careful lifecycle management
-- Falls back to polling for SQLite (dev mode)
+- Falls back to polling (current implementation)
 - psycopg2's `select()` or `poll()` integrates with asyncio via `loop.add_reader()`
 
 **Effort**: medium. Worth doing if concurrent streams become a bottleneck.

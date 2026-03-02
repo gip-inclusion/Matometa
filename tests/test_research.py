@@ -2,8 +2,8 @@
 
 import hashlib
 import json
-import sqlite3
 
+import psycopg2
 import pytest
 
 # ---------------------------------------------------------------------------
@@ -12,7 +12,7 @@ import pytest
 from scripts.refresh_research import (
     _split_text,
     build_chunks,
-    ensure_schema,
+    ensure_research_schema,
     extract_block_text,
     extract_page_properties,
     extract_page_title,
@@ -87,36 +87,29 @@ class TestExtractBody:
 
 
 # =============================================================================
-# _build_result
+# _build_result (now takes a single joined row dict)
 # =============================================================================
 
 
 class TestBuildResult:
-    def _chunk(self, **overrides):
+    def _row(self, **overrides):
+        """Create a fake joined row (chunk + page fields)."""
         base = {
             "id": 1,
             "page_id": "page-abc",
             "chunk_index": 0,
             "text": "Title\n[DB]\n---\nSome body",
             "database_key": "entretiens",
-        }
-        base.update(overrides)
-        return base
-
-    def _page_info(self, **overrides):
-        base = {
             "title": "Interview with Alice",
             "database_name": "Entretiens et actions de recherche",
-            "database_key": "entretiens",
             "url": "https://notion.so/page-abc",
-            "type": "❝ Verbatim",
-            "date": "2024-03-15",
+            "properties_json": json.dumps({"Type": "❝ Verbatim", "Date": "2024-03-15"}),
         }
         base.update(overrides)
         return base
 
     def test_basic(self):
-        r = _build_result(self._chunk(), self._page_info(), score=0.85)
+        r = _build_result(self._row(), score=0.85)
         assert r["chunk_id"] == 1
         assert r["page_id"] == "page-abc"
         assert r["body"] == "Some body"
@@ -124,17 +117,17 @@ class TestBuildResult:
         assert r["score"] == 0.85
 
     def test_no_score(self):
-        r = _build_result(self._chunk(), self._page_info())
+        r = _build_result(self._row())
         assert "score" not in r
 
-    def test_none_page_info(self):
-        r = _build_result(self._chunk(), None)
+    def test_none_properties(self):
+        r = _build_result(self._row(properties_json=None, title=None, url=None, database_name=None))
         assert r["page_title"] is None
         assert r["page_url"] is None
         assert r["page_type"] is None
 
     def test_score_rounding(self):
-        r = _build_result(self._chunk(), self._page_info(), score=0.123456789)
+        r = _build_result(self._row(), score=0.123456789)
         assert r["score"] == 0.1235
 
 
@@ -501,32 +494,47 @@ class TestExtractPageProperties:
 
 
 # =============================================================================
-# build_chunks (integration with in-memory SQLite)
+# build_chunks (integration with PostgreSQL)
 # =============================================================================
 
 
 @pytest.fixture
 def research_db():
-    """Create an in-memory SQLite DB with the research corpus schema."""
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    ensure_schema(conn)
-    return conn
+    """Create a PostgreSQL connection with research tables for testing."""
+    from web.config import DATABASE_URL
+
+    if not DATABASE_URL:
+        pytest.skip("DATABASE_URL not set")
+    conn = psycopg2.connect(DATABASE_URL)
+    ensure_research_schema(conn)
+    conn.commit()
+    yield conn
+    # Truncate research tables
+    cur = conn.cursor()
+    cur.execute(
+        "TRUNCATE TABLE research_chunks, research_blocks, research_relations, "
+        "research_pages, research_sync_meta CASCADE"
+    )
+    conn.commit()
+    conn.close()
 
 
 def _insert_page(conn, page_id="page-1", db_key="entretiens", title="Test Page", properties=None):
     props = properties or {"Type": "❝ Verbatim"}
-    conn.execute(
-        "INSERT INTO pages (id, database_key, database_name, title, properties_json, url) VALUES (?, ?, ?, ?, ?, ?)",
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO research_pages (id, database_key, database_name, title, properties_json, url) "
+        "VALUES (%s, %s, %s, %s, %s, %s)",
         (page_id, db_key, "Entretiens", title, json.dumps(props), f"https://notion.so/{page_id}"),
     )
     conn.commit()
 
 
 def _insert_blocks(conn, page_id, texts):
+    cur = conn.cursor()
     for i, text in enumerate(texts):
-        conn.execute(
-            "INSERT INTO blocks (id, page_id, type, text_content, position) VALUES (?, ?, ?, ?, ?)",
+        cur.execute(
+            "INSERT INTO research_blocks (id, page_id, type, text_content, position) VALUES (%s, %s, %s, %s, %s)",
             (f"block-{page_id}-{i}", page_id, "paragraph", text, i),
         )
     conn.commit()
@@ -606,25 +614,38 @@ class TestBuildChunks:
 
 
 # =============================================================================
-# ensure_schema
+# ensure_research_schema
 # =============================================================================
 
 
 class TestEnsureSchema:
     def test_creates_all_tables(self, research_db):
-        tables = {r[0] for r in research_db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-        assert "pages" in tables
-        assert "blocks" in tables
-        assert "relations" in tables
-        assert "chunks" in tables
-        assert "sync_meta" in tables
+        cur = research_db.cursor()
+        cur.execute(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = 'public' AND table_name LIKE 'research_%%'"
+        )
+        tables = {r[0] for r in cur.fetchall()}
+        assert "research_pages" in tables
+        assert "research_blocks" in tables
+        assert "research_relations" in tables
+        assert "research_chunks" in tables
+        assert "research_sync_meta" in tables
 
     def test_idempotent(self, research_db):
-        """Running ensure_schema twice should not fail."""
-        ensure_schema(research_db)
-        tables = {r[0] for r in research_db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-        assert "pages" in tables
+        """Running ensure_research_schema twice should not fail."""
+        ensure_research_schema(research_db)
+        research_db.commit()
+        cur = research_db.cursor()
+        cur.execute(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = 'public' AND table_name LIKE 'research_%%'"
+        )
+        tables = {r[0] for r in cur.fetchall()}
+        assert "research_pages" in tables
 
     def test_chunks_has_text_hash(self, research_db):
-        cols = {r[1] for r in research_db.execute("PRAGMA table_info(chunks)").fetchall()}
+        cur = research_db.cursor()
+        cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'research_chunks'")
+        cols = {r[0] for r in cur.fetchall()}
         assert "text_hash" in cols

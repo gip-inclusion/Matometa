@@ -1,5 +1,7 @@
 # FastAPI Migration + Process Manager Extraction
 
+> **Note (2026-03):** This plan predates the full PostgreSQL migration. SQLite references describe the architecture at the time of writing.
+
 **Date:** 2026-02-21
 **Status:** Ready for execution
 **Builds on:** [2026-01-11-pubsub-streaming.md](2026-01-11-pubsub-streaming.md), [2026-01-10-architecture-audit.md](2026-01-10-architecture-audit.md)

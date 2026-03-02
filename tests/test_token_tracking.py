@@ -78,28 +78,32 @@ class TestConversationUsageFields:
 class TestDatabaseUsageColumns:
     """Tests for usage columns in database schema."""
 
-    @pytest.fixture
-    def temp_db(self, tmp_path, monkeypatch):
-        """Create a temporary database for testing."""
-        db_path = tmp_path / "test.db"
-        monkeypatch.setattr("web.config.SQLITE_PATH", db_path)
-        # Re-import to use patched path
-        import importlib
-
-        import web.database
-
-        importlib.reload(web.database)
-        return db_path
-
-    def test_conversations_table_has_usage_columns(self, temp_db):
-        """Conversations table has all usage columns."""
-        from web.database import get_db, init_db
+    @pytest.fixture(autouse=True)
+    def db_setup(self):
+        """Ensure database tables exist and clean up after test."""
+        from web.database import init_db
 
         init_db()
+        yield
+        from web.db import get_db
 
         with get_db() as conn:
-            cursor = conn.execute("PRAGMA table_info(conversations)")
-            columns = {row["name"] for row in cursor.fetchall()}
+            conn.execute_raw("""
+                TRUNCATE TABLE messages, conversation_tags, report_tags,
+                    uploaded_files, cron_runs, pinned_items, pm_commands,
+                    pm_heartbeat, reports, conversations, tags, schema_version
+                    CASCADE;
+            """)
+
+    def test_conversations_table_has_usage_columns(self):
+        """Conversations table has all usage columns."""
+        from web.database import get_db
+
+        with get_db() as conn:
+            cursor = conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = %s", ("conversations",)
+            )
+            columns = {row["column_name"] for row in cursor.fetchall()}
             assert "usage_input_tokens" in columns
             assert "usage_output_tokens" in columns
             assert "usage_cache_creation_tokens" in columns
@@ -107,7 +111,7 @@ class TestDatabaseUsageColumns:
             assert "usage_backend" in columns
             assert "usage_extra" in columns
 
-    def test_create_conversation_stores_zero_usage(self, temp_db):
+    def test_create_conversation_stores_zero_usage(self):
         """New conversations start with zero usage."""
         from web.database import ConversationStore
 
@@ -122,7 +126,7 @@ class TestDatabaseUsageColumns:
         assert loaded.usage_backend is None
         assert loaded.usage_extra is None
 
-    def test_update_conversation_usage(self, temp_db):
+    def test_update_conversation_usage(self):
         """Can update usage on a conversation."""
         from web.database import ConversationStore
 
@@ -148,7 +152,7 @@ class TestDatabaseUsageColumns:
         assert loaded.usage_backend == "sdk"
         assert loaded.usage_extra == {"service_tier": "priority", "web_search_requests": 2}
 
-    def test_accumulate_usage(self, temp_db):
+    def test_accumulate_usage(self):
         """Can accumulate usage incrementally."""
         from web.database import ConversationStore
 

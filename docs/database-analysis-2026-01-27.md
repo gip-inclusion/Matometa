@@ -244,7 +244,7 @@ Ces conversations ont un taux d'erreur élevé, souvent dû à des schémas SQL 
 
 5. **Automatiser les baselines**
    - Script mensuel `VisitsSummary.get` pour tous les sites
-   - Stockage dans SQLite ou fichiers CSV datés
+   - Stockage dans PostgreSQL ou fichiers CSV datés
 
 6. **Améliorer la wishlist**
    - Intégrer avec Notion (sync automatique)

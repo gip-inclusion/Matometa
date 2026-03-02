@@ -1,5 +1,7 @@
 # Architecture Audit: Matometa
 
+> **Note (2026-03):** This plan predates the SQLite→PostgreSQL migration. SQLite references describe the architecture at the time of writing.
+
 **Date:** 2026-01-10
 **Scope:** Security, maintainability, testability, upgradeability, repo structure
 

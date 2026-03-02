@@ -15,17 +15,17 @@ Usage:
 import argparse
 import json
 import os
-import sqlite3
 import sys
-from pathlib import Path
 
 import numpy as np
+import psycopg2
 import requests
 from dotenv import load_dotenv
+from psycopg2.extras import RealDictCursor
 
 load_dotenv()
 
-DEFAULT_DB_PATH = Path(os.getenv("DATA_DIR", Path(__file__).parent.parent / "data")) / "notion_research.db"
+DATABASE_URL = os.getenv("DATABASE_URL")
 DEEPINFRA_URL = "https://api.deepinfra.com/v1/openai/embeddings"
 EMBEDDING_MODEL = "Qwen/Qwen3-Embedding-0.6B"
 
@@ -64,7 +64,7 @@ def get_type_label(type_str):
 
 
 def embed_query(text, api_key):
-    """Encode a query string using DeepInfra API."""
+    """Encode a query string using DeepInfra API, return pgvector string."""
     resp = requests.post(
         DEEPINFRA_URL,
         headers={
@@ -81,7 +81,8 @@ def embed_query(text, api_key):
     resp.raise_for_status()
     data = resp.json()
     vec = np.array(data["data"][0]["embedding"], dtype=np.float32)
-    return vec / np.linalg.norm(vec)
+    vec = vec / np.linalg.norm(vec)
+    return "[" + ",".join(str(float(x)) for x in vec) + "]"
 
 
 def extract_body(text):
@@ -106,11 +107,10 @@ def extract_body(text):
     return "\n".join(lines[body_start:]).strip()
 
 
-def search(query, db_path=None, limit=5, db_filter=None, type_filter=None):
-    """Search the research corpus and return results."""
-    db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
-    if not db_path.exists():
-        print(f"Error: database not found at {db_path}", file=sys.stderr)
+def search(query, limit=5, db_filter=None, type_filter=None):
+    """Search the research corpus via pgvector and return results."""
+    if not DATABASE_URL:
+        print("Error: DATABASE_URL not set", file=sys.stderr)
         sys.exit(1)
 
     api_key = os.getenv("DEEPINFRA_API_KEY")
@@ -118,87 +118,57 @@ def search(query, db_path=None, limit=5, db_filter=None, type_filter=None):
         print("Error: DEEPINFRA_API_KEY not set", file=sys.stderr)
         sys.exit(1)
 
-    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor(cursor_factory=RealDictCursor)
 
-    # Load chunks and embeddings
-    rows = conn.execute("SELECT id, page_id, chunk_index, text, database_key, embedding FROM chunks").fetchall()
+    # Embed query and search with pgvector
+    query_vec = embed_query(query, api_key)
 
-    chunks = []
-    vecs = []
-    for row in rows:
-        chunks.append(
-            {
-                "id": row["id"],
-                "page_id": row["page_id"],
-                "chunk_index": row["chunk_index"],
-                "text": row["text"],
-                "database_key": row["database_key"],
-            }
-        )
-        vecs.append(np.frombuffer(row["embedding"], dtype=np.float32))
-
-    embeddings = np.vstack(vecs)
-    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-    norms[norms == 0] = 1
-    embeddings = embeddings / norms
-
-    # Load page metadata
-    page_rows = conn.execute(
-        "SELECT id, title, database_key, database_name, url, properties_json FROM pages"
-    ).fetchall()
-
-    pages = {}
-    for row in page_rows:
-        props = json.loads(row["properties_json"]) if row["properties_json"] else {}
-        pages[row["id"]] = {
-            "title": row["title"],
-            "database_key": row["database_key"],
-            "database_name": row["database_name"],
-            "url": row["url"],
-            "type": props.get("Type"),
-            "date": props.get("Date"),
-        }
+    cur.execute(
+        """
+        SELECT c.id, c.page_id, c.chunk_index, c.text, c.database_key,
+               p.title, p.database_name, p.url, p.properties_json,
+               1 - (c.embedding <=> %s::vector) AS score
+        FROM research_chunks c
+        JOIN research_pages p ON p.id = c.page_id
+        WHERE c.embedding IS NOT NULL
+        ORDER BY c.embedding <=> %s::vector
+        LIMIT %s
+    """,
+        (query_vec, query_vec, limit * 3),
+    )
+    rows = cur.fetchall()
 
     conn.close()
 
-    # Embed query and compute scores
-    query_vec = embed_query(query, api_key)
-    scores = embeddings @ query_vec
-    top_indices = np.argsort(scores)[::-1]
-
-    # Collect results with filtering and dedup
+    # Filter and dedup
     seen_pages = {}
     results = []
-    for idx in top_indices:
-        if len(results) >= limit * 3:
-            break
-        chunk = chunks[idx]
-
-        if db_filter and chunk["database_key"] not in db_filter:
+    for row in rows:
+        if db_filter and row["database_key"] not in db_filter:
             continue
 
-        page_info = pages.get(chunk["page_id"])
-        if type_filter and (not page_info or page_info.get("type") not in type_filter):
+        props = json.loads(row["properties_json"]) if row.get("properties_json") else {}
+        if type_filter and props.get("Type") not in type_filter:
             continue
 
-        pid = chunk["page_id"]
+        pid = row["page_id"]
         if pid in seen_pages:
             continue
         seen_pages[pid] = True
 
-        body = extract_body(chunk["text"])
+        body = extract_body(row["text"])
         results.append(
             {
                 "page_id": pid,
-                "title": page_info["title"] if page_info else "Sans titre",
+                "title": row["title"] or "Sans titre",
                 "body": body,
-                "database_key": chunk["database_key"],
-                "database_name": page_info["database_name"] if page_info else None,
-                "page_type": page_info["type"] if page_info else None,
-                "page_date": page_info["date"] if page_info else None,
-                "page_url": page_info["url"] if page_info else None,
-                "score": float(scores[idx]),
+                "database_key": row["database_key"],
+                "database_name": row["database_name"],
+                "page_type": props.get("Type"),
+                "page_date": props.get("Date"),
+                "page_url": row["url"],
+                "score": float(row["score"]),
             }
         )
 
@@ -228,9 +198,6 @@ def format_citation(result):
     type_label = get_type_label(page_type)
     prefix = TYPE_PREFIXES.get(page_type, DB_PREFIXES.get(db_key, "📄"))
 
-    # Build the quote content
-    # For verbatims and short items: the title IS the quote
-    # For longer items: title + truncated body
     if body:
         text = body
         if len(text) > 300:
@@ -263,7 +230,6 @@ def format_citation(result):
 
     lines.append(f"— *{attribution}* · {links_str}")
 
-    # Prefix every line with > for blockquote
     return "\n".join(f"> {line}" for line in lines)
 
 
@@ -273,13 +239,11 @@ def main():
     parser.add_argument("--limit", type=int, default=5, help="Number of citations (default: 5)")
     parser.add_argument("--db", action="append", help="Filter by database key (repeatable)")
     parser.add_argument("--type", action="append", dest="types", help="Filter by type (repeatable)")
-    parser.add_argument("--db-path", help="Path to notion_research.db")
     parser.add_argument("--json", action="store_true", help="Output raw JSON instead of citations")
     args = parser.parse_args()
 
     results = search(
         query=args.query,
-        db_path=args.db_path,
         limit=args.limit,
         db_filter=set(args.db) if args.db else None,
         type_filter=set(args.types) if args.types else None,

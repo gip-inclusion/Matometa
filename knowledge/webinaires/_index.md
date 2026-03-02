@@ -279,7 +279,7 @@ ORDER BY n DESC;
 |---------|------|
 | `lib/webinaires.py` | Clients API (Livestorm, Grist), DatalakeWriter, logique de sync |
 | `scripts/sync_webinaires.py` | CLI : `--grist-only`, `--livestorm-only` |
-| `scripts/datalake_create_webinaires.py` | Création des tables + export initial SQLite → datalake |
+| `scripts/datalake_create_webinaires.py` | *(supprimé)* |
 | `cron/webinaires/cron.py` | Cron quotidien : Grist uniquement |
 | `cron/webinaires/CRON.md` | Métadonnées cron (daily, timeout 600s) |
 | `tests/test_webinaires.py` | 43 tests (helpers, schema, sync Grist mocké) |

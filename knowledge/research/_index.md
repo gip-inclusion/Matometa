@@ -62,9 +62,9 @@ Relations principales :
 - **Structure** (texte) : organisation de l'interviewé
 - **Auteurs** (people) : chercheurs ayant réalisé l'entretien
 
-## Base SQLite
+## Base PostgreSQL
 
-Fichier : `data/notion_research.db`
+Stockage : PostgreSQL (tables `research_*`, extension pgvector)
 Sync : hebdomadaire via `cron/research-corpus/` (voir [knowledge/notion/_index.md](../notion/_index.md))
 
 ### Tables

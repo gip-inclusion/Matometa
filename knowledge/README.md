@@ -50,7 +50,7 @@ Intégration Notion (API, authentification, fonctionnalités) :
 
 ### `research/`
 Corpus de recherche terrain (ethnographie « Connaissance du terrain ») :
-- `_index.md` : bases Notion, hiérarchie, schéma SQLite, requêtes, recherche vectorielle, correspondance segments/sites
+- `_index.md` : bases Notion, hiérarchie, schéma PostgreSQL, requêtes, recherche vectorielle, correspondance segments/sites
 
 ### `webinaires/`
 Données de participation aux webinaires (Livestorm historique + Grist actuel) :

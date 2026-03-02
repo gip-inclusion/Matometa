@@ -67,7 +67,7 @@ Inline : **bold**, *italic*, `code`, [liens](url).
 
 **Fichier** : `skills/wishlist/scripts/wishlist.py`
 
-Crée une page dans la base wishlist. Stockage local en parallèle dans `data/matometa.db` table `wishlist`.
+Crée une page dans la base wishlist. Stockage en parallèle dans PostgreSQL (table `wishlist`).
 
 Propriétés :
 - `Fonction` (title)
@@ -80,7 +80,7 @@ Propriétés :
 
 **Fichier** : `scripts/refresh_research.py`
 **Cron** : `cron/research-corpus/` (hebdomadaire, timeout 1200s)
-**Base locale** : `data/notion_research.db`
+**Base** : PostgreSQL (tables `research_*`, pgvector)
 
 Synchronise 6 bases Notion du workspace "Connaissance du terrain".
 Voir [knowledge/research/_index.md](../research/_index.md) pour le modèle de données complet.

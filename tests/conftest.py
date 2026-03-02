@@ -2,12 +2,11 @@
 Pytest configuration for Autometa tests.
 
 Configure test parameters here or via environment variables.
+Requires DATABASE_URL to be set (PostgreSQL).
 """
 
 import importlib
 import os
-import tempfile
-from pathlib import Path
 
 import pytest
 
@@ -58,16 +57,24 @@ def segment():
     return MATOMO_TEST_SEGMENT
 
 
+def _truncate_all_tables():
+    """Truncate all application tables (PostgreSQL)."""
+    from web.db import get_db
+
+    with get_db() as conn:
+        conn.execute_raw("""
+            TRUNCATE TABLE messages, conversation_tags, report_tags,
+                uploaded_files, cron_runs, pinned_items, pm_commands,
+                pm_heartbeat, reports, conversations, tags, schema_version,
+                research_chunks, research_blocks, research_relations,
+                research_pages, research_sync_meta, wishlist
+                CASCADE;
+        """)
+
+
 @pytest.fixture
 def app():
-    """Create a FastAPI test app with a temporary database."""
-    db_fd, db_path = tempfile.mkstemp()
-
-    from web import config
-
-    original_path = config.SQLITE_PATH
-    config.SQLITE_PATH = Path(db_path)
-
+    """Create a FastAPI test app with a fresh database."""
     from web import database
 
     importlib.reload(database)
@@ -80,9 +87,7 @@ def app():
 
     yield fastapi_app
 
-    config.SQLITE_PATH = original_path
-    os.close(db_fd)
-    os.unlink(db_path)
+    _truncate_all_tables()
 
 
 @pytest.fixture

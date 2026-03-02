@@ -355,7 +355,7 @@ def _record_run(result: dict, trigger: str):
         with get_db() as conn:
             conn.execute(
                 """INSERT INTO cron_runs (app_slug, started_at, finished_at, status, output, duration_ms, trigger)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
                 (
                     result["slug"],
                     result["started_at"],
@@ -405,9 +405,9 @@ def get_app_runs(slug: str, limit: int = 20) -> list[dict]:
         with get_db() as conn:
             rows = conn.execute(
                 """SELECT * FROM cron_runs
-                   WHERE app_slug = ?
+                   WHERE app_slug = %s
                    ORDER BY started_at DESC
-                   LIMIT ?""",
+                   LIMIT %s""",
                 (slug, limit),
             ).fetchall()
             return [

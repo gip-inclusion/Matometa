@@ -7,11 +7,8 @@ Run with: pytest tests/test_sse_streaming.py -v
 import asyncio
 import importlib
 import json
-import os
-import tempfile
 import threading
 import time
-from pathlib import Path
 
 import pytest
 
@@ -23,13 +20,6 @@ import pytest
 @pytest.fixture(scope="module")
 def app():
     """Module-scoped FastAPI app with fresh database."""
-    db_fd, db_path = tempfile.mkstemp()
-
-    from web import config
-
-    original_path = config.SQLITE_PATH
-    config.SQLITE_PATH = Path(db_path)
-
     from web import database
 
     importlib.reload(database)
@@ -41,9 +31,15 @@ def app():
 
     yield fastapi_app
 
-    config.SQLITE_PATH = original_path
-    os.close(db_fd)
-    os.unlink(db_path)
+    from web.db import get_db
+
+    with get_db() as conn:
+        conn.execute_raw("""
+            TRUNCATE TABLE messages, conversation_tags, report_tags,
+                uploaded_files, cron_runs, pinned_items, pm_commands,
+                pm_heartbeat, reports, conversations, tags, schema_version
+                CASCADE;
+        """)
 
 
 @pytest.fixture

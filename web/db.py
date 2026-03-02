@@ -1,37 +1,33 @@
-"""Database connection infrastructure (SQLite or PostgreSQL).
+"""Database connection infrastructure (PostgreSQL).
 
 Low-level connection management, query helpers, and column validation.
 Business logic lives in web/database.py.
 """
 
 import logging
-import sqlite3
 from contextlib import contextmanager
 from typing import Any, Optional
+
+from psycopg2.extras import RealDictCursor
+from psycopg2.pool import ThreadedConnectionPool
 
 from . import config
 
 logger = logging.getLogger(__name__)
 
-# Database backend detection from DATABASE_URL
-USE_POSTGRES = config.DATABASE_URL is not None and config.DATABASE_URL.startswith(("postgres://", "postgresql://"))
+_pg_pool: Optional[ThreadedConnectionPool] = None
 
-if USE_POSTGRES:
-    from psycopg2.extras import RealDictCursor
-    from psycopg2.pool import ThreadedConnectionPool
 
-    _pg_pool: Optional[ThreadedConnectionPool] = None
-
-    def _get_pg_pool() -> ThreadedConnectionPool:
-        global _pg_pool
-        if _pg_pool is None or _pg_pool.closed:
-            _pg_pool = ThreadedConnectionPool(
-                minconn=2,
-                maxconn=20,
-                dsn=config.DATABASE_URL,
-            )
-            logger.info("PostgreSQL connection pool created (max=20)")
-        return _pg_pool
+def _get_pg_pool() -> ThreadedConnectionPool:
+    global _pg_pool
+    if _pg_pool is None or _pg_pool.closed:
+        _pg_pool = ThreadedConnectionPool(
+            minconn=1,
+            maxconn=10,
+            dsn=config.DATABASE_URL,
+        )
+        logger.info("PostgreSQL connection pool created (max=10)")
+    return _pg_pool
 
 
 # Valid column names for dynamic updates (security: prevents SQL injection)
@@ -47,7 +43,6 @@ def _build_update_clause(updates: dict, valid_columns: frozenset) -> tuple[str, 
 
     Validates all keys against valid_columns to prevent SQL injection.
     Returns (set_clause, values) for use in parameterized query.
-    Uses ? placeholders (ConnectionWrapper converts to %s for PostgreSQL).
 
     Raises ValueError if any key is not in valid_columns.
     """
@@ -55,105 +50,51 @@ def _build_update_clause(updates: dict, valid_columns: frozenset) -> tuple[str, 
         if key not in valid_columns:
             raise ValueError(f"Invalid column name: {key}")
 
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    # Convert Python bools to ints for SQLite/PG INTEGER column compatibility
+    set_clause = ", ".join(f"{k} = %s" for k in updates)
     values = [int(v) if isinstance(v, bool) else v for v in updates.values()]
     return set_clause, values
 
 
-class DictRowWrapper:
-    """Wrapper to make psycopg2 RealDictRow behave like sqlite3.Row for .keys() method."""
-
-    def __init__(self, row: dict):
-        self._row = row
-
-    def __getitem__(self, key):
-        return self._row[key]
-
-    def keys(self):
-        return self._row.keys()
-
-
 class ConnectionWrapper:
-    """Wrapper to normalize sqlite3 and psycopg2 connection interfaces.
+    """Wrapper around psycopg2 connections.
 
-    Provides a unified interface for both SQLite and PostgreSQL:
-    - Automatic placeholder conversion (? to %s for PostgreSQL)
-    - Consistent row factory (dict-like access)
-    - Helper methods for common patterns (insert_and_get_id, insert_ignore)
+    Provides helper methods for common patterns (insert_and_get_id, insert_ignore).
+    All SQL must use %s placeholders (native psycopg2 format).
     """
 
-    def __init__(self, conn, is_postgres: bool):
+    def __init__(self, conn):
         self._conn = conn
-        self._is_postgres = is_postgres
         self._cursor = None
 
-    @property
-    def is_postgres(self) -> bool:
-        """Check if this is a PostgreSQL connection."""
-        return self._is_postgres
-
     def execute(self, sql: str, params: tuple = ()) -> "ConnectionWrapper":
-        """Execute a query, converting placeholders if needed."""
-        if self._is_postgres:
-            # Convert ? to %s for PostgreSQL
-            sql = sql.replace("?", "%s")
-            self._cursor = self._conn.cursor(cursor_factory=RealDictCursor)
-        else:
-            self._cursor = self._conn.cursor()
+        """Execute a query with %s placeholders."""
+        self._cursor = self._conn.cursor(cursor_factory=RealDictCursor)
         self._cursor.execute(sql, params)
         return self
 
-    def executescript(self, sql: str) -> "ConnectionWrapper":
-        """Execute multiple statements (SQLite) or single execution (PostgreSQL)."""
-        if self._is_postgres:
-            # PostgreSQL can execute multiple statements in one call
-            self._cursor = self._conn.cursor()
-            self._cursor.execute(sql)
-        else:
-            self._conn.executescript(sql)
-            self._cursor = self._conn.cursor()
+    def execute_raw(self, sql: str) -> "ConnectionWrapper":
+        """Execute raw SQL (multi-statement, no parameters, no dict cursor)."""
+        self._cursor = self._conn.cursor()
+        self._cursor.execute(sql)
         return self
 
     def executemany(self, sql: str, params_list: list) -> "ConnectionWrapper":
         """Execute a query with multiple parameter sets."""
-        if self._is_postgres:
-            sql = sql.replace("?", "%s")
-            self._cursor = self._conn.cursor()
-        else:
-            self._cursor = self._conn.cursor()
+        self._cursor = self._conn.cursor()
         self._cursor.executemany(sql, params_list)
         return self
 
     def fetchone(self) -> Optional[Any]:
-        """Fetch one row."""
+        """Fetch one row as a dict (via RealDictCursor)."""
         if self._cursor is None:
             return None
-        row = self._cursor.fetchone()
-        if row is None:
-            return None
-        if self._is_postgres:
-            return DictRowWrapper(row)
-        return row
+        return self._cursor.fetchone()
 
     def fetchall(self) -> list:
-        """Fetch all rows."""
+        """Fetch all rows as dicts (via RealDictCursor)."""
         if self._cursor is None:
             return []
-        rows = self._cursor.fetchall()
-        if self._is_postgres:
-            return [DictRowWrapper(row) for row in rows]
-        return rows
-
-    @property
-    def lastrowid(self) -> Optional[int]:
-        """Get last inserted row ID."""
-        if self._cursor is None:
-            return None
-        if self._is_postgres:
-            # PostgreSQL needs RETURNING clause, handle in caller
-            return None
-        return self._cursor.lastrowid
+        return self._cursor.fetchall()
 
     @property
     def rowcount(self) -> int:
@@ -163,39 +104,20 @@ class ConnectionWrapper:
         return self._cursor.rowcount
 
     def insert_and_get_id(self, sql: str, params: tuple = ()) -> Optional[int]:
-        """Execute an INSERT and return the new row's ID.
-
-        For PostgreSQL, appends RETURNING id to the query.
-        For SQLite, uses lastrowid.
-        """
-        if self._is_postgres:
-            sql = sql.replace("?", "%s")
-            if "RETURNING" not in sql.upper():
-                sql = sql.rstrip().rstrip(";") + " RETURNING id"
-            self._cursor = self._conn.cursor(cursor_factory=RealDictCursor)
-            self._cursor.execute(sql, params)
-            row = self._cursor.fetchone()
-            return row["id"] if row else None
-        else:
-            self._cursor = self._conn.cursor()
-            self._cursor.execute(sql, params)
-            return self._cursor.lastrowid
+        """Execute an INSERT and return the new row's ID via RETURNING."""
+        if "RETURNING" not in sql.upper():
+            sql = sql.rstrip().rstrip(";") + " RETURNING id"
+        self._cursor = self._conn.cursor(cursor_factory=RealDictCursor)
+        self._cursor.execute(sql, params)
+        row = self._cursor.fetchone()
+        return row["id"] if row else None
 
     def insert_ignore(self, table: str, columns: list[str], values: tuple) -> "ConnectionWrapper":
-        """Execute an INSERT that ignores conflicts (duplicate keys).
-
-        Uses INSERT OR IGNORE for SQLite, INSERT ... ON CONFLICT DO NOTHING for PostgreSQL.
-        """
-        placeholders = ", ".join(["%s" if self._is_postgres else "?"] * len(values))
+        """Execute an INSERT ... ON CONFLICT DO NOTHING."""
+        placeholders = ", ".join(["%s"] * len(values))
         cols = ", ".join(columns)
-
-        if self._is_postgres:
-            sql = f"INSERT INTO {table} ({cols}) VALUES ({placeholders}) ON CONFLICT DO NOTHING"
-            self._cursor = self._conn.cursor(cursor_factory=RealDictCursor)
-        else:
-            sql = f"INSERT OR IGNORE INTO {table} ({cols}) VALUES ({placeholders})"
-            self._cursor = self._conn.cursor()
-
+        sql = f"INSERT INTO {table} ({cols}) VALUES ({placeholders}) ON CONFLICT DO NOTHING"
+        self._cursor = self._conn.cursor(cursor_factory=RealDictCursor)
         self._cursor.execute(sql, values)
         return self
 
@@ -213,20 +135,10 @@ class ConnectionWrapper:
 
 
 def get_connection() -> ConnectionWrapper:
-    """Get a database connection with row factory."""
-    if USE_POSTGRES:
-        pool = _get_pg_pool()
-        conn = pool.getconn()
-        return ConnectionWrapper(conn, is_postgres=True)
-    else:
-        config.SQLITE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(str(config.SQLITE_PATH), check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA synchronous=NORMAL")
-        conn.execute("PRAGMA cache_size=-65536")
-        conn.execute("PRAGMA foreign_keys = ON")
-        return ConnectionWrapper(conn, is_postgres=False)
+    """Get a database connection from the pool."""
+    pool = _get_pg_pool()
+    conn = pool.getconn()
+    return ConnectionWrapper(conn)
 
 
 @contextmanager
@@ -236,9 +148,9 @@ def get_db():
     try:
         yield conn
         conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
-        if USE_POSTGRES:
-            pool = _get_pg_pool()
-            pool.putconn(conn._conn)
-        else:
-            conn.close()
+        pool = _get_pg_pool()
+        pool.putconn(conn._conn)

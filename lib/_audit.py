@@ -10,7 +10,6 @@ import os
 from contextlib import contextmanager
 from typing import Optional
 
-import psycopg2
 from psycopg2.pool import ThreadedConnectionPool
 
 logger = logging.getLogger(__name__)
@@ -107,9 +106,18 @@ def log_query(
                  query_details, success, error, execution_time_ms, row_count)
                 VALUES (NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
-                (source, instance, caller, conversation_id, query_type,
-                 json.dumps(query_details, default=str),
-                 success, error, execution_time_ms, row_count),
+                (
+                    source,
+                    instance,
+                    caller,
+                    conversation_id,
+                    query_type,
+                    json.dumps(query_details, default=str),
+                    success,
+                    error,
+                    execution_time_ms,
+                    row_count,
+                ),
             )
     except Exception as e:
         logger.warning("Failed to log query: %s", e)

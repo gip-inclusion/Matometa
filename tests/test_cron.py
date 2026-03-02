@@ -34,17 +34,20 @@ def interactive_dir(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def db_setup(tmp_path, monkeypatch):
-    """Set up a temporary database."""
-    db_path = tmp_path / "test.db"
-    monkeypatch.setattr(config, "SQLITE_PATH", db_path)
-    monkeypatch.setattr(config, "DATABASE_URL", None)
-    # Re-import to pick up the new path
-    import web.db as db_mod
-
-    monkeypatch.setattr(db_mod, "USE_POSTGRES", False)
+def db_setup(monkeypatch):
+    """Ensure database tables exist and clean up after test."""
     init_db()
-    return db_path
+    yield
+
+    from web.db import get_db
+
+    with get_db() as conn:
+        conn.execute_raw("""
+            TRUNCATE TABLE messages, conversation_tags, report_tags,
+                uploaded_files, cron_runs, pinned_items, pm_commands,
+                pm_heartbeat, reports, conversations, tags, schema_version
+                CASCADE;
+        """)
 
 
 def _create_app(interactive_dir, slug, cron_script=None, app_md=None):
@@ -248,7 +251,7 @@ class TestRunCronTask:
         run_cron_task("db-app", trigger="manual")
 
         with get_db() as conn:
-            row = conn.execute("SELECT * FROM cron_runs WHERE app_slug = ?", ("db-app",)).fetchone()
+            row = conn.execute("SELECT * FROM cron_runs WHERE app_slug = %s", ("db-app",)).fetchone()
             assert row is not None
             assert row["status"] == "success"
             assert row["trigger"] == "manual"

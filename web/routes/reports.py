@@ -174,7 +174,7 @@ def publish_to_notion(report_id: int):
     from ..database import get_db
 
     with get_db() as conn:
-        conn.execute("UPDATE reports SET notion_url = ? WHERE id = ?", (url, report_id))
+        conn.execute("UPDATE reports SET notion_url = %s WHERE id = %s", (url, report_id))
 
     return {"url": url}
 

@@ -5,7 +5,6 @@ Run with: pytest tests/test_query.py -v
 Integration tests (require .env): pytest tests/test_query.py -v -m integration
 """
 
-import json
 from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
@@ -364,7 +363,6 @@ class TestConversationIdFromEnv:
             )
 
         assert result.success is True
-
 
 
 # --- Integration tests ---

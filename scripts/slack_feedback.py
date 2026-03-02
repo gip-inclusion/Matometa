@@ -44,7 +44,7 @@ def get_active_emails() -> list[str]:
 
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT DISTINCT user_id FROM conversations WHERE updated_at >= ?",
+            "SELECT DISTINCT user_id FROM conversations WHERE updated_at >= %s",
             (cutoff,),
         ).fetchall()
 

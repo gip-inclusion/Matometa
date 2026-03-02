@@ -36,7 +36,7 @@ ALLOWED_TOOLS = os.getenv(
     "Bash(curl:*github.com/gip-inclusion*),Bash(curl:*github.com/betagouv*),"
     "Bash(curl:*raw.githubusercontent.com/gip-inclusion*),Bash(curl:*raw.githubusercontent.com/betagouv*),"
     "Bash(curl:*api.github.com*),"
-    "Bash(jq:*),Bash(sqlite3:*),"
+    "Bash(jq:*),"
     "Bash(python:*),Bash(python3:*),"
     "Bash(.venv/bin/python:*)",
 )
@@ -73,9 +73,8 @@ ADMIN_USERS = [
     if email.strip()
 ]
 
-# Database: uses PostgreSQL if DATABASE_URL is set, otherwise SQLite
+# Database: PostgreSQL via DATABASE_URL (required)
 DATABASE_URL = os.getenv("DATABASE_URL")
-SQLITE_PATH = DATA_DIR / "matometa.db"
 
 # Agent-produced scripts directory
 SCRIPTS_DIR = DATA_DIR / "scripts"
@@ -118,8 +117,7 @@ USE_S3 = bool(S3_BUCKET and S3_ACCESS_KEY and S3_SECRET_KEY)
 # Additional directories the agent can access (beyond working directory)
 ADDITIONAL_DIRS = ["/tmp"]
 
-# Research corpus (Notion "Connaissance du terrain")
-NOTION_RESEARCH_DB = DATA_DIR / "notion_research.db"
+# Research corpus embedding API
 DEEPINFRA_API_KEY = os.getenv("DEEPINFRA_API_KEY")
 
 # Feature flags

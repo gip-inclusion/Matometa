@@ -82,6 +82,7 @@ TEST_CASES = [
 @dataclass
 class AgentResult:
     """Result from a sub-agent search."""
+
     test_id: str
     mode: str  # "markdown" or "sqlite"
     found_card_ids: list[int]
@@ -98,7 +99,7 @@ def run_markdown_agent(test_case: dict) -> AgentResult:
     prompt = f"""You have access ONLY to markdown files in knowledge/stats/.
 Do NOT use any SQLite database or Python scripts.
 
-Your task: {test_case['question']}
+Your task: {test_case["question"]}
 
 Search the markdown files to find the relevant Metabase card(s).
 Return your answer in this exact JSON format:
@@ -111,10 +112,14 @@ Use Glob to find files, then Read to examine them. Start with knowledge/stats/_i
         result = subprocess.run(
             [
                 "claude",
-                "-p", prompt,
-                "--output-format", "text",
-                "--max-turns", "10",
-                "--allowedTools", "Glob,Read",
+                "-p",
+                prompt,
+                "--output-format",
+                "text",
+                "--max-turns",
+                "10",
+                "--allowedTools",
+                "Glob,Read",
             ],
             capture_output=True,
             text=True,
@@ -168,7 +173,7 @@ def run_sqlite_agent(test_case: dict) -> AgentResult:
     prompt = f"""You have access ONLY to the SQLite database at {db_path}.
 Do NOT read any markdown files.
 
-Your task: {test_case['question']}
+Your task: {test_case["question"]}
 
 ## Database Schema
 
@@ -214,10 +219,14 @@ Return your answer in this exact JSON format:
         result = subprocess.run(
             [
                 "claude",
-                "-p", prompt,
-                "--output-format", "text",
-                "--max-turns", "10",
-                "--allowedTools", "Bash(sqlite3:*)",
+                "-p",
+                prompt,
+                "--output-format",
+                "text",
+                "--max-turns",
+                "10",
+                "--allowedTools",
+                "Bash(sqlite3:*)",
             ],
             capture_output=True,
             text=True,
@@ -277,10 +286,10 @@ def extract_card_ids(response: str) -> list[int]:
 
     # Fallback: look for patterns like "ID: 1234" or "card 1234"
     id_patterns = [
-        r'\*\*ID:\*\*\s*(\d+)',
-        r'ID:\s*(\d+)',
-        r'card[_\s]+id[:\s]+(\d+)',
-        r'card\s+(\d{4,})',
+        r"\*\*ID:\*\*\s*(\d+)",
+        r"ID:\s*(\d+)",
+        r"card[_\s]+id[:\s]+(\d+)",
+        r"card\s+(\d{4,})",
     ]
 
     found_ids = set()
@@ -314,11 +323,10 @@ def evaluate_result(result: AgentResult, test_case: dict) -> dict:
         f1 = 1.0 if found_ids else 0
 
     # Check if keywords appear in response
-    keyword_hits = sum(
-        1 for kw in test_case.get("expected_keywords", [])
-        if kw.lower() in result.raw_response.lower()
+    keyword_hits = sum(1 for kw in test_case.get("expected_keywords", []) if kw.lower() in result.raw_response.lower())
+    keyword_coverage = (
+        keyword_hits / len(test_case.get("expected_keywords", [1])) if test_case.get("expected_keywords") else 1
     )
-    keyword_coverage = keyword_hits / len(test_case.get("expected_keywords", [1])) if test_case.get("expected_keywords") else 1
 
     return {
         "test_id": result.test_id,
@@ -353,7 +361,7 @@ def run_test_suite(test_cases: list[dict] = None, modes: list[str] = None):
     print()
 
     for i, test_case in enumerate(test_cases):
-        print(f"\n[{i+1}/{len(test_cases)}] Test: {test_case['id']}")
+        print(f"\n[{i + 1}/{len(test_cases)}] Test: {test_case['id']}")
         print(f"    Question: {test_case['question'][:60]}...")
         print(f"    Difficulty: {test_case['difficulty']}")
 
@@ -387,7 +395,7 @@ def run_test_suite(test_cases: list[dict] = None, modes: list[str] = None):
         avg_duration = sum(r["duration_seconds"] for r in mode_results) / len(mode_results) if mode_results else 0
 
         print(f"\n{mode.upper()}:")
-        print(f"  Accuracy: {correct}/{len(mode_results)} ({100*correct/len(mode_results):.0f}%)")
+        print(f"  Accuracy: {correct}/{len(mode_results)} ({100 * correct / len(mode_results):.0f}%)")
         print(f"  Avg F1: {avg_f1:.2f}")
         print(f"  Avg Duration: {avg_duration:.1f}s")
 
@@ -404,8 +412,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Test card retrieval performance")
-    parser.add_argument("--mode", choices=["markdown", "sqlite", "both"], default="both",
-                        help="Which mode(s) to test")
+    parser.add_argument("--mode", choices=["markdown", "sqlite", "both"], default="both", help="Which mode(s) to test")
     parser.add_argument("--test", type=str, help="Run specific test by ID")
     parser.add_argument("--quick", action="store_true", help="Run only easy tests")
     args = parser.parse_args()

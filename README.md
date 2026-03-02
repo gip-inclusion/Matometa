@@ -34,7 +34,6 @@ Autometa combine les APIs **Matomo** (analytics web) et **Metabase** (données m
 │   └── static/          # CSS, JS, assets
 │
 ├── data/                # Données runtime (gitignored)
-│   ├── matometa.db      # Base SQLite des conversations
 │   ├── scripts/         # Scripts one-off générés par l'agent
 │   └── interactive/     # Fichiers téléchargeables (servis à /interactive/)
 │
@@ -126,7 +125,7 @@ Toutes les variables sont documentées dans `.env.example`. Voici les groupes pr
 |--------|-----------|--------|
 | **Agent** | `AGENT_BACKEND`, `CLAUDE_CODE_OAUTH_TOKEN` | Oui |
 | **Web** | `ADMIN_USERS`, `BASE_URL` | Oui |
-| **Base de données** | `DATABASE_URL` | Non (SQLite par défaut) |
+| **Base de données** | `DATABASE_URL` | Oui (PostgreSQL requis) |
 | **S3** | `S3_BUCKET`, `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` | Non (fichiers locaux) |
 | **Sources de données** | `MATOMO_API_KEY`, `METABASE_*_API_KEY`, `NOTION_TOKEN`, `GRIST_API_KEY` | Selon `config/sources.yaml` |
 | **Claude CLI** | `CLAUDE_CLI`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY` | Quand `AGENT_BACKEND=cli` |

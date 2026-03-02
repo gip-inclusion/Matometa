@@ -37,7 +37,7 @@ def fix_updated_at():
             new_ts = row["last_msg"]
             print(f"  {conv_id[:8]}... {old_ts} -> {new_ts}")
 
-            conn.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (new_ts, conv_id))
+            conn.execute("UPDATE conversations SET updated_at = %s WHERE id = %s", (new_ts, conv_id))
 
         print(f"\nFixed {len(rows)} conversations")
 

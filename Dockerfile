@@ -47,7 +47,7 @@ RUN uv export --frozen --group embeddings --no-hashes | \
 # Copy application code
 COPY --chown=autometa:autometa . .
 
-# Create data directories for SQLite, uploads, and modified files
+# Create data directories for uploads and modified files
 RUN mkdir -p /app/data /app/data/uploads /app/data/modified \
     && chown autometa:autometa /app/data /app/data/uploads /app/data/modified
 

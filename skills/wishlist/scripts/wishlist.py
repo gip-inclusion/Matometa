@@ -4,18 +4,18 @@
 import argparse
 import json
 import os
-import sqlite3
 import urllib.request
 from datetime import datetime
 from pathlib import Path
 
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
 
-# Database path
-DB_PATH = Path(__file__).parent.parent.parent.parent / "data" / "matometa.db"
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Notion config
 NOTION_TOKEN = os.getenv("NOTION_TOKEN")
@@ -24,36 +24,11 @@ NOTION_WISHLIST_DB = os.getenv("NOTION_WISHLIST_DB")
 CATEGORIES = ["permission", "tool", "knowledge", "skill", "workflow", "other"]
 
 
-def init_db():
-    """Initialize wishlist table if not exists."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS wishlist (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT NOT NULL,
-            category TEXT NOT NULL,
-            title TEXT NOT NULL,
-            description TEXT,
-            conversation_id TEXT,
-            status TEXT DEFAULT 'open',
-            notion_page_id TEXT
-        )
-    """)
-    conn.execute("""
-        CREATE INDEX IF NOT EXISTS idx_wishlist_category
-        ON wishlist(category)
-    """)
-    conn.execute("""
-        CREATE INDEX IF NOT EXISTS idx_wishlist_status
-        ON wishlist(status)
-    """)
-    # Add notion_page_id column if missing (migration)
-    try:
-        conn.execute("ALTER TABLE wishlist ADD COLUMN notion_page_id TEXT")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-    conn.commit()
-    conn.close()
+def _get_conn():
+    """Get a PostgreSQL connection."""
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL not set in .env")
+    return psycopg2.connect(DATABASE_URL)
 
 
 def push_to_notion(title: str, category: str, description: str = None) -> str | None:
@@ -77,7 +52,6 @@ def push_to_notion(title: str, category: str, description: str = None) -> str | 
     if description:
         properties["Description"] = {"rich_text": [{"text": {"content": description}}]}
 
-    # No children blocks needed - description goes in property
     children = []
 
     payload = {
@@ -118,17 +92,15 @@ def add_wish(category: str, title: str, description: str = None, conversation_id
     # Push to Notion first
     notion_page_id = push_to_notion(title, category, description)
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(
+    conn = _get_conn()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(
         """INSERT INTO wishlist (timestamp, category, title, description, conversation_id, notion_page_id)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (datetime.now().isoformat(), category, title, description, conversation_id, notion_page_id),
+           VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+        (datetime.now().isoformat(), category, title, description, conversation_id, notion_page_id)
     )
+    wish_id = cur.fetchone()["id"]
     conn.commit()
-
-    # Get the ID of the inserted row
-    cursor = conn.execute("SELECT last_insert_rowid()")
-    wish_id = cursor.fetchone()[0]
     conn.close()
 
     print(f"Added wish #{wish_id}: [{category}] {title}")
@@ -137,24 +109,25 @@ def add_wish(category: str, title: str, description: str = None, conversation_id
 
 def list_wishes(category: str = None, status: str = "open", limit: int = 20):
     """List wishes from the database."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = _get_conn()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
 
     query = "SELECT * FROM wishlist WHERE 1=1"
     params = []
 
     if category:
-        query += " AND category = ?"
+        query += " AND category = %s"
         params.append(category)
 
     if status:
-        query += " AND status = ?"
+        query += " AND status = %s"
         params.append(status)
 
-    query += " ORDER BY timestamp DESC LIMIT ?"
+    query += " ORDER BY timestamp DESC LIMIT %s"
     params.append(limit)
 
-    rows = conn.execute(query, params).fetchall()
+    cur.execute(query, params)
+    rows = cur.fetchall()
     conn.close()
 
     if not rows:
@@ -164,18 +137,21 @@ def list_wishes(category: str = None, status: str = "open", limit: int = 20):
     print(f"{'ID':<4} {'Date':<12} {'Category':<10} {'Title'}")
     print("-" * 60)
     for row in rows:
-        date = row["timestamp"][:10]
+        date = row["timestamp"][:10] if isinstance(row["timestamp"], str) else row["timestamp"].strftime("%Y-%m-%d")
         print(f"{row['id']:<4} {date:<12} {row['category']:<10} {row['title']}")
         if row["description"]:
-            # Indent description
             for line in row["description"].split("\n"):
                 print(f"     {line}")
 
 
 def update_status(wish_id: int, status: str):
     """Update wish status (open, done, wontfix)."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("UPDATE wishlist SET status = ? WHERE id = ?", (status, wish_id))
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE wishlist SET status = %s WHERE id = %s",
+        (status, wish_id)
+    )
     conn.commit()
     conn.close()
     print(f"Updated wish #{wish_id} to status: {status}")
@@ -187,12 +163,16 @@ def sync_to_notion():
         print("Error: NOTION_TOKEN and NOTION_WISHLIST_DB must be set")
         return
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute("SELECT * FROM wishlist WHERE notion_page_id IS NULL ORDER BY timestamp").fetchall()
+    conn = _get_conn()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(
+        "SELECT * FROM wishlist WHERE notion_page_id IS NULL ORDER BY timestamp"
+    )
+    rows = cur.fetchall()
 
     if not rows:
         print("All wishes already synced to Notion.")
+        conn.close()
         return
 
     print(f"Syncing {len(rows)} wishes to Notion...")
@@ -200,7 +180,10 @@ def sync_to_notion():
     for row in rows:
         page_id = push_to_notion(row["title"], row["category"], row["description"])
         if page_id:
-            conn.execute("UPDATE wishlist SET notion_page_id = ? WHERE id = ?", (page_id, row["id"]))
+            cur.execute(
+                "UPDATE wishlist SET notion_page_id = %s WHERE id = %s",
+                (page_id, row["id"])
+            )
             conn.commit()
             synced += 1
             print(f"  #{row['id']}: {row['title']}")
@@ -211,29 +194,29 @@ def sync_to_notion():
 
 def stats():
     """Show wishlist statistics."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = _get_conn()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
 
     # By category
     print("By category:")
-    rows = conn.execute("""
+    cur.execute("""
         SELECT category, COUNT(*) as count
         FROM wishlist
         WHERE status = 'open'
         GROUP BY category
         ORDER BY count DESC
-    """).fetchall()
-    for row in rows:
+    """)
+    for row in cur.fetchall():
         print(f"  {row['category']}: {row['count']}")
 
     # By status
     print("\nBy status:")
-    rows = conn.execute("""
+    cur.execute("""
         SELECT status, COUNT(*) as count
         FROM wishlist
         GROUP BY status
-    """).fetchall()
-    for row in rows:
+    """)
+    for row in cur.fetchall():
         print(f"  {row['status']}: {row['count']}")
 
     conn.close()
@@ -269,9 +252,6 @@ def main():
     subparsers.add_parser("sync", help="Sync unsynced wishes to Notion")
 
     args = parser.parse_args()
-
-    # Initialize DB
-    init_db()
 
     if args.command == "add":
         add_wish(args.category, args.title, args.description, args.conversation_id)

@@ -55,8 +55,6 @@ result = execute_query(
 |------|---------|
 | `$DATA_DIR/scripts/` | One-off query scripts (produced by agent) |
 | `$DATA_DIR/interactive/` | User-downloadable files (CSV exports, dashboards) |
-| `$DATA_DIR/matometa.db` | SQLite database (conversations, reports) |
-| `$DATA_DIR/notion_research.db` | Research corpus (interviews, verbatims, observations) |
 
 **Sync commands:**
 ```bash
@@ -203,7 +201,7 @@ knowledge/
 │   ├── cohorts.md      # Premium: cohort analysis
 │   └── funnels.md      # Premium: conversion funnels
 ├── notion/         # Notion API integration (publish, wishlist, corpus)
-└── research/       # Corpus ethnographique (bases Notion, schéma SQLite, segments)
+└── research/       # Corpus ethnographique (bases Notion, segments, recherche vectorielle)
 ```
 
 **Load only what's relevant.** For site queries: `knowledge/sites/{site}.md`.
@@ -235,7 +233,6 @@ Use the `Skill` tool to invoke these skills before querying:
 | `python <script>` | Run Python scripts (in container: `/app`) |
 | `curl` | API calls (but prefer Python clients) |
 | `jq` | Parse JSON |
-| `sqlite3` | Database queries |
 
 **DO NOT use heredocs.** Write scripts to files instead.
 
@@ -286,7 +283,6 @@ print(model.transmat_)  # Probability of transitioning between states
 | Package | Purpose |
 |---------|---------|
 | `psycopg2` | PostgreSQL client |
-| `sqlite3` | SQLite (stdlib) |
 
 **Project libraries:**
 | Import | Purpose |
@@ -443,7 +439,7 @@ else:
 
 ### Report Storage
 
-Reports are stored in the SQLite database at `./data/matometa.db`. This applies to both
+Reports are stored in the PostgreSQL database (via `DATABASE_URL`). This applies to both
 Web UI mode and CLI mode.
 
 **DO NOT write report files** to `./reports/`. That folder is archived.
