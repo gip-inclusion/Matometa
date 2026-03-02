@@ -8,7 +8,6 @@ Run with: pytest tests/test_bugs.py -v
 """
 
 import json
-import sqlite3
 from unittest.mock import MagicMock, patch
 
 import pytest
