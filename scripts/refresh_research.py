@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """Incremental sync + embed for Notion 'Connaissance du terrain' databases.
 
-Combines sync_notion_research.py and embed_notion_research.py into a single
-incremental pipeline:
-
+Pipeline:
 1. Query each Notion database for pages
 2. Compare last_edited_time to detect new/changed/deleted pages
 3. Only re-fetch blocks for changed pages
@@ -13,14 +11,13 @@ incremental pipeline:
 Usage:
     python scripts/refresh_research.py
     python scripts/refresh_research.py --full     # force full rebuild
-    python scripts/refresh_research.py --db data/notion_research.db
+    python scripts/refresh_research.py --sync-only
 """
 
 import argparse
 import hashlib
 import json
 import os
-import sqlite3
 import sys
 import time
 import urllib.error
@@ -30,12 +27,14 @@ from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
 NOTION_TOKEN = os.getenv("NOTION_TOKEN")
-DEFAULT_DB_PATH = Path(__file__).parent.parent / "data" / "notion_research.db"
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 MODEL_NAME = "Qwen/Qwen3-Embedding-0.6B"
 CHUNK_THRESHOLD = 5
@@ -82,7 +81,18 @@ _request_count = 0
 
 
 # =============================================================================
-# Notion API helpers (from sync_notion_research.py)
+# DB helper
+# =============================================================================
+
+def _execute(conn, sql, params=()):
+    """Execute SQL with RealDictCursor, return cursor for fetchall()/fetchone()."""
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(sql, params)
+    return cur
+
+
+# =============================================================================
+# Notion API helpers
 # =============================================================================
 
 def _rate_limited_request(url, data=None, method="GET", max_retries=5):
@@ -207,23 +217,25 @@ def extract_page_properties(page):
 
 
 # =============================================================================
-# Chunking helpers (from embed_notion_research.py)
+# Chunking helpers
 # =============================================================================
 
 def get_page_block_texts(conn, page_id):
-    rows = conn.execute(
-        "SELECT text_content FROM blocks WHERE page_id = ? ORDER BY position",
+    rows = _execute(
+        conn,
+        "SELECT text_content FROM research_blocks WHERE page_id = %s ORDER BY position",
         (page_id,),
     ).fetchall()
     return [r["text_content"] for r in rows if r["text_content"] and r["text_content"].strip()]
 
 
 def resolve_relation_names(conn, page_id, property_name):
-    rows = conn.execute(
+    rows = _execute(
+        conn,
         """
-        SELECT p.title FROM relations r
-        JOIN pages p ON p.id = r.target_page_id
-        WHERE r.source_page_id = ? AND r.property_name = ?
+        SELECT p.title FROM research_relations r
+        JOIN research_pages p ON p.id = r.target_page_id
+        WHERE r.source_page_id = %s AND r.property_name = %s
         """,
         (page_id, property_name),
     ).fetchall()
@@ -266,8 +278,9 @@ def _split_text(text, max_chars):
 
 
 def build_chunks(conn):
-    pages = conn.execute(
-        "SELECT id, database_key, database_name, title, properties_json FROM pages"
+    pages = _execute(
+        conn,
+        "SELECT id, database_key, database_name, title, properties_json FROM research_pages",
     ).fetchall()
     chunks = []
     for page in pages:
@@ -349,18 +362,21 @@ def text_hash(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
-def embedding_to_blob(vec):
-    return vec.astype(np.float32).tobytes()
+def embedding_to_pgvector(vec):
+    """Convert numpy array to pgvector string literal."""
+    return '[' + ','.join(str(float(x)) for x in vec) + ']'
 
 
 # =============================================================================
-# Schema
+# Schema (idempotent, for standalone runs without web app)
 # =============================================================================
 
-def ensure_schema(conn):
-    """Create tables if they don't exist (idempotent)."""
-    conn.executescript("""
-        CREATE TABLE IF NOT EXISTS pages (
+def ensure_research_schema(conn):
+    """Create research tables if they don't exist."""
+    cur = conn.cursor()
+    cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS research_pages (
             id TEXT PRIMARY KEY,
             database_key TEXT NOT NULL,
             database_name TEXT NOT NULL,
@@ -369,105 +385,45 @@ def ensure_schema(conn):
             url TEXT,
             created_time TEXT,
             last_edited_time TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS blocks (
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS research_blocks (
             id TEXT PRIMARY KEY,
-            page_id TEXT NOT NULL REFERENCES pages(id),
+            page_id TEXT NOT NULL REFERENCES research_pages(id) ON DELETE CASCADE,
             type TEXT NOT NULL,
             text_content TEXT,
             position INTEGER,
-            parent_block_id TEXT,
-            FOREIGN KEY (page_id) REFERENCES pages(id)
-        );
-
-        CREATE TABLE IF NOT EXISTS relations (
-            source_page_id TEXT NOT NULL,
+            parent_block_id TEXT
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS research_relations (
+            source_page_id TEXT NOT NULL REFERENCES research_pages(id) ON DELETE CASCADE,
             property_name TEXT NOT NULL,
-            target_page_id TEXT NOT NULL,
-            FOREIGN KEY (source_page_id) REFERENCES pages(id)
-        );
-
-        CREATE TABLE IF NOT EXISTS sync_meta (
+            target_page_id TEXT NOT NULL
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS research_chunks (
+            id SERIAL PRIMARY KEY,
+            page_id TEXT NOT NULL REFERENCES research_pages(id) ON DELETE CASCADE,
+            chunk_index INTEGER NOT NULL,
+            text TEXT NOT NULL,
+            text_hash TEXT NOT NULL,
+            database_key TEXT NOT NULL,
+            embedding vector(1024)
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS research_sync_meta (
             key TEXT PRIMARY KEY,
             value TEXT
-        );
-
-        CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
-            page_id, title, properties_text
-        );
-
-        CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(
-            block_id, text_content
-        );
+        )
     """)
-    # Migrate FTS tables from content-linked to standalone (if needed)
-    fts_sql = conn.execute("SELECT sql FROM sqlite_master WHERE name = 'pages_fts'").fetchone()
-    if fts_sql and "content='pages'" in (fts_sql[0] or ""):
-        print("  Migrating FTS tables to standalone schema...")
-        conn.executescript("""
-            DROP TABLE IF EXISTS pages_fts;
-            DROP TABLE IF EXISTS blocks_fts;
-            CREATE VIRTUAL TABLE pages_fts USING fts5(page_id, title, properties_text);
-            CREATE VIRTUAL TABLE blocks_fts USING fts5(block_id, text_content);
-        """)
-        # Repopulate pages_fts from existing data
-        for page in conn.execute("SELECT id, title, properties_json FROM pages").fetchall():
-            props = json.loads(page[2]) if page[2] else {}
-            parts = []
-            for k, v in props.items():
-                if v is None:
-                    continue
-                if isinstance(v, list):
-                    if v and all(isinstance(x, str) and len(x) == 36 for x in v):
-                        continue
-                    parts.append(f"{k}: {', '.join(str(x) for x in v)}")
-                else:
-                    parts.append(f"{k}: {v}")
-            conn.execute(
-                "INSERT INTO pages_fts (page_id, title, properties_text) VALUES (?, ?, ?)",
-                (page[0], page[1], "\n".join(parts)),
-            )
-        # Repopulate blocks_fts
-        for block in conn.execute("SELECT id, text_content FROM blocks WHERE text_content IS NOT NULL AND text_content != ''").fetchall():
-            conn.execute(
-                "INSERT INTO blocks_fts (block_id, text_content) VALUES (?, ?)",
-                (block[0], block[1]),
-            )
-        conn.commit()
-        print("  FTS migration complete.")
-
-    # Create chunks table if it doesn't exist (new DB)
-    if not conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks'").fetchone():
-        conn.execute("""
-            CREATE TABLE chunks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                page_id TEXT NOT NULL,
-                chunk_index INTEGER NOT NULL,
-                text TEXT NOT NULL,
-                text_hash TEXT NOT NULL,
-                database_key TEXT NOT NULL,
-                embedding BLOB,
-                FOREIGN KEY (page_id) REFERENCES pages(id)
-            )
-        """)
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_hash ON chunks(text_hash)")
-        conn.commit()
-
-    # Add text_hash column if missing (upgrading from old schema)
-    cols = [r[1] for r in conn.execute("PRAGMA table_info(chunks)").fetchall()]
-    if "text_hash" not in cols:
-        conn.execute("ALTER TABLE chunks ADD COLUMN text_hash TEXT NOT NULL DEFAULT ''")
-        conn.commit()
-        # Backfill hashes for existing chunks so we can reuse their embeddings
-        rows = conn.execute("SELECT id, text FROM chunks WHERE text_hash = ''").fetchall()
-        if rows:
-            print(f"  Migrating: computing text_hash for {len(rows)} existing chunks...")
-            for row in rows:
-                h = hashlib.sha256(row["text"].encode("utf-8")).hexdigest()[:16]
-                conn.execute("UPDATE chunks SET text_hash = ? WHERE id = ?", (h, row["id"]))
-            conn.commit()
-            print(f"  Done.")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_research_chunks_hash ON research_chunks(text_hash)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_research_chunks_page ON research_chunks(page_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_research_blocks_page ON research_blocks(page_id)")
     conn.commit()
 
 
@@ -477,13 +433,9 @@ def ensure_schema(conn):
 
 def sync_pages(conn, full=False):
     """Sync pages from Notion. Returns set of page IDs that changed."""
-    # Load existing page timestamps
     existing = {}
-    try:
-        for row in conn.execute("SELECT id, last_edited_time FROM pages"):
-            existing[row["id"]] = row["last_edited_time"]
-    except sqlite3.OperationalError:
-        pass  # Table might not exist yet
+    for row in _execute(conn, "SELECT id, last_edited_time FROM research_pages").fetchall():
+        existing[row["id"]] = row["last_edited_time"]
 
     all_notion_ids = set()
     changed_ids = set()
@@ -519,41 +471,32 @@ def sync_pages(conn, full=False):
             changed_ids.add(page_id)
 
             # Upsert page
-            conn.execute(
-                "INSERT OR REPLACE INTO pages (id, database_key, database_name, title, properties_json, url, created_time, last_edited_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (page_id, db_key, db_name, title,
-                 json.dumps(props, ensure_ascii=False),
-                 page.get("url"), page.get("created_time"), last_edited),
-            )
-
-            # Update FTS
-            conn.execute("DELETE FROM pages_fts WHERE page_id = ?", (page_id,))
-            props_text_parts = []
-            for k, v in props.items():
-                if v is None:
-                    continue
-                if isinstance(v, list):
-                    if v and all(isinstance(x, str) and len(x) == 36 for x in v):
-                        continue
-                    props_text_parts.append(f"{k}: {', '.join(str(x) for x in v)}")
-                else:
-                    props_text_parts.append(f"{k}: {v}")
-            conn.execute(
-                "INSERT INTO pages_fts (page_id, title, properties_text) VALUES (?, ?, ?)",
-                (page_id, title, "\n".join(props_text_parts)),
-            )
+            _execute(conn, """
+                INSERT INTO research_pages (id, database_key, database_name, title, properties_json, url, created_time, last_edited_time)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO UPDATE SET
+                    database_key = EXCLUDED.database_key,
+                    database_name = EXCLUDED.database_name,
+                    title = EXCLUDED.title,
+                    properties_json = EXCLUDED.properties_json,
+                    url = EXCLUDED.url,
+                    created_time = EXCLUDED.created_time,
+                    last_edited_time = EXCLUDED.last_edited_time
+            """, (page_id, db_key, db_name, title,
+                  json.dumps(props, ensure_ascii=False),
+                  page.get("url"), page.get("created_time"), last_edited))
 
             # Update relations
-            conn.execute("DELETE FROM relations WHERE source_page_id = ?", (page_id,))
+            _execute(conn, "DELETE FROM research_relations WHERE source_page_id = %s", (page_id,))
             for prop_name, prop_val in props.items():
                 if isinstance(prop_val, list) and prop_val and all(
                     isinstance(v, str) and len(v) == 36 for v in prop_val
                 ):
                     for target_id in prop_val:
-                        conn.execute(
-                            "INSERT INTO relations (source_page_id, property_name, target_page_id) VALUES (?, ?, ?)",
-                            (page_id, prop_name, target_id),
-                        )
+                        _execute(conn, """
+                            INSERT INTO research_relations (source_page_id, property_name, target_page_id)
+                            VALUES (%s, %s, %s)
+                        """, (page_id, prop_name, target_id))
 
             # Fetch blocks for changed pages
             try:
@@ -562,42 +505,27 @@ def sync_pages(conn, full=False):
                 print(f"  Warning: failed to fetch blocks for '{title[:50]}': {e}")
                 blocks = []
 
-            # Clear old blocks and their FTS entries
-            old_block_ids = [r[0] for r in conn.execute("SELECT id FROM blocks WHERE page_id = ?", (page_id,)).fetchall()]
-            for bid in old_block_ids:
-                conn.execute("DELETE FROM blocks_fts WHERE block_id = ?", (bid,))
-            conn.execute("DELETE FROM blocks WHERE page_id = ?", (page_id,))
+            # Clear old blocks (CASCADE doesn't apply here — blocks have their own PK)
+            _execute(conn, "DELETE FROM research_blocks WHERE page_id = %s", (page_id,))
             for pos, block in enumerate(blocks):
                 text = extract_block_text(block)
-                conn.execute(
-                    "INSERT INTO blocks (id, page_id, type, text_content, position, parent_block_id) VALUES (?, ?, ?, ?, ?, ?)",
-                    (block["id"], page_id, block["type"], text, pos,
-                     block.get("parent", {}).get("block_id")),
-                )
-                if text.strip():
-                    conn.execute(
-                        "INSERT INTO blocks_fts (block_id, text_content) VALUES (?, ?)",
-                        (block["id"], text),
-                    )
+                _execute(conn, """
+                    INSERT INTO research_blocks (id, page_id, type, text_content, position, parent_block_id)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (block["id"], page_id, block["type"], text, pos,
+                      block.get("parent", {}).get("block_id")))
 
         print(f"  {db_new} new, {db_updated} updated, {db_unchanged} unchanged")
         stats["new"] += db_new
         stats["updated"] += db_updated
         stats["unchanged"] += db_unchanged
 
-    # Delete pages removed from Notion
+    # Delete pages removed from Notion (CASCADE handles blocks, relations, chunks)
     existing_ids = set(existing.keys())
     deleted_ids = existing_ids - all_notion_ids
     if deleted_ids:
         for pid in deleted_ids:
-            old_block_ids = [r[0] for r in conn.execute("SELECT id FROM blocks WHERE page_id = ?", (pid,)).fetchall()]
-            for bid in old_block_ids:
-                conn.execute("DELETE FROM blocks_fts WHERE block_id = ?", (bid,))
-            conn.execute("DELETE FROM blocks WHERE page_id = ?", (pid,))
-            conn.execute("DELETE FROM relations WHERE source_page_id = ?", (pid,))
-            conn.execute("DELETE FROM chunks WHERE page_id = ?", (pid,))
-            conn.execute("DELETE FROM pages_fts WHERE page_id = ?", (pid,))
-            conn.execute("DELETE FROM pages WHERE id = ?", (pid,))
+            _execute(conn, "DELETE FROM research_pages WHERE id = %s", (pid,))
         stats["deleted"] = len(deleted_ids)
         print(f"\n  Deleted {len(deleted_ids)} pages removed from Notion")
 
@@ -620,28 +548,24 @@ def rebuild_and_embed(conn, changed_page_ids, full=False):
     for db_key, count in db_counts.most_common():
         print(f"  {db_key}: {count} chunks")
 
-    # Load existing chunk text_hash → embedding mapping
-    old_embeddings = {}  # text_hash → embedding blob
+    # Load existing chunk text_hash → embedding mapping (pgvector string format)
+    old_embeddings = {}
     if not full:
-        try:
-            for row in conn.execute("SELECT text_hash, embedding FROM chunks WHERE text_hash != '' AND embedding IS NOT NULL"):
-                old_embeddings[row["text_hash"]] = row["embedding"]
-        except sqlite3.OperationalError:
-            pass
+        for row in _execute(conn,
+            "SELECT text_hash, embedding::text FROM research_chunks WHERE text_hash != '' AND embedding IS NOT NULL"
+        ).fetchall():
+            old_embeddings[row["text_hash"]] = row["embedding"]
     print(f"  {len(old_embeddings)} existing embeddings in cache")
 
     # Compute hashes and figure out which chunks need embedding
     for chunk in new_chunks:
         chunk["text_hash"] = text_hash(chunk["text"])
 
-    # For pages that didn't change, we can also reuse by hash match.
-    # For pages that DID change, the chunk text might still be the same
-    # (e.g. a property changed but block text didn't), so hash-match covers that.
     to_embed = []
     reused = 0
     for chunk in new_chunks:
         if chunk["text_hash"] in old_embeddings:
-            chunk["embedding_blob"] = old_embeddings[chunk["text_hash"]]
+            chunk["embedding_value"] = old_embeddings[chunk["text_hash"]]
             reused += 1
         else:
             to_embed.append(chunk)
@@ -657,8 +581,8 @@ def rebuild_and_embed(conn, changed_page_ids, full=False):
             print("  Install with: pip install sentence-transformers")
             print("  (chunks will be stored without embeddings)")
             for chunk in to_embed:
-                chunk["embedding_blob"] = None
-            to_embed = []  # skip the embedding loop below
+                chunk["embedding_value"] = None
+            to_embed = []
 
     if to_embed:
         print(f"\nLoading {MODEL_NAME}...")
@@ -687,19 +611,20 @@ def rebuild_and_embed(conn, changed_page_ids, full=False):
         print(f"  Done in {embed_time:.1f}s ({len(to_embed)/embed_time:.1f} chunks/s)")
 
         for i, chunk in enumerate(to_embed):
-            chunk["embedding_blob"] = embedding_to_blob(all_embeddings[i])
+            chunk["embedding_value"] = embedding_to_pgvector(all_embeddings[i])
     else:
         embed_time = 0
 
     # Replace chunks table contents
     print("\nStoring chunks...")
-    conn.execute("DELETE FROM chunks")
+    _execute(conn, "DELETE FROM research_chunks")
     for chunk in new_chunks:
-        conn.execute(
-            "INSERT INTO chunks (page_id, chunk_index, text, text_hash, database_key, embedding) VALUES (?, ?, ?, ?, ?, ?)",
-            (chunk["page_id"], chunk["chunk_index"], chunk["text"],
-             chunk["text_hash"], chunk["database_key"], chunk["embedding_blob"]),
-        )
+        emb = chunk.get("embedding_value")
+        _execute(conn, """
+            INSERT INTO research_chunks (page_id, chunk_index, text, text_hash, database_key, embedding)
+            VALUES (%s, %s, %s, %s, %s, %s::vector)
+        """, (chunk["page_id"], chunk["chunk_index"], chunk["text"],
+              chunk["text_hash"], chunk["database_key"], emb))
     conn.commit()
 
     return len(new_chunks), len(to_embed), reused, embed_time
@@ -711,7 +636,6 @@ def rebuild_and_embed(conn, changed_page_ids, full=False):
 
 def main():
     parser = argparse.ArgumentParser(description="Incremental refresh of Notion research corpus")
-    parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
     parser.add_argument("--full", action="store_true", help="Force full rebuild (ignore timestamps)")
     parser.add_argument("--sync-only", action="store_true", help="Only sync pages, skip embedding")
     args = parser.parse_args()
@@ -720,13 +644,11 @@ def main():
         print("Error: NOTION_TOKEN not set in .env")
         sys.exit(1)
 
-    args.db.parent.mkdir(parents=True, exist_ok=True)
+    if not DATABASE_URL:
+        print("Error: DATABASE_URL not set in .env")
+        sys.exit(1)
 
-    is_new_db = not args.db.exists()
-    if is_new_db:
-        args.full = True
-
-    print(f"Refreshing research corpus → {args.db}")
+    print("Refreshing research corpus → PostgreSQL")
     print(f"Mode: {'full rebuild' if args.full else 'incremental'}")
     print(f"Databases: {len(DATABASES)}")
     print()
@@ -735,61 +657,65 @@ def main():
     _request_count = 0
     t0 = time.time()
 
-    conn = sqlite3.connect(args.db)
-    conn.row_factory = sqlite3.Row
-    ensure_schema(conn)
+    conn = psycopg2.connect(DATABASE_URL)
+    try:
+        ensure_research_schema(conn)
 
-    # Phase 1: Sync pages from Notion
-    print("=" * 50)
-    print("PHASE 1: SYNC")
-    print("=" * 50)
-    changed_ids, sync_stats = sync_pages(conn, full=args.full)
-    sync_time = time.time() - t0
+        # Check if corpus is empty (first run)
+        row = _execute(conn, "SELECT COUNT(*) as n FROM research_pages").fetchone()
+        if row["n"] == 0:
+            args.full = True
 
-    print(f"\nSync: {sync_stats['new']} new, {sync_stats['updated']} updated, "
-          f"{sync_stats['unchanged']} unchanged, {sync_stats['deleted']} deleted")
-    print(f"  {_request_count} API requests in {sync_time:.1f}s")
+        # Phase 1: Sync pages from Notion
+        print("=" * 50)
+        print("PHASE 1: SYNC")
+        print("=" * 50)
+        changed_ids, sync_stats = sync_pages(conn, full=args.full)
+        sync_time = time.time() - t0
 
-    # Phase 2: Rebuild chunks and embed
-    total_chunks = embedded = reused = 0
-    embed_time = 0
-    if not args.sync_only:
-        if not changed_ids and not args.full:
-            print("\nNo changes detected, skipping embedding phase.")
-        else:
-            print()
-            print("=" * 50)
-            print("PHASE 2: CHUNK + EMBED")
-            print("=" * 50)
-            total_chunks, embedded, reused, embed_time = rebuild_and_embed(
-                conn, changed_ids, full=args.full
-            )
+        print(f"\nSync: {sync_stats['new']} new, {sync_stats['updated']} updated, "
+              f"{sync_stats['unchanged']} unchanged, {sync_stats['deleted']} deleted")
+        print(f"  {_request_count} API requests in {sync_time:.1f}s")
 
-    # Store metadata
-    total_time = time.time() - t0
-    total_pages = conn.execute("SELECT COUNT(*) FROM pages").fetchone()[0]
-    total_blocks = conn.execute("SELECT COUNT(*) FROM blocks").fetchone()[0]
-    total_chunks = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+        # Phase 2: Rebuild chunks and embed
+        total_chunks = embedded = reused = 0
+        embed_time = 0
+        if not args.sync_only:
+            if not changed_ids and not args.full:
+                print("\nNo changes detected, skipping embedding phase.")
+            else:
+                print()
+                print("=" * 50)
+                print("PHASE 2: CHUNK + EMBED")
+                print("=" * 50)
+                total_chunks, embedded, reused, embed_time = rebuild_and_embed(
+                    conn, changed_ids, full=args.full
+                )
 
-    conn.execute("INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)",
-                 ("last_sync", datetime.now().isoformat()))
-    conn.execute("INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)",
-                 ("sync_duration_seconds", str(round(total_time, 1))))
-    conn.execute("INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)",
-                 ("total_pages", str(total_pages)))
-    conn.execute("INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)",
-                 ("total_blocks", str(total_blocks)))
-    conn.execute("INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)",
-                 ("total_api_requests", str(_request_count)))
-    conn.execute("INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)",
-                 ("embedding_model", MODEL_NAME))
-    conn.execute("INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)",
-                 ("embedding_count", str(total_chunks)))
-    conn.commit()
-    conn.close()
+        # Store metadata
+        total_time = time.time() - t0
+        total_pages = _execute(conn, "SELECT COUNT(*) as n FROM research_pages").fetchone()["n"]
+        total_blocks = _execute(conn, "SELECT COUNT(*) as n FROM research_blocks").fetchone()["n"]
+        total_chunks = _execute(conn, "SELECT COUNT(*) as n FROM research_chunks").fetchone()["n"]
+
+        meta_values = [
+            ("last_sync", datetime.now().isoformat()),
+            ("sync_duration_seconds", str(round(total_time, 1))),
+            ("total_pages", str(total_pages)),
+            ("total_blocks", str(total_blocks)),
+            ("total_api_requests", str(_request_count)),
+            ("embedding_model", MODEL_NAME),
+            ("embedding_count", str(total_chunks)),
+        ]
+        for key, value in meta_values:
+            _execute(conn,
+                "INSERT INTO research_sync_meta (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                (key, value))
+        conn.commit()
+    finally:
+        conn.close()
 
     # Summary
-    db_size = args.db.stat().st_size / 1024 / 1024
     print()
     print("=" * 50)
     print("REFRESH COMPLETE")
@@ -801,7 +727,6 @@ def main():
     print(f"Chunks:         {total_chunks} ({embedded} embedded, {reused} reused)")
     if embed_time:
         print(f"Embed time:     {embed_time:.1f}s")
-    print(f"DB size:        {db_size:.1f} MB")
 
 
 if __name__ == "__main__":
