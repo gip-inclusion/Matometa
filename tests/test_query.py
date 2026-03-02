@@ -5,6 +5,8 @@ Run with: pytest tests/test_query.py -v
 Integration tests (require .env): pytest tests/test_query.py -v -m integration
 """
 
+import json
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -66,6 +68,15 @@ def test_public_api_exports():
     # Classes are also re-exported
     assert hasattr(query, "MatomoAPI")
     assert hasattr(query, "MetabaseAPI")
+
+
+def test_audit_module_exists():
+    """lib._audit module exists and has expected exports."""
+    from lib import _audit
+
+    assert hasattr(_audit, "log_query")
+    assert hasattr(_audit, "get_conversation_id")
+    assert hasattr(_audit, "get_query_stats")
 
 
 # --- Unit tests (mocked) ---
@@ -214,6 +225,146 @@ class TestExecuteQuery:
 
         assert result.success is False
         assert "Unknown source" in result.error
+
+
+@contextmanager
+def _fake_audit_db(mock_conn):
+    """Replacement context manager for _audit_db in tests."""
+    yield mock_conn
+    mock_conn.commit()
+
+
+class TestQueryLogging:
+    """Tests for log_query writing to the database."""
+
+    def test_log_query_calls_insert(self):
+        from lib._audit import log_query
+
+        mock_cursor = MagicMock()
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+
+        with patch("lib._audit._audit_db", lambda: _fake_audit_db(mock_conn)):
+            log_query(
+                source="metabase",
+                instance="stats",
+                caller="agent",
+                conversation_id="test-conv-123",
+                query_type="sql",
+                query_details={"sql": "SELECT 1"},
+                success=True,
+                error=None,
+                execution_time_ms=50,
+                row_count=1,
+            )
+
+        mock_cursor.execute.assert_called_once()
+        sql, params = mock_cursor.execute.call_args[0]
+        assert "INSERT INTO query_log" in sql
+        assert params[0] == "metabase"
+        assert params[1] == "stats"
+        assert params[2] == "agent"
+        assert params[3] == "test-conv-123"
+        assert params[6] is True
+
+    def test_log_query_swallows_exceptions(self):
+        from lib._audit import log_query
+
+        with patch("lib._audit._audit_db", side_effect=Exception("DB down")):
+            log_query(
+                source="metabase",
+                instance="stats",
+                caller="agent",
+                conversation_id=None,
+                query_type="sql",
+                query_details={},
+                success=True,
+                error=None,
+                execution_time_ms=0,
+            )
+
+
+class TestGetQueryStats:
+    """Tests for get_query_stats function."""
+
+    def test_returns_stats_dict(self):
+        from lib._audit import get_query_stats
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.side_effect = [
+            (9,),
+            (8,),
+            (150.0,),
+        ]
+        mock_cursor.fetchall.side_effect = [
+            [("metabase", 6), ("matomo", 3)],
+            [("agent", 6), ("app", 3)],
+        ]
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+
+        with patch("lib._audit._audit_db", lambda: _fake_audit_db(mock_conn)):
+            stats = get_query_stats()
+
+        assert stats["total_queries"] == 9
+        assert stats["successful_queries"] == 8
+        assert stats["by_source"]["metabase"] == 6
+        assert stats["by_source"]["matomo"] == 3
+        assert stats["by_caller"]["agent"] == 6
+        assert stats["by_caller"]["app"] == 3
+        assert stats["avg_execution_time_ms"] == 150
+
+    def test_filters_by_source(self):
+        from lib._audit import get_query_stats
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.side_effect = [
+            (3,),
+            (3,),
+            (200.0,),
+        ]
+        mock_cursor.fetchall.side_effect = [
+            [("matomo", 3)],
+            [("app", 3)],
+        ]
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+
+        with patch("lib._audit._audit_db", lambda: _fake_audit_db(mock_conn)):
+            stats = get_query_stats(source="matomo")
+
+        assert stats["total_queries"] == 3
+        assert stats["by_source"] == {"matomo": 3}
+        call_args = mock_cursor.execute.call_args_list[0]
+        assert "source = %s" in call_args[0][0]
+        assert "matomo" in call_args[0][1]
+
+
+class TestConversationIdFromEnv:
+    """Tests for auto-reading conversation_id from environment."""
+
+    @patch("lib._audit.log_query")
+    @patch("lib.query.get_metabase")
+    def test_reads_conversation_id_from_env(self, mock_get_metabase, mock_log):
+        from lib._metabase import QueryResult as MetabaseQueryResult
+        from lib.query import CallerType, execute_metabase_query
+
+        mock_result = MetabaseQueryResult(columns=["x"], rows=[[1]], row_count=1)
+        mock_api = MagicMock()
+        mock_api.execute_sql.return_value = mock_result
+        mock_api.caller = "agent"
+        mock_get_metabase.return_value = mock_api
+
+        with patch.dict("os.environ", {"MATOMETA_CONVERSATION_ID": "env-conv-123"}):
+            result = execute_metabase_query(
+                instance="stats",
+                caller=CallerType.AGENT,
+                sql="SELECT 1",
+                database_id=2,
+            )
+
+        assert result.success is True
+
 
 
 # --- Integration tests ---
