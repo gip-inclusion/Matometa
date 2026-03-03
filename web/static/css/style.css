@@ -577,6 +577,34 @@ body.has-sidebar {
   background: rgba(0, 0, 0, 0.1);
 }
 
+/* Feedback badge – inline in header row, pushed right */
+.feedback-badge {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #fff;
+  background: #000091;
+  border-radius: 2rem;
+  text-decoration: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: background 0.15s, transform 0.15s;
+}
+
+.feedback-badge:hover {
+  background: #000063;
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.feedback-badge i {
+  font-size: 1rem;
+}
+
 /* ==========================================================================
    Chat output
    ========================================================================== */
