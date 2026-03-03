@@ -83,12 +83,22 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "web/app.py" = ["E402"]              # imports after logging setup
-"web/routes/__init__.py" = ["F401"]  # re-exports
 "scripts/*" = ["E402"]               # sys.path / dotenv setup before imports
+"tests/test_knowledge_sync.py" = ["E402"]  # sys.path setup before imports
+"tests/test_uploads.py" = ["E402"]         # env config before imports
 
 # =============================================================================
 # Bandit — SAST
 # =============================================================================
+
+# =============================================================================
+# Pytest
+# =============================================================================
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: tests that require external services or credentials",
+]
 
 [tool.bandit]
 exclude_dirs = ["tests", "evals", "data", "skills"]

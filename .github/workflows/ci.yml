@@ -21,8 +21,8 @@ jobs:
           enable-cache: true
 
       - run: uv sync --group dev --frozen
-      - run: uv run ruff check web/ lib/ scripts/
-      - run: uv run ruff format --check web/ lib/ scripts/
+      - run: uv run ruff check web/ lib/ scripts/ tests/
+      - run: uv run ruff format --check web/ lib/ scripts/ tests/
 
   security:
     name: Security
@@ -45,7 +45,7 @@ jobs:
       # Dependency vulnerability audit
       - name: pip-audit
         run: |
-          uv export --frozen --no-hashes > /tmp/requirements.txt
+          uv export --frozen --no-hashes --no-emit-project > /tmp/requirements.txt
           uv run pip-audit -r /tmp/requirements.txt
 
       # Secret detection
@@ -68,10 +68,7 @@ jobs:
       - name: Unit tests
         run: >
           uv run pytest tests/ -q --tb=short -m "not integration"
-          --ignore=tests/test_metabase_client.py
-          --ignore=tests/test_matomo.py
           --ignore=tests/test_metabase_answers.py
-          --ignore=tests/test_notion.py
 
   docker:
     name: Docker
@@ -88,4 +85,4 @@ jobs:
 
       # Verify the image builds (no push)
       - name: Build
-        run: docker build . --tag matometa:ci --no-cache
+        run: docker build . --tag matometa:ci
