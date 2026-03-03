@@ -8,7 +8,7 @@ import sqlite3
 from .db import ConnectionWrapper, get_db, USE_POSTGRES
 
 # Schema version - increment when adding migrations
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 23
 
 
 def _get_schema_version(conn: ConnectionWrapper) -> int:
@@ -82,6 +82,12 @@ def init_db():
                     _migrate_to_v19(conn)
                 if current_version < 20:
                     _migrate_to_v20(conn)
+                if current_version < 21:
+                    _migrate_to_v21(conn)
+                if current_version < 22:
+                    _migrate_to_v22(conn)
+                if current_version < 23:
+                    _migrate_to_v23(conn)
 
             _set_schema_version(conn, SCHEMA_VERSION)
 
@@ -91,6 +97,9 @@ def init_db():
         _migrate_to_v18(conn)
         _migrate_to_v19(conn)
         _migrate_to_v20(conn)
+        _migrate_to_v21(conn)
+        _migrate_to_v22(conn)
+        _migrate_to_v23(conn)
 
 
 # =============================================================================
@@ -290,6 +299,31 @@ def _create_schema(conn: ConnectionWrapper):
             version INTEGER PRIMARY KEY
         );
 
+        CREATE TABLE IF NOT EXISTS projects (
+            id TEXT PRIMARY KEY,
+            user_id TEXT,
+            name TEXT NOT NULL,
+            slug TEXT NOT NULL UNIQUE,
+            description TEXT,
+            spec TEXT,
+            status TEXT DEFAULT 'draft',
+            workflow_phase TEXT DEFAULT 'planning',
+            gitea_repo_id INTEGER,
+            gitea_url TEXT,
+            coolify_app_uuid TEXT,
+            deploy_url TEXT,
+            staging_branch TEXT DEFAULT 'stagging',
+            production_branch TEXT DEFAULT 'prod',
+            staging_coolify_app_uuid TEXT,
+            staging_deploy_url TEXT,
+            production_coolify_app_uuid TEXT,
+            production_deploy_url TEXT,
+            tech_stack TEXT,
+            boilerplate TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS conversations (
             id TEXT PRIMARY KEY,
             user_id TEXT,
@@ -300,6 +334,7 @@ def _create_schema(conn: ConnectionWrapper):
             status TEXT DEFAULT 'active',
             pr_url TEXT,
             forked_from TEXT,
+            project_id TEXT REFERENCES projects(id),
             usage_input_tokens INTEGER DEFAULT 0,
             usage_output_tokens INTEGER DEFAULT 0,
             usage_cache_creation_tokens INTEGER DEFAULT 0,
@@ -421,6 +456,9 @@ def _create_schema(conn: ConnectionWrapper):
         CREATE INDEX IF NOT EXISTS idx_uploaded_files_user ON uploaded_files(user_id);
         CREATE INDEX IF NOT EXISTS idx_cron_runs_slug_started ON cron_runs(app_slug, started_at DESC);
         CREATE INDEX IF NOT EXISTS idx_pm_commands_pending ON pm_commands(processed_at) WHERE processed_at IS NULL;
+        CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);
+        CREATE INDEX IF NOT EXISTS idx_projects_slug ON projects(slug);
+        CREATE INDEX IF NOT EXISTS idx_conversations_project ON conversations(project_id);
 
         CREATE TABLE IF NOT EXISTS pm_heartbeat (
             id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -439,6 +477,75 @@ def _migrate_to_v20(conn: ConnectionWrapper):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_conv_id ON messages(conversation_id, id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_user_updated ON conversations(user_id, updated_at DESC)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_needs_response ON conversations(needs_response) WHERE needs_response = 1")
+
+
+def _migrate_to_v21(conn: ConnectionWrapper):
+    """Migrate to v21: add projects table and project_id on conversations."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS projects (
+            id TEXT PRIMARY KEY,
+            user_id TEXT,
+            name TEXT NOT NULL,
+            slug TEXT NOT NULL UNIQUE,
+            description TEXT,
+            spec TEXT,
+            status TEXT DEFAULT 'draft',
+            workflow_phase TEXT DEFAULT 'planning',
+            gitea_repo_id INTEGER,
+            gitea_url TEXT,
+            coolify_app_uuid TEXT,
+            deploy_url TEXT,
+            staging_branch TEXT DEFAULT 'stagging',
+            production_branch TEXT DEFAULT 'prod',
+            staging_coolify_app_uuid TEXT,
+            staging_deploy_url TEXT,
+            production_coolify_app_uuid TEXT,
+            production_deploy_url TEXT,
+            tech_stack TEXT,
+            boilerplate TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_slug ON projects(slug)")
+
+    # Add project_id column to conversations
+    columns = _get_table_columns(conn, "conversations")
+    if "project_id" not in columns:
+        conn.execute("ALTER TABLE conversations ADD COLUMN project_id TEXT REFERENCES projects(id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_project ON conversations(project_id)")
+
+
+def _migrate_to_v22(conn: ConnectionWrapper):
+    """Migrate to v22: ensure gitea columns exist (rename from gitlab)."""
+    try:
+        columns = _get_table_columns(conn, "projects")
+    except Exception:
+        return  # projects table may not exist yet
+    if "gitea_repo_id" not in columns:
+        conn.execute("ALTER TABLE projects ADD COLUMN gitea_repo_id INTEGER")
+        conn.execute("ALTER TABLE projects ADD COLUMN gitea_url TEXT")
+
+
+def _migrate_to_v23(conn: ConnectionWrapper):
+    """Migrate to v23: ensure staging/production deploy fields exist."""
+    try:
+        columns = _get_table_columns(conn, "projects")
+    except Exception:
+        return
+    for col, default in [
+        ("staging_branch", "'stagging'"),
+        ("production_branch", "'prod'"),
+        ("staging_coolify_app_uuid", None),
+        ("staging_deploy_url", None),
+        ("production_coolify_app_uuid", None),
+        ("production_deploy_url", None),
+        ("workflow_phase", "'planning'"),
+    ]:
+        if col not in columns:
+            default_clause = f" DEFAULT {default}" if default else ""
+            conn.execute(f"ALTER TABLE projects ADD COLUMN {col} TEXT{default_clause}")
 
 
 # =============================================================================
