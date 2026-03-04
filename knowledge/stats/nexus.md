@@ -4,13 +4,14 @@
 Nexus est une fonctionnalité des Emplois de l'Inclusion qui permet aux utilisateurs
 professionnels (prescripteurs, employeurs/SIAE, offreurs de service) de consulter
 de manière centralisée leur présence sur l'ensemble des services de la Plateforme.
-Le portail facilite l’accès aux services numériques de la Plateforme de l’inclusion pour les structures d’insertion et les accompagnateurs. 
+Le portail facilite l’accès aux services numériques de la Plateforme de l’inclusion pour les structures d’insertion et les accompagnateurs.
 Il réunit toutes les données et actions métiers pertinentes dans un seul interface web et met fin à la multiplication des mots de passe et à la répétition d’informations.
 
-## Publics cibles : 
-- 🎯 **Cible prioritaire :** les gestionnaires de structure
-- 🆗 **Cible secondaire :** les accompagnateurs (sens large)
-- ❌ **Non ciblée :** usagers, pilotes institutionnels
+## Publics cibles
+
+- **Cible prioritaire :** gestionnaires de structure
+- **Cible secondaire :** accompagnateurs (sens large)
+- **Non ciblés :** usagers, pilotes institutionnels
 
 **Base Metabase :** instance STATS, `database_id = 17` (base séparée de la base Stats principale)
 **Mise à jour :** quotidienne
