@@ -14,7 +14,7 @@ result = execute_metabase_query(
     instance="stats",
     caller=CallerType.AGENT,
     sql="SELECT 1",
-    database_id=2,
+    database_id=2,  # Stats principal (IAE dashboards) — Nexus: database_id=17
 )
 print(result.data)  # {"columns": [...], "rows": [...], "row_count": N}
 
@@ -48,6 +48,8 @@ result = execute_query(
 | `./knowledge/matomo/README.md` | Matomo API reference |
 | `./reports/` | Output reports |
 | `./skills/` | Reusable agent skills |
+| `./knowledge/stats/nexus.md`  | Nexus (application unifiée cross-services, DB 17) |
+
 
 **Data directory** (`DATA_DIR`, default `./data/`):
 | Path | Purpose |
