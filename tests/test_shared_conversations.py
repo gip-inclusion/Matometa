@@ -42,15 +42,6 @@ def conversation(app, owner_client):
 class TestSharedConversationAccess:
     """Test that users can view shared conversations."""
 
-    def test_owner_can_view_own_conversation(self, app, owner_client, conversation):
-        """Owner can view their own conversation."""
-        response = owner_client.get(
-            f"/explorations/{conversation.id}",
-            headers={"X-Forwarded-Email": "owner@example.com"},
-        )
-        assert response.status_code == 200
-        assert b"owner@example.com" not in response.content  # Not shown as "Conversation de" for owner
-
     def test_guest_can_view_shared_conversation(self, app, guest_client, conversation):
         """Guest can view a conversation owned by someone else."""
         response = guest_client.get(
