@@ -40,7 +40,7 @@ RUN uv pip install --no-cache torch --index-url https://download.pytorch.org/whl
 
 # Install all dependencies including embeddings group.
 # Filter out torch/nvidia (CPU-only torch already installed above).
-RUN uv export --frozen --group embeddings --no-hashes | \
+RUN uv export --frozen --extra embeddings --no-hashes | \
     grep -v '^\(torch\|nvidia-\|cuda-\)' | \
     uv pip install --no-cache -r -
 

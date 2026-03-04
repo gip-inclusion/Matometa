@@ -322,11 +322,27 @@ function renderOptions(element) {
       button.dataset.prompt = fullPrompt;
 
       button.addEventListener('click', () => {
+        // Mark selected in this group
+        container.querySelectorAll('.btn').forEach(b => {
+          b.classList.remove('btn-primary', 'active');
+          b.classList.add('btn-outline-primary');
+        });
+        button.classList.remove('btn-outline-primary');
+        button.classList.add('btn-primary', 'active');
+
+        // Collect all selected options across all groups in this message
+        const msgBlock = button.closest('.message-content, .chat-output');
+        const allGroups = msgBlock ? msgBlock.querySelectorAll('.options-buttons') : [container];
+        const answers = [];
+        allGroups.forEach(group => {
+          const selected = group.querySelector('.btn.active');
+          if (selected) answers.push(selected.dataset.prompt);
+        });
+
         const chatInput = document.getElementById('chatInput');
         if (chatInput) {
-          chatInput.value = button.dataset.prompt;
+          chatInput.value = answers.join('\n');
           chatInput.focus();
-          // Auto-resize textarea if needed
           chatInput.style.height = 'auto';
           chatInput.style.height = chatInput.scrollHeight + 'px';
         }

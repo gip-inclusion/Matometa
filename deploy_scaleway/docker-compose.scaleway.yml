@@ -1,0 +1,196 @@
+# Scaleway deployment: matometa + expert mode (Gitea + Coolify)
+# Combined from docker-compose.yml + docker-compose.expert.yml
+#
+# Usage:
+#   docker compose -f deploy/docker-compose.scaleway.yml up -d
+#   bash scripts/setup_expert_test.sh   # first-time only
+
+services:
+  # ── Matometa ───────────────────────────────────────────────────────
+  matometa:
+    build: .
+    restart: always
+    hostname: matometa
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 2g
+    pids_limit: 200
+    env_file: .env
+    environment:
+      - WEB_HOST=0.0.0.0
+      - WEB_PORT=5000
+      - WEB_DEBUG=false
+      - ADMIN_USERS=${ADMIN_USERS}
+      # Expert mode
+      - GITEA_API_TOKEN=${GITEA_API_TOKEN}
+      - GITEA_URL=${GITEA_URL:-http://host.docker.internal:3300}
+      - GITEA_ORG=${GITEA_ORG:-apps}
+      - COOLIFY_URL=${COOLIFY_URL:-http://host.docker.internal:8001}
+      - COOLIFY_API_TOKEN=${COOLIFY_API_TOKEN}
+      - EXPERT_DEPLOY_PUBLIC_HOST=${EXPERT_DEPLOY_PUBLIC_HOST:-163.172.144.13}
+      - SKIP_CLI_AUTH_CHECK=${SKIP_CLI_AUTH_CHECK:-false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "0.0.0.0:5002:5000"
+    volumes:
+      - ./data:/app/data
+      - ./claude-credentials:/home/matometa/.claude
+      - /etc/machine-id:/etc/machine-id:ro
+      - ./knowledge:/app/knowledge:ro
+      - ./AGENTS.md:/app/AGENTS.md:ro
+      - ./skills:/app/skills:ro
+      - ./.claude:/app/.claude:ro
+    networks:
+      - coolify
+      - default
+
+  # ── Gitea (lightweight git hosting) ────────────────────────────────
+  gitea:
+    image: gitea/gitea:latest
+    container_name: matometa-gitea
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:3300:3000"
+      - "0.0.0.0:2222:22"
+    volumes:
+      - gitea_data:/data
+    environment:
+      - GITEA__server__ROOT_URL=${GITEA_PUBLIC_URL:-http://163.172.144.13:3300}
+      - GITEA__server__HTTP_PORT=3000
+      - GITEA__database__DB_TYPE=sqlite3
+      - GITEA__service__DISABLE_REGISTRATION=true
+      - GITEA__api__ENABLE_SWAGGER=false
+      - GITEA__webhook__ALLOW_LOCALNETWORKS=true
+      - GITEA__webhook__ALLOWED_HOST_LIST=coolify,host.docker.internal,localhost,127.0.0.1
+      - GITEA__security__INSTALL_LOCK=true
+    networks:
+      - coolify
+      - default
+
+  # ── Coolify (PaaS) ────────────────────────────────────────────────
+  coolify:
+    image: ghcr.io/coollabsio/coolify:latest
+    container_name: coolify
+    restart: always
+    working_dir: /var/www/html
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    ports:
+      - "0.0.0.0:8001:8080"
+    environment:
+      - APP_ENV=production
+      - APP_NAME=Coolify
+      - APP_ID=${COOLIFY_APP_ID:-deadbeef0000}
+      - APP_KEY=${COOLIFY_APP_KEY:-base64:w0x0IZJWH/25byMTMJv9TuNXljSAh3S6iVru+ImwsZ8=}
+      - DB_USERNAME=coolify
+      - DB_PASSWORD=${COOLIFY_DB_PASSWORD:-coolify-dev-password}
+      - DB_DATABASE=coolify
+      - DB_HOST=coolify-db
+      - DB_PORT=5432
+      - REDIS_HOST=coolify-redis
+      - REDIS_PASSWORD=${COOLIFY_REDIS_PASSWORD:-coolify-redis-dev}
+      - PUSHER_APP_ID=${COOLIFY_PUSHER_APP_ID:-matometa-dev-pusher}
+      - PUSHER_APP_KEY=${COOLIFY_PUSHER_APP_KEY:-matometa-dev-key}
+      - PUSHER_APP_SECRET=${COOLIFY_PUSHER_APP_SECRET:-matometa-dev-secret}
+      - PUSHER_HOST=localhost
+      - PUSHER_PORT=6001
+      - PHP_MEMORY_LIMIT=256M
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - coolify_ssh:/var/www/html/storage/app/ssh
+      - coolify_applications:/var/www/html/storage/app/applications
+      - coolify_databases:/var/www/html/storage/app/databases
+      - coolify_services:/var/www/html/storage/app/services
+      - coolify_backups:/var/www/html/storage/app/backups
+    healthcheck:
+      test: curl --fail http://127.0.0.1:8080/api/health || exit 1
+      interval: 5s
+      retries: 20
+      timeout: 2s
+    depends_on:
+      coolify-db:
+        condition: service_healthy
+      coolify-redis:
+        condition: service_healthy
+      coolify-realtime:
+        condition: service_healthy
+    networks:
+      - coolify
+      - default
+
+  coolify-db:
+    image: postgres:15-alpine
+    container_name: coolify-db
+    restart: always
+    volumes:
+      - coolify_db_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: coolify
+      POSTGRES_PASSWORD: ${COOLIFY_DB_PASSWORD:-coolify-dev-password}
+      POSTGRES_DB: coolify
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coolify -d coolify"]
+      interval: 5s
+      retries: 10
+      timeout: 2s
+    networks:
+      - coolify
+
+  coolify-redis:
+    image: redis:7-alpine
+    container_name: coolify-redis
+    restart: always
+    command: redis-server --save 20 1 --loglevel warning --requirepass ${COOLIFY_REDIS_PASSWORD:-coolify-redis-dev}
+    environment:
+      REDIS_PASSWORD: ${COOLIFY_REDIS_PASSWORD:-coolify-redis-dev}
+    volumes:
+      - coolify_redis_data:/data
+    healthcheck:
+      test: redis-cli ping
+      interval: 5s
+      retries: 10
+      timeout: 2s
+    networks:
+      - coolify
+
+  coolify-realtime:
+    image: ghcr.io/coollabsio/coolify-realtime:1.0.10
+    container_name: coolify-realtime
+    restart: always
+    ports:
+      - "6001:6001"
+      - "6002:6002"
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    environment:
+      APP_NAME: Coolify
+      SOKETI_DEBUG: "false"
+      SOKETI_DEFAULT_APP_ID: ${COOLIFY_PUSHER_APP_ID:-matometa-dev-pusher}
+      SOKETI_DEFAULT_APP_KEY: ${COOLIFY_PUSHER_APP_KEY:-matometa-dev-key}
+      SOKETI_DEFAULT_APP_SECRET: ${COOLIFY_PUSHER_APP_SECRET:-matometa-dev-secret}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:6001/ready && wget -qO- http://127.0.0.1:6002/ready || exit 1"]
+      interval: 5s
+      retries: 10
+      timeout: 2s
+    networks:
+      - coolify
+
+networks:
+  coolify:
+    name: coolify
+    driver: bridge
+
+volumes:
+  gitea_data:
+  coolify_db_data:
+  coolify_redis_data:
+  coolify_ssh:
+  coolify_applications:
+  coolify_databases:
+  coolify_services:
+  coolify_backups:

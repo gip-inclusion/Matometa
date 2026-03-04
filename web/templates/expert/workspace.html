@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title_suffix %} – {{ project.name }}{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ static_url('css/expert.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="section-content expert-workspace" id="section-expert">
+  <!-- Header -->
+  <div class="section-header">
+    <div class="container">
+      <div class="conv-header-row">
+        <a href="/expert" class="conv-back-link" hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
+          <i class="ri-arrow-left-line ri-xl"></i>
+        </a>
+        <div class="conv-title-wrapper">
+          <p class="conv-meta-row text-muted mb-0 small">
+            <a href="/expert" class="text-muted">Expert</a>
+            <span class="badge {% if project.status == 'deployed' %}bg-success{% elif project.status == 'active' %}bg-primary{% elif project.status == 'archived' %}bg-secondary{% else %}bg-warning text-dark{% endif %} ms-1">
+              {{ project.status }}
+            </span>
+            {% if project.gitea_url %}
+            · <a href="{{ project.gitea_url }}" target="_blank" class="text-muted" title="Repository"><i class="ri-git-repository-line"></i></a>
+            {% endif %}
+            {% if project.production_deploy_url %}
+            · <a href="/expert/{{ project.slug }}/preview/production/" target="_blank" class="text-muted" title="Ouvrir production"><i class="ri-external-link-line"></i> Production</a>
+            {% elif project.staging_deploy_url %}
+            · <a href="/expert/{{ project.slug }}/preview/staging/" target="_blank" class="text-muted" title="Ouvrir staging"><i class="ri-external-link-line"></i> Staging</a>
+            {% endif %}
+            · <a href="/expert/{{ project.slug }}/settings" class="text-muted" title="Paramètres"><i class="ri-settings-3-line"></i></a>
+          </p>
+          <div class="conv-title-display" id="projectTitleDisplay">
+            <h1 class="mb-0" id="projectNameText" style="cursor: pointer;" title="Cliquer pour renommer">{{ project.name }} <i class="ri-pencil-line text-muted" style="font-size: 0.5em; vertical-align: middle;"></i></h1>
+          </div>
+          <div id="projectNameEdit" style="display: none;" class="d-flex align-items-center gap-2 mt-1">
+            <input type="text" id="projectNameInput" class="form-control form-control-sm" value="{{ project.name }}" style="max-width: 300px;">
+            <button class="btn btn-sm btn-primary" id="projectNameSaveBtn"><i class="ri-check-line"></i></button>
+            <button class="btn btn-sm btn-outline-secondary" id="projectNameCancelBtn"><i class="ri-close-line"></i></button>
+          </div>
+          <div>
+            <!-- Conversation selector -->
+            {% if project_conversations|length > 1 %}
+            <div class="conv-selector">
+              <select id="convSelector" class="form-select form-select-sm">
+                {% for conv in project_conversations %}
+                <option value="{{ conv.id }}" {% if current_conv and current_conv.id == conv.id %}selected{% endif %}>
+                  {{ conv.title or 'Sans titre' }}
+                </option>
+                {% endfor %}
+              </select>
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="newConvBtn" title="Nouvelle conversation">
+                <i class="ri-add-line"></i>
+              </button>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Two-panel layout: spec + chat -->
+  <div class="section-body" style="padding: 0; max-width: none;">
+    <div class="expert-panels">
+      <!-- Spec panel (left) -->
+      <aside class="spec-panel" id="specPanel">
+        <div class="spec-panel-header">
+          <nav class="spec-tabs">
+            <button type="button" class="spec-tab active" data-artifact="spec">Spécification</button>
+            <button type="button" class="spec-tab" data-artifact="plan">Plan</button>
+            <button type="button" class="spec-tab" data-artifact="tasks">Tâches</button>
+            <button type="button" class="spec-tab" data-artifact="checklist">Vérification</button>
+          </nav>
+        </div>
+        <div class="spec-panel-body" id="specPanelBody">
+          <div class="spec-content markdown-body" id="specContent">
+            <div class="spec-loading">
+              <div class="spinner"></div> Chargement...
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Spec panel toggle (always visible) -->
+      <button type="button" class="spec-panel-toggle" id="specPanelToggle" title="Masquer">
+        <i class="ri-arrow-left-s-line"></i>
+      </button>
+
+      <!-- Chat panel (right) -->
+      <div class="chat-panel">
+        <div class="chat-main">
+          <div class="chat-output" id="chatOutput">
+            <div class="loading-indicator" id="loadingConversation">
+              <div class="spinner"></div> Chargement...
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Deploy bar -->
+    <div class="deploy-bar" id="deployBar">
+      <div class="deploy-bar-inner">
+        <div class="deploy-env">
+          <span class="deploy-dot deploy-dot-unknown" id="stagingDot"></span>
+          <span class="deploy-label">staging</span>
+          <a href="#" class="deploy-link" id="stagingLink" target="_blank" style="display:none;">
+            <i class="ri-external-link-line"></i>
+          </a>
+        </div>
+        <div class="deploy-env">
+          <span class="deploy-dot deploy-dot-unknown" id="productionDot"></span>
+          <span class="deploy-label">prod</span>
+          <a href="#" class="deploy-link" id="productionLink" target="_blank" style="display:none;">
+            <i class="ri-external-link-line"></i>
+          </a>
+        </div>
+        <div class="deploy-actions">
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="deployRefreshBtn" title="Rafraichir">
+            <i class="ri-refresh-line"></i>
+          </button>
+          <button type="button" class="btn btn-sm btn-primary" id="deployProductionBtn" title="Deployer en production">
+            <i class="ri-rocket-line"></i> Deployer
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chat bar (fixed at bottom) -->
+  <div class="chat-bar-container">
+    <div class="container">
+      <div class="chat-bar">
+        <div class="chat-input-wrapper">
+          <div class="chat-pending-files" id="chatPendingFiles"></div>
+          <textarea
+            class="chat-input"
+            id="chatInput"
+            placeholder="Decrivez ce que vous voulez construire..."
+            rows="1"
+          ></textarea>
+        </div>
+        <button type="button" class="chat-send-btn" id="chatSendBtn" title="Envoyer">
+          <i class="ri-send-plane-fill"></i>
+        </button>
+        <button type="button" class="chat-cancel-btn" id="chatCancelBtn" title="Annuler" style="display: none;">
+          <i class="ri-stop-fill"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ static_url('js/expert-workspace.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', async () => {
+    {% if current_conv %}
+    currentConversationId = '{{ current_conv.id }}';
+    {% endif %}
+
+    // Initialize chat UI
+    initChat();
+
+    // Initialize expert workspace (spec panel, deploy bar, conversation selector)
+    initExpertWorkspace({
+      projectId: '{{ project.id }}',
+      projectSlug: '{{ project.slug }}',
+      convId: currentConversationId,
+    });
+
+    {% if current_conv %}
+    const conv = await loadConversation('{{ current_conv.id }}');
+
+    const isPlanningPhase =
+      {% if project.workflow_phase is defined %}
+      '{{ project.workflow_phase }}' === 'planning';
+      {% else %}
+      '{{ project.status }}' === 'draft';
+      {% endif %}
+
+    const shouldAutoWelcome =
+      isPlanningPhase &&
+      conv &&
+      Array.isArray(conv.messages) &&
+      conv.messages.length === 0 &&
+      !conv.is_running;
+
+    if (shouldAutoWelcome) {
+      try {
+        const res = await fetch(`/api/conversations/${currentConversationId}/welcome`, { method: 'POST' });
+        if (res.status === 202 || res.ok) {
+          startStream(0);
+        } else if (res.status === 409) {
+          const data = await res.json().catch(() => ({}));
+          if (data.status === 'already_running') startStream(0);
+        }
+      } catch (err) {
+        console.warn('Planning welcome trigger failed', err);
+      }
+    }
+    {% endif %}
+
+    document.getElementById('chatInput')?.focus();
+
+    // Project rename
+    const nameText = document.getElementById('projectNameText');
+    const nameDisplay = document.getElementById('projectTitleDisplay');
+    const nameEdit = document.getElementById('projectNameEdit');
+    const nameInput = document.getElementById('projectNameInput');
+    const nameSaveBtn = document.getElementById('projectNameSaveBtn');
+    const nameCancelBtn = document.getElementById('projectNameCancelBtn');
+
+    if (nameText && nameEdit) {
+      nameText.addEventListener('click', () => {
+        nameDisplay.style.display = 'none';
+        nameEdit.style.display = 'flex';
+        nameInput.focus();
+        nameInput.select();
+      });
+
+      nameCancelBtn.addEventListener('click', () => {
+        nameEdit.style.display = 'none';
+        nameDisplay.style.display = '';
+      });
+
+      nameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') nameSaveBtn.click();
+        if (e.key === 'Escape') nameCancelBtn.click();
+      });
+
+      nameSaveBtn.addEventListener('click', async () => {
+        const newName = nameInput.value.trim();
+        if (!newName) return;
+        try {
+          const res = await fetch(`/api/expert/projects/{{ project.id }}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName }),
+          });
+          if (res.ok) {
+            nameText.childNodes[0].textContent = newName + ' ';
+            nameEdit.style.display = 'none';
+            nameDisplay.style.display = '';
+          }
+        } catch (err) {
+          console.error('Rename failed:', err);
+        }
+      });
+    }
+  });
+</script>
+{% endblock %}

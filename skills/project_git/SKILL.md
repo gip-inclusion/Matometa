@@ -15,7 +15,7 @@ python -m skills.project_git.scripts.git_ops branch --project-id <uuid> --name <
 
 ## Workflow
 
-1. **init**: Creates a Gitea repo, clones it locally, pushes the project spec as `CLAUDE.md` with initial boilerplate. Updates the project record with `gitea_url` and sets status to `active`.
+1. **init**: Creates a Gitea repo, clones it locally, initializes the `.specify/` structure for spec-driven development. Updates the project record with `gitea_url` and sets status to `active`.
 
 2. **push**: Stages all changes in the project working directory, commits with the given message, and pushes to the remote.
 
@@ -26,5 +26,6 @@ python -m skills.project_git.scripts.git_ops branch --project-id <uuid> --name <
 ## Notes
 
 - The working directory for each project is `data/projects/<project-id>/`
-- The spec is stored as `CLAUDE.md` in the repo root so Claude Code can use it as context
+- The spec is stored in `.specify/` (spec-kit structure) for structured development
+- CLAUDE.md in repo root is supported for backwards compatibility
 - Always commit and push after making significant changes

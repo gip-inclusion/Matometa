@@ -65,7 +65,7 @@
         </li>
 
         {% if config.EXPERT_MODE_ENABLED %}
-        <li class="nav-item expert-nav-item {% if section == 'accueil' %}d-none{% endif %}">
+        <li class="nav-item expert-nav-item">
           <a href="/expert" class="nav-link {% if section == 'expert' %}active{% endif %}"
              hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true">
             <i class="ri-code-s-slash-line" aria-hidden="true"></i>
@@ -274,11 +274,6 @@
   <script>
   function updateSidebarActive() {
     const path = window.location.pathname;
-    const hideExpertOnLanding = path === '/';
-
-    document.querySelectorAll('.expert-nav-item').forEach(item => {
-      item.classList.toggle('d-none', hideExpertOnLanding);
-    });
 
     document.querySelectorAll('.sidebar-nav .nav-link, .offcanvas .nav-link').forEach(link => {
       const href = link.getAttribute('href');

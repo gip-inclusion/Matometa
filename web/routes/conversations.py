@@ -40,45 +40,35 @@ def _project_in_planning(project) -> bool:
 
 
 def _build_project_prompt(*, project, content: str, workdir: str, is_first_project_message: bool) -> str:
-    """Build the expert-mode prompt with project context."""
+    """Build the expert-mode prompt with project context.
+
+    Spec content is now injected via the system prompt (AGENTS_EXPERT.md + .specify/ artifacts),
+    so the user message only carries project metadata.
+    """
+    from pathlib import Path
+    specify_exists = (Path(workdir) / ".specify" / "specs").exists()
+
     if _project_in_planning(project) and is_first_project_message:
         project_context = (
-            "You are in MODE EXPERT - plan mode.\n\n"
-            "IMPORTANT: Enter plan mode (/plan) to design the app spec with the user.\n\n"
-            "Help the user describe what they want to build. In your plan, include:\n"
-            "- App name and description\n"
-            "- Architecture (backend framework, frontend, database)\n"
-            "- API endpoints or pages\n"
-            "- Data model\n"
-            "- Docker setup\n\n"
-            "Once the plan is approved, save it as the project spec and proceed to implementation.\n\n"
             f"Project: {project.name}\n"
-            f"Working directory: {workdir}/\n\n"
-            "User request: "
-        )
-    elif project.spec:
-        project_context = (
-            f"You are in MODE EXPERT working on \"{project.name}\".\n\n"
             f"Working directory: {workdir}/\n"
-            f"Gitea: {project.gitea_url or 'not yet created'}\n"
-            f"Deploy URL: {project.deploy_url or 'not yet deployed'}\n"
-            f"Status: {project.status}\n\n"
-            "SPEC:\n"
-            "---\n"
-            f"{project.spec}\n"
-            "---\n\n"
-            "All code goes in the working directory.\n"
-            "Important: Matometa automatically commits and pushes code changes to the staging branch\n"
-            "after each response. Do not run git commit/push yourself unless explicitly requested.\n\n"
-            "User request: "
+            f"No spec exists yet. Use /speckit.specify to help the user design the app.\n\n"
+            "User: "
         )
     else:
         project_context = (
-            f"You are in MODE EXPERT working on \"{project.name}\".\n"
+            f"Project: {project.name}\n"
             f"Working directory: {workdir}/\n"
-            f"Status: {project.status}\n\n"
-            "User request: "
+            f"Gitea: {project.gitea_url or 'not created'}\n"
+            f"Status: {project.status}\n"
         )
+        if not specify_exists and project.spec:
+            project_context += (
+                "\nSPEC:\n---\n"
+                f"{project.spec}\n"
+                "---\n"
+            )
+        project_context += "\nUser: "
 
     return project_context + content
 

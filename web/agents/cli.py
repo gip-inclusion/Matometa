@@ -15,6 +15,54 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
+def _read_specify_context(workdir: str) -> str:
+    """Read .specify/ artifacts from a project workdir for system prompt injection.
+
+    Falls back to CLAUDE.md if .specify/ doesn't exist (backwards compatibility).
+    """
+    from pathlib import Path
+    workdir_path = Path(workdir)
+    specify_dir = workdir_path / ".specify"
+
+    if specify_dir.exists():
+        parts = []
+        # Read constitution
+        constitution = specify_dir / "memory" / "constitution.md"
+        if constitution.exists():
+            content = constitution.read_text().strip()
+            if content:
+                parts.append(f"### Constitution\n\n{content}")
+
+        # Find latest spec version
+        specs_dir = specify_dir / "specs"
+        if specs_dir.exists():
+            versions = sorted(
+                [d for d in specs_dir.iterdir() if d.is_dir()],
+                key=lambda d: d.name,
+                reverse=True,
+            )
+            if versions:
+                latest = versions[0]
+                for name in ("spec.md", "plan.md", "tasks.md", "checklist.md"):
+                    fpath = latest / name
+                    if fpath.exists():
+                        content = fpath.read_text().strip()
+                        if content:
+                            label = name.replace(".md", "").capitalize()
+                            parts.append(f"### {label}\n\n{content}")
+
+        return "\n\n".join(parts) if parts else ""
+
+    # Backwards compatibility: read CLAUDE.md if it exists
+    claude_md = workdir_path / "CLAUDE.md"
+    if claude_md.exists():
+        content = claude_md.read_text().strip()
+        if content:
+            return f"### Project CLAUDE.md\n\n{content}"
+
+    return ""
+
+
 class CLIBackend(AgentBackend):
     """Agent backend that spawns the claude CLI."""
 
@@ -122,13 +170,25 @@ class CLIBackend(AgentBackend):
         for d in config.ADDITIONAL_DIRS:
             cmd.extend(["--add-dir", d])
 
-        # Add AGENTS.md as system prompt
+        # Build system prompt from composable parts
         agents_md_path = config.BASE_DIR / "AGENTS.md"
         if agents_md_path.exists():
             from datetime import date
             today = date.today().strftime("%A %d %B %Y")
-            agents_content = agents_md_path.read_text()
-            agents_content = f"Aujourd'hui, nous sommes le {today}.\n\n{agents_content}"
+            base = agents_md_path.read_text()
+
+            if project_workdir:
+                mode_path = config.BASE_DIR / "AGENTS_EXPERT.md"
+                mode = mode_path.read_text() if mode_path.exists() else ""
+                # Inject spec-kit artifacts as project context
+                spec_context = _read_specify_context(project_workdir)
+                if spec_context:
+                    mode += "\n\n## Current Project Context\n\n" + spec_context
+            else:
+                mode_path = config.BASE_DIR / "AGENTS_ANALYTICS.md"
+                mode = mode_path.read_text() if mode_path.exists() else ""
+
+            agents_content = f"Aujourd'hui, nous sommes le {today}.\n\n{base}\n\n{mode}"
             cmd.extend(["--system-prompt", agents_content])
 
         # In a container, skip permission checks (container is the security boundary).

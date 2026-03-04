@@ -2,6 +2,10 @@
 
 {% block title_suffix %} – Expert{% endblock %}
 
+{% block head %}
+<link rel="stylesheet" href="{{ static_url('css/expert.css') }}">
+{% endblock %}
+
 {% block content %}
 <section class="section-content" id="section-expert">
   <div class="section-header">
@@ -10,7 +14,7 @@
         <div class="conv-title-wrapper">
           <p class="conv-meta-row text-muted mb-0 small">Mode Expert</p>
           <div class="conv-title-display">
-            <h1 class="mb-0"><i class="ri-code-s-slash-line ri-2x text-primary me-2" style="vertical-align: middle;"></i>Mes applications</h1>
+            <h1 class="mb-0">Mes applications</h1>
           </div>
         </div>
         <a href="/expert/nouveau" class="btn btn-primary ms-auto">
@@ -23,42 +27,28 @@
   <div class="section-body">
     <div class="container py-4">
       {% if projects %}
-      <div class="row g-3">
+      <ul class="expert-project-list">
         {% for project in projects %}
-        <div class="col-12 col-md-6 col-lg-4">
-          <a href="/expert/{{ project.slug }}" class="card h-100 text-decoration-none">
-            <div class="card-body">
-              <div class="d-flex align-items-center mb-2">
-                <h5 class="card-title mb-0 me-2">{{ project.name }}</h5>
-                <span class="badge {% if project.status == 'deployed' %}bg-success{% elif project.status == 'active' %}bg-primary{% elif project.status == 'archived' %}bg-secondary{% else %}bg-warning text-dark{% endif %}">
-                  {{ project.status }}
-                </span>
-              </div>
-              {% if project.description %}
-              <p class="card-text text-muted small">{{ project.description }}</p>
-              {% endif %}
-              <div class="d-flex gap-2 mt-2">
-                {% if project.deploy_url %}
-                <span class="badge bg-light text-dark"><i class="ri-global-line"></i> En ligne</span>
-                {% endif %}
-                {% if project.gitea_url %}
-                <span class="badge bg-light text-dark"><i class="ri-git-repository-line"></i> Repo</span>
-                {% endif %}
-              </div>
-            </div>
-            <div class="card-footer text-muted small">
-              Mis à jour {{ project.updated_at.strftime('%d/%m/%Y à %H:%M') }}
-            </div>
+        <li>
+          <a href="/expert/{{ project.slug }}" class="expert-project-item">
+            <span class="expert-project-name">{{ project.name }}</span>
+            <span class="badge {% if project.status == 'deployed' %}bg-success{% elif project.status == 'active' %}bg-primary{% elif project.status == 'archived' %}bg-secondary{% else %}bg-warning text-dark{% endif %}">
+              {{ project.status }}
+            </span>
+            {% if project.deploy_url %}
+            <span class="deploy-dot deploy-dot-running" title="En ligne"></span>
+            {% endif %}
+            <span class="expert-project-meta">{{ project.updated_at.strftime('%d/%m') }}</span>
           </a>
-        </div>
+        </li>
         {% endfor %}
-      </div>
+      </ul>
       {% else %}
       <div class="text-center py-5">
         <i class="ri-code-s-slash-line ri-4x text-disabled mb-3"></i>
         <p class="text-muted mb-3">Aucune application pour le moment.</p>
         <a href="/expert/nouveau" class="btn btn-primary">
-          <i class="ri-add-line"></i> Créer ma première app
+          <i class="ri-add-line"></i> Creer ma premiere app
         </a>
       </div>
       {% endif %}

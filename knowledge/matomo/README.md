@@ -47,7 +47,7 @@ Scraped from the Matomo instance on 2026-01-03. This instance includes premium p
 | VisitorInterest | 6 | Engagement metrics |
 | VisitTime | 3 | Time-based analytics |
 | SitesManager | 42 | Site configuration |
-| TagManager | 38 | Tag management |
+| TagManager | 46 | `tag-manager.md` | Tag management (containers, tags, triggers, variables) |
 | UsersManager | 28 | User management |
 
 → See `other-modules.md` for full signatures.
