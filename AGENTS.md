@@ -50,7 +50,6 @@ result = execute_query(
 | `./skills/` | Reusable agent skills |
 | `./knowledge/stats/nexus.md`  | Nexus (application unifiée cross-services, DB 17) |
 
-
 **Data directory** (`DATA_DIR`, default `./data/`):
 | Path | Purpose |
 |------|---------|
