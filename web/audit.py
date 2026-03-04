@@ -1,70 +1,53 @@
 """Audit logging for agent tool usage.
 
-Stores audit logs in a separate SQLite database for security and separation of concerns.
+Uses the main PostgreSQL connection pool.
 """
 
 import json
-import sqlite3
-from contextlib import contextmanager
-from datetime import datetime
-from pathlib import Path
+import logging
 from typing import Any, Optional
 
-from . import config
+from .db import get_db
 
-# Separate database for audit logs
-AUDIT_DB_PATH = config.BASE_DIR / "data" / "audit.db"
-
-
-def get_audit_connection() -> sqlite3.Connection:
-    """Get an audit database connection."""
-    AUDIT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(AUDIT_DB_PATH), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA cache_size=-65536")
-    return conn
+logger = logging.getLogger(__name__)
 
 
-@contextmanager
 def get_audit_db():
     """Context manager for audit database connections."""
-    conn = get_audit_connection()
-    try:
-        yield conn
-        conn.commit()
-    finally:
-        conn.close()
+    return get_db()
 
 
 def init_audit_db():
     """Initialize the audit database schema."""
     with get_audit_db() as conn:
-        conn.executescript("""
+        conn.execute_raw("""
             CREATE TABLE IF NOT EXISTS tool_invocations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT NOT NULL,
+                id SERIAL PRIMARY KEY,
+                timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 conversation_id TEXT NOT NULL,
                 user_email TEXT,
                 tool_name TEXT NOT NULL,
                 tool_input TEXT,
-                success INTEGER DEFAULT 1
+                success BOOLEAN DEFAULT TRUE
             );
 
             CREATE INDEX IF NOT EXISTS idx_tool_invocations_timestamp
                 ON tool_invocations(timestamp DESC);
-
             CREATE INDEX IF NOT EXISTS idx_tool_invocations_user
                 ON tool_invocations(user_email);
-
             CREATE INDEX IF NOT EXISTS idx_tool_invocations_tool
                 ON tool_invocations(tool_name);
+
+            DELETE FROM tool_invocations
+                WHERE timestamp < NOW() - INTERVAL '90 days';
         """)
 
 
 # Initialize on import
-init_audit_db()
+try:
+    init_audit_db()
+except Exception as e:
+    logger.warning("Failed to initialize tool_invocations table: %s", e)
 
 
 def audit_log(
@@ -74,35 +57,23 @@ def audit_log(
     user_email: Optional[str] = None,
     success: bool = True,
 ) -> None:
-    """
-    Log a tool invocation to the audit database.
-
-    Args:
-        conversation_id: The conversation where the tool was invoked
-        tool_name: Name of the tool (e.g., "Bash", "Read", "Write")
-        tool_input: The input passed to the tool (will be JSON-serialized)
-        user_email: Email of the authenticated user (from oauth2-proxy)
-        success: Whether the tool invocation succeeded
-    """
+    """Log a tool invocation to the audit database."""
     try:
         input_json = json.dumps(tool_input) if tool_input else None
     except (TypeError, ValueError):
         input_json = str(tool_input)
 
-    with get_audit_db() as conn:
-        conn.execute(
-            """INSERT INTO tool_invocations
-               (timestamp, conversation_id, user_email, tool_name, tool_input, success)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (
-                datetime.now().isoformat(),
-                conversation_id,
-                user_email,
-                tool_name,
-                input_json,
-                1 if success else 0,
+    try:
+        with get_audit_db() as conn:
+            conn.execute(
+                """INSERT INTO tool_invocations
+                   (conversation_id, user_email, tool_name, tool_input, success)
+                   VALUES (%s, %s, %s, %s, %s)""",
+                (conversation_id, user_email, tool_name, input_json,
+                 1 if success else 0),
             )
-        )
+    except Exception as e:
+        logger.warning("Failed to log tool invocation: %s", e)
 
 
 def get_recent_audit_logs(limit: int = 100) -> list[dict]:
@@ -111,7 +82,7 @@ def get_recent_audit_logs(limit: int = 100) -> list[dict]:
         rows = conn.execute(
             """SELECT * FROM tool_invocations
                ORDER BY timestamp DESC
-               LIMIT ?""",
+               LIMIT %s""",
             (limit,)
         ).fetchall()
 
@@ -134,7 +105,7 @@ def get_audit_logs_for_conversation(conversation_id: str) -> list[dict]:
     with get_audit_db() as conn:
         rows = conn.execute(
             """SELECT * FROM tool_invocations
-               WHERE conversation_id = ?
+               WHERE conversation_id = %s
                ORDER BY timestamp ASC""",
             (conversation_id,)
         ).fetchall()

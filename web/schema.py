@@ -3,12 +3,10 @@
 Called once at startup by ConversationStore.__init__().
 """
 
-import sqlite3
-
-from .db import ConnectionWrapper, get_db, USE_POSTGRES
+from .db import ConnectionWrapper, get_db
 
 # Schema version - increment when adding migrations
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
 
 
 def _get_schema_version(conn: ConnectionWrapper) -> int:
@@ -16,39 +14,29 @@ def _get_schema_version(conn: ConnectionWrapper) -> int:
     try:
         row = conn.execute("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").fetchone()
         return row["version"] if row else 0
-    except sqlite3.OperationalError:
-        return 0
     except Exception as e:
-        if USE_POSTGRES:
-            error_code = getattr(e, "pgcode", None)
-            if error_code == "42P01":  # undefined_table
-                conn.rollback()
-                return 0
+        error_code = getattr(e, "pgcode", None)
+        if error_code == "42P01":  # undefined_table
+            conn.rollback()
+            return 0
         raise
 
 
 def _set_schema_version(conn: ConnectionWrapper, version: int):
     """Set the schema version."""
-    if conn.is_postgres:
-        conn.execute(
-            "INSERT INTO schema_version (version) VALUES (%s) ON CONFLICT (version) DO UPDATE SET version = %s",
-            (version, version)
-        )
-    else:
-        conn.execute("INSERT OR REPLACE INTO schema_version (version) VALUES (?)", (version,))
+    conn.execute(
+        "INSERT INTO schema_version (version) VALUES (%s) ON CONFLICT (version) DO UPDATE SET version = %s",
+        (version, version)
+    )
 
 
 def _get_table_columns(conn: ConnectionWrapper, table_name: str) -> set[str]:
     """Get column names for a table."""
-    if conn.is_postgres:
-        rows = conn.execute(
-            "SELECT column_name FROM information_schema.columns WHERE table_name = %s",
-            (table_name,)
-        ).fetchall()
-        return {row['column_name'] for row in rows}
-    else:
-        rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
-        return {row['name'] for row in rows}
+    rows = conn.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = %s",
+        (table_name,)
+    ).fetchall()
+    return {row['column_name'] for row in rows}
 
 
 def init_db():
@@ -82,6 +70,8 @@ def init_db():
                     _migrate_to_v19(conn)
                 if current_version < 20:
                     _migrate_to_v20(conn)
+                if current_version < 21:
+                    _migrate_to_v21(conn)
 
             _set_schema_version(conn, SCHEMA_VERSION)
 
@@ -91,6 +81,7 @@ def init_db():
         _migrate_to_v18(conn)
         _migrate_to_v19(conn)
         _migrate_to_v20(conn)
+        _migrate_to_v21(conn)
 
 
 # =============================================================================
@@ -107,52 +98,27 @@ def _migrate_to_v11(conn: ConnectionWrapper):
 
     has_old_columns = "input_tokens" in columns
 
-    if conn.is_postgres:
-        # PostgreSQL supports RENAME COLUMN
-        if has_old_columns:
-            conn.execute("ALTER TABLE conversations RENAME COLUMN input_tokens TO usage_input_tokens")
-            conn.execute("ALTER TABLE conversations RENAME COLUMN output_tokens TO usage_output_tokens")
-        else:
-            conn.execute("ALTER TABLE conversations ADD COLUMN usage_input_tokens INTEGER DEFAULT 0")
-            conn.execute("ALTER TABLE conversations ADD COLUMN usage_output_tokens INTEGER DEFAULT 0")
-
-        conn.execute("ALTER TABLE conversations ADD COLUMN usage_cache_creation_tokens INTEGER DEFAULT 0")
-        conn.execute("ALTER TABLE conversations ADD COLUMN usage_cache_read_tokens INTEGER DEFAULT 0")
-        conn.execute("ALTER TABLE conversations ADD COLUMN usage_backend TEXT")
-        conn.execute("ALTER TABLE conversations ADD COLUMN usage_extra TEXT")
+    if has_old_columns:
+        conn.execute("ALTER TABLE conversations RENAME COLUMN input_tokens TO usage_input_tokens")
+        conn.execute("ALTER TABLE conversations RENAME COLUMN output_tokens TO usage_output_tokens")
     else:
-        # SQLite: RENAME COLUMN supported since 3.25.0
-        if has_old_columns and sqlite3.sqlite_version_info >= (3, 25, 0):
-            conn.execute("ALTER TABLE conversations RENAME COLUMN input_tokens TO usage_input_tokens")
-            conn.execute("ALTER TABLE conversations RENAME COLUMN output_tokens TO usage_output_tokens")
-        elif has_old_columns:
-            # Old SQLite: add new columns and copy data
-            conn.execute("ALTER TABLE conversations ADD COLUMN usage_input_tokens INTEGER DEFAULT 0")
-            conn.execute("ALTER TABLE conversations ADD COLUMN usage_output_tokens INTEGER DEFAULT 0")
-            conn.execute("UPDATE conversations SET usage_input_tokens = input_tokens, usage_output_tokens = output_tokens")
-        else:
-            conn.execute("ALTER TABLE conversations ADD COLUMN usage_input_tokens INTEGER DEFAULT 0")
-            conn.execute("ALTER TABLE conversations ADD COLUMN usage_output_tokens INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE conversations ADD COLUMN usage_input_tokens INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE conversations ADD COLUMN usage_output_tokens INTEGER DEFAULT 0")
 
-        conn.execute("ALTER TABLE conversations ADD COLUMN usage_cache_creation_tokens INTEGER DEFAULT 0")
-        conn.execute("ALTER TABLE conversations ADD COLUMN usage_cache_read_tokens INTEGER DEFAULT 0")
-        conn.execute("ALTER TABLE conversations ADD COLUMN usage_backend TEXT")
-        conn.execute("ALTER TABLE conversations ADD COLUMN usage_extra TEXT")
+    conn.execute("ALTER TABLE conversations ADD COLUMN usage_cache_creation_tokens INTEGER DEFAULT 0")
+    conn.execute("ALTER TABLE conversations ADD COLUMN usage_cache_read_tokens INTEGER DEFAULT 0")
+    conn.execute("ALTER TABLE conversations ADD COLUMN usage_backend TEXT")
+    conn.execute("ALTER TABLE conversations ADD COLUMN usage_extra TEXT")
 
     # Ensure schema_version table exists for older databases
-    if conn.is_postgres:
-        conn.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY)")
-    else:
-        conn.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY)")
+    conn.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY)")
 
 
 def _migrate_to_v12(conn: ConnectionWrapper):
     """Migrate to v12: add uploaded_files table for chat file uploads."""
-    serial_pk = "SERIAL PRIMARY KEY" if conn.is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
-
-    conn.execute(f"""
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS uploaded_files (
-            id {serial_pk},
+            id SERIAL PRIMARY KEY,
             conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,
             user_id TEXT,
             original_filename TEXT NOT NULL,
@@ -191,11 +157,9 @@ def _migrate_to_v14(conn: ConnectionWrapper):
 
 def _migrate_to_v15(conn: ConnectionWrapper):
     """Migrate to v15: add cron_runs table for scheduled task history."""
-    serial_pk = "SERIAL PRIMARY KEY" if conn.is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
-
-    conn.execute(f"""
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS cron_runs (
-            id {serial_pk},
+            id SERIAL PRIMARY KEY,
             app_slug TEXT NOT NULL,
             started_at TEXT NOT NULL,
             finished_at TEXT,
@@ -217,11 +181,9 @@ def _migrate_to_v16(conn: ConnectionWrapper):
 
 def _migrate_to_v17(conn: ConnectionWrapper):
     """Migrate to v17: add pinned_items table for generic pinning (conversations, reports, apps)."""
-    serial_pk = "SERIAL PRIMARY KEY" if conn.is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
-
-    conn.execute(f"""
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS pinned_items (
-            id {serial_pk},
+            id SERIAL PRIMARY KEY,
             item_type TEXT NOT NULL,
             item_id TEXT NOT NULL,
             label TEXT,
@@ -231,28 +193,19 @@ def _migrate_to_v17(conn: ConnectionWrapper):
     """)
 
     # Migrate existing pinned conversations
-    if conn.is_postgres:
-        conn.execute("""
-            INSERT INTO pinned_items (item_type, item_id, label, pinned_at)
-            SELECT 'conversation', id, pinned_label, pinned_at
-            FROM conversations WHERE pinned_at IS NOT NULL
-            ON CONFLICT (item_type, item_id) DO NOTHING
-        """)
-    else:
-        conn.execute("""
-            INSERT OR IGNORE INTO pinned_items (item_type, item_id, label, pinned_at)
-            SELECT 'conversation', id, pinned_label, pinned_at
-            FROM conversations WHERE pinned_at IS NOT NULL
-        """)
+    conn.execute("""
+        INSERT INTO pinned_items (item_type, item_id, label, pinned_at)
+        SELECT 'conversation', id, pinned_label, pinned_at
+        FROM conversations WHERE pinned_at IS NOT NULL
+        ON CONFLICT (item_type, item_id) DO NOTHING
+    """)
 
 
 def _migrate_to_v18(conn: ConnectionWrapper):
     """Migrate to v18: add pm_commands table for process manager coordination."""
-    serial_pk = "SERIAL PRIMARY KEY" if conn.is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
-
-    conn.execute(f"""
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS pm_commands (
-            id {serial_pk},
+            id SERIAL PRIMARY KEY,
             conversation_id TEXT NOT NULL,
             command TEXT NOT NULL,
             payload TEXT,
@@ -282,10 +235,7 @@ def _migrate_to_v19(conn: ConnectionWrapper):
 
 def _create_schema(conn: ConnectionWrapper):
     """Create the complete database schema."""
-    # Use SERIAL for PostgreSQL, INTEGER PRIMARY KEY AUTOINCREMENT for SQLite
-    serial_pk = "SERIAL PRIMARY KEY" if conn.is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
-
-    conn.executescript(f"""
+    conn.execute_raw("""
         CREATE TABLE IF NOT EXISTS schema_version (
             version INTEGER PRIMARY KEY
         );
@@ -314,7 +264,7 @@ def _create_schema(conn: ConnectionWrapper):
         );
 
         CREATE TABLE IF NOT EXISTS messages (
-            id {serial_pk},
+            id SERIAL PRIMARY KEY,
             conversation_id TEXT NOT NULL,
             type TEXT,
             role TEXT NOT NULL,
@@ -325,7 +275,7 @@ def _create_schema(conn: ConnectionWrapper):
         );
 
         CREATE TABLE IF NOT EXISTS reports (
-            id {serial_pk},
+            id SERIAL PRIMARY KEY,
             title TEXT NOT NULL,
             content TEXT,
             website TEXT,
@@ -344,7 +294,7 @@ def _create_schema(conn: ConnectionWrapper):
         );
 
         CREATE TABLE IF NOT EXISTS tags (
-            id {serial_pk},
+            id SERIAL PRIMARY KEY,
             name TEXT NOT NULL UNIQUE,
             type TEXT NOT NULL,
             label TEXT NOT NULL
@@ -363,7 +313,7 @@ def _create_schema(conn: ConnectionWrapper):
         );
 
         CREATE TABLE IF NOT EXISTS uploaded_files (
-            id {serial_pk},
+            id SERIAL PRIMARY KEY,
             conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,
             user_id TEXT,
             original_filename TEXT NOT NULL,
@@ -388,7 +338,7 @@ def _create_schema(conn: ConnectionWrapper):
         CREATE INDEX IF NOT EXISTS idx_report_tags_report ON report_tags(report_id);
         CREATE INDEX IF NOT EXISTS idx_report_tags_tag ON report_tags(tag_id);
         CREATE TABLE IF NOT EXISTS cron_runs (
-            id {serial_pk},
+            id SERIAL PRIMARY KEY,
             app_slug TEXT NOT NULL,
             started_at TEXT NOT NULL,
             finished_at TEXT,
@@ -399,7 +349,7 @@ def _create_schema(conn: ConnectionWrapper):
         );
 
         CREATE TABLE IF NOT EXISTS pinned_items (
-            id {serial_pk},
+            id SERIAL PRIMARY KEY,
             item_type TEXT NOT NULL,
             item_id TEXT NOT NULL,
             label TEXT,
@@ -408,7 +358,7 @@ def _create_schema(conn: ConnectionWrapper):
         );
 
         CREATE TABLE IF NOT EXISTS pm_commands (
-            id {serial_pk},
+            id SERIAL PRIMARY KEY,
             conversation_id TEXT NOT NULL,
             command TEXT NOT NULL,
             payload TEXT,
@@ -426,7 +376,147 @@ def _create_schema(conn: ConnectionWrapper):
             id INTEGER PRIMARY KEY CHECK (id = 1),
             last_seen TEXT NOT NULL
         );
+
+        -- pgvector extension for embedding similarity search
+        CREATE EXTENSION IF NOT EXISTS vector;
+
+        -- Research corpus tables (Notion "Connaissance du terrain")
+        CREATE TABLE IF NOT EXISTS research_pages (
+            id TEXT PRIMARY KEY,
+            database_key TEXT NOT NULL,
+            database_name TEXT NOT NULL,
+            title TEXT,
+            properties_json TEXT,
+            url TEXT,
+            created_time TEXT,
+            last_edited_time TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS research_blocks (
+            id TEXT PRIMARY KEY,
+            page_id TEXT NOT NULL REFERENCES research_pages(id) ON DELETE CASCADE,
+            type TEXT NOT NULL,
+            text_content TEXT,
+            position INTEGER,
+            parent_block_id TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS research_relations (
+            source_page_id TEXT NOT NULL REFERENCES research_pages(id) ON DELETE CASCADE,
+            property_name TEXT NOT NULL,
+            target_page_id TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS research_chunks (
+            id SERIAL PRIMARY KEY,
+            page_id TEXT NOT NULL REFERENCES research_pages(id) ON DELETE CASCADE,
+            chunk_index INTEGER NOT NULL,
+            text TEXT NOT NULL,
+            text_hash TEXT NOT NULL,
+            database_key TEXT NOT NULL,
+            embedding vector(1024)
+        );
+
+        CREATE TABLE IF NOT EXISTS research_sync_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_research_chunks_hash ON research_chunks(text_hash);
+        CREATE INDEX IF NOT EXISTS idx_research_chunks_page ON research_chunks(page_id);
+        CREATE INDEX IF NOT EXISTS idx_research_blocks_page ON research_blocks(page_id);
+
+        -- Wishlist table (capability requests synced to Notion)
+        CREATE TABLE IF NOT EXISTS wishlist (
+            id SERIAL PRIMARY KEY,
+            timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            category TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            conversation_id TEXT,
+            status TEXT NOT NULL DEFAULT 'open',
+            notion_page_id TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_wishlist_category ON wishlist(category);
+        CREATE INDEX IF NOT EXISTS idx_wishlist_status ON wishlist(status);
     """)
+
+
+def _migrate_to_v21(conn: ConnectionWrapper):
+    """Migrate to v21: add pgvector, research corpus tables, and wishlist table."""
+    conn.execute_raw("CREATE EXTENSION IF NOT EXISTS vector")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS research_pages (
+            id TEXT PRIMARY KEY,
+            database_key TEXT NOT NULL,
+            database_name TEXT NOT NULL,
+            title TEXT,
+            properties_json TEXT,
+            url TEXT,
+            created_time TEXT,
+            last_edited_time TEXT
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS research_blocks (
+            id TEXT PRIMARY KEY,
+            page_id TEXT NOT NULL REFERENCES research_pages(id) ON DELETE CASCADE,
+            type TEXT NOT NULL,
+            text_content TEXT,
+            position INTEGER,
+            parent_block_id TEXT
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS research_relations (
+            source_page_id TEXT NOT NULL REFERENCES research_pages(id) ON DELETE CASCADE,
+            property_name TEXT NOT NULL,
+            target_page_id TEXT NOT NULL
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS research_chunks (
+            id SERIAL PRIMARY KEY,
+            page_id TEXT NOT NULL REFERENCES research_pages(id) ON DELETE CASCADE,
+            chunk_index INTEGER NOT NULL,
+            text TEXT NOT NULL,
+            text_hash TEXT NOT NULL,
+            database_key TEXT NOT NULL,
+            embedding vector(1024)
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS research_sync_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    """)
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_research_chunks_hash ON research_chunks(text_hash)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_research_chunks_page ON research_chunks(page_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_research_blocks_page ON research_blocks(page_id)")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS wishlist (
+            id SERIAL PRIMARY KEY,
+            timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            category TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            conversation_id TEXT,
+            status TEXT NOT NULL DEFAULT 'open',
+            notion_page_id TEXT
+        )
+    """)
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_wishlist_category ON wishlist(category)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_wishlist_status ON wishlist(status)")
 
 
 def _migrate_to_v20(conn: ConnectionWrapper):
@@ -488,13 +578,7 @@ TAGS = [
 
 def _seed_tags(conn: ConnectionWrapper):
     """Seed the tags table with taxonomy."""
-    if conn.is_postgres:
-        conn.executemany(
-            "INSERT INTO tags (name, type, label) VALUES (%s, %s, %s) ON CONFLICT (name) DO NOTHING",
-            TAGS
-        )
-    else:
-        conn.executemany(
-            "INSERT OR IGNORE INTO tags (name, type, label) VALUES (?, ?, ?)",
-            TAGS
-        )
+    conn.executemany(
+        "INSERT INTO tags (name, type, label) VALUES (%s, %s, %s) ON CONFLICT (name) DO NOTHING",
+        TAGS
+    )

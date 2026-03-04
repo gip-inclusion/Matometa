@@ -31,7 +31,7 @@ from enum import Enum
 from typing import Any, Optional
 
 from ._sources import get_metabase, get_matomo
-from ._audit import log_query, _get_db_connection
+from ._audit import log_query, get_query_stats
 
 # Re-export API classes and helpers for convenience
 from ._matomo import MatomoAPI, MatomoError
@@ -204,71 +204,4 @@ def execute_query(
         )
 
 
-def get_query_stats(
-    since: Optional[str] = None,
-    source: Optional[str] = None,
-    caller: Optional[str] = None,
-) -> dict:
-    """
-    Get query statistics from the log.
-
-    Args:
-        since: ISO timestamp to filter from (e.g., "2025-01-01")
-        source: Filter by source ("metabase" or "matomo")
-        caller: Filter by caller type ("agent" or "app")
-
-    Returns:
-        Dict with statistics
-    """
-    conn = _get_db_connection()
-
-    where_clauses = []
-    params = []
-
-    if since:
-        where_clauses.append("timestamp >= ?")
-        params.append(since)
-    if source:
-        where_clauses.append("source = ?")
-        params.append(source)
-    if caller:
-        where_clauses.append("caller = ?")
-        params.append(caller)
-
-    where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
-
-    # Total queries
-    total = conn.execute(
-        f"SELECT COUNT(*) FROM query_log WHERE {where_sql}", params
-    ).fetchone()[0]
-
-    # Success rate
-    success = conn.execute(
-        f"SELECT COUNT(*) FROM query_log WHERE {where_sql} AND success = 1", params
-    ).fetchone()[0]
-
-    # By source
-    by_source = dict(conn.execute(
-        f"SELECT source, COUNT(*) FROM query_log WHERE {where_sql} GROUP BY source", params
-    ).fetchall())
-
-    # By caller
-    by_caller = dict(conn.execute(
-        f"SELECT caller, COUNT(*) FROM query_log WHERE {where_sql} GROUP BY caller", params
-    ).fetchall())
-
-    # Avg execution time
-    avg_time = conn.execute(
-        f"SELECT AVG(execution_time_ms) FROM query_log WHERE {where_sql}", params
-    ).fetchone()[0]
-
-    conn.close()
-
-    return {
-        "total_queries": total,
-        "successful_queries": success,
-        "success_rate": success / total if total > 0 else 0,
-        "by_source": by_source,
-        "by_caller": by_caller,
-        "avg_execution_time_ms": int(avg_time) if avg_time else 0,
-    }
+# get_query_stats is imported from _audit and re-exported for convenience

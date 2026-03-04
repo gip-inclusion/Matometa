@@ -18,7 +18,6 @@ import pytest
 # Set up test environment BEFORE any imports
 _tmp_dir = tempfile.mkdtemp()
 os.environ["DATA_DIR"] = _tmp_dir
-os.environ["DATABASE_URL"] = ""  # Force SQLite
 
 # Now we can safely import
 from web.uploads import (
@@ -38,7 +37,6 @@ from web import config
 
 # Configure for testing
 config.DATA_DIR = Path(_tmp_dir)
-config.SQLITE_PATH = Path(_tmp_dir) / "test.db"
 config.UPLOADS_DIR = Path(_tmp_dir) / "uploads"
 config.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 config.MAX_UPLOAD_SIZE = 10 * 1024 * 1024
@@ -55,7 +53,6 @@ def setup_test_db(tmp_path):
     """Set up a fresh test database and uploads directory for each test."""
     # Override config paths
     import web.config as config
-    config.SQLITE_PATH = tmp_path / "test.db"
     config.DATA_DIR = tmp_path
     config.UPLOADS_DIR = tmp_path / "uploads"
     config.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -67,6 +64,16 @@ def setup_test_db(tmp_path):
     init_db()
 
     yield tmp_path
+
+    # Clean up database tables
+    from web.db import get_db
+    with get_db() as conn:
+        conn.execute_raw("""
+            TRUNCATE TABLE messages, conversation_tags, report_tags,
+                uploaded_files, cron_runs, pinned_items, pm_commands,
+                pm_heartbeat, reports, conversations, tags, schema_version
+                CASCADE;
+        """)
 
 
 class TestComputeSha256:
