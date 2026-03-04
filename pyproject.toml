@@ -73,6 +73,8 @@ dev = [
 [tool.ruff]
 target-version = "py311"
 line-length = 120
+# evals/: experimental evaluation scripts, intentionally loose style
+# skills/: self-contained agent skill packages with their own conventions
 exclude = ["data/", ".venv/", "evals/", "skills/"]
 
 [tool.ruff.lint]

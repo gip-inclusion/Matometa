@@ -36,23 +36,24 @@ down:
 
 ## Lint (ruff check + format check)
 lint:
-	uv run ruff check web/ lib/ scripts/ tests/
-	uv run ruff format --check web/ lib/ scripts/ tests/
+	uv run --frozen ruff check web/ lib/ scripts/ tests/
+	uv run --frozen ruff format --check web/ lib/ scripts/ tests/
 
 ## Auto-format code
 format:
-	uv run ruff check --fix web/ lib/ scripts/ tests/
-	uv run ruff format web/ lib/ scripts/ tests/
+	uv run --frozen ruff check --fix web/ lib/ scripts/ tests/
+	uv run --frozen ruff format web/ lib/ scripts/ tests/
 
 ## Security checks (SAST + dependency audit)
 security:
-	uv run bandit -r web/ lib/ scripts/ -c pyproject.toml --severity-level medium --confidence-level high -q
-	uv export --frozen --no-hashes --no-emit-project > /tmp/requirements.txt && uv run pip-audit -r /tmp/requirements.txt
+	uv run --frozen bandit -r web/ lib/ scripts/ -c pyproject.toml --severity-level medium --confidence-level high -q
+	uv export --frozen --no-hashes --no-emit-project > /tmp/requirements.txt && uv run --frozen pip-audit -r /tmp/requirements.txt
 
 ## Run all CI checks locally
 ci: lint security test
 
 # --- Tests ---
 
+## test_metabase_answers requires live credentials and has no @pytest.mark.integration marker.
 test:
-	uv run pytest tests/ -q --tb=short -m "not integration" --ignore=tests/test_metabase_answers.py
+	uv run --frozen pytest tests/ -q --tb=short -m "not integration" --ignore=tests/test_metabase_answers.py

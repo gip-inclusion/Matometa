@@ -10,6 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Python version pinned via .python-version (3.11), read by uv sync.
   lint:
     name: Lint & format
     runs-on: ubuntu-latest
@@ -50,7 +51,7 @@ jobs:
 
       # Secret detection
       - name: Gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc  # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -65,6 +66,8 @@ jobs:
           enable-cache: true
 
       - run: uv sync --group dev --frozen
+      # test_metabase_answers requires live Metabase credentials and has
+      # no @pytest.mark.integration marker, so we --ignore it explicitly.
       - name: Unit tests
         run: >
           uv run pytest tests/ -q --tb=short -m "not integration"
