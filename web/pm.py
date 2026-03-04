@@ -211,5 +211,3 @@ class ProcessManager:
         """Check if an agent is running for a conversation."""
         task = self.running.get(conversation_id)
         return task is not None and not task.done()
-
-

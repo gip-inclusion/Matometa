@@ -97,11 +97,7 @@ class SignalRegistry:
         update_pm_alive().
         """
         now = time.monotonic()
-        stale = [
-            cid
-            for cid, sig in self._signals.items()
-            if sig.finished and (now - sig.created_at) > max_age
-        ]
+        stale = [cid for cid, sig in self._signals.items() if sig.finished and (now - sig.created_at) > max_age]
         for cid in stale:
             del self._signals[cid]
 

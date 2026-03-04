@@ -273,7 +273,7 @@ class TestSignalRegistryCounter:
         from web.signals import SignalRegistry
 
         reg = SignalRegistry()
-        sig = reg._get_or_create("conv1")
+        reg._get_or_create("conv1")  # register listener so notify_message doesn't no-op
         # Simulate: PM fires signal, then SSE calls wait_for_message
         reg.notify_message("conv1")
 

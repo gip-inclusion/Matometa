@@ -596,9 +596,7 @@ async def stream_conversation(
                 now = time.monotonic()
 
                 if signaled:
-                    new_messages = await asyncio.to_thread(
-                        store.get_messages_since, conv_id, last_msg_id
-                    )
+                    new_messages = await asyncio.to_thread(store.get_messages_since, conv_id, last_msg_id)
                     for msg in new_messages:
                         last_msg_id = msg.id
                         yield _format_msg(msg)
@@ -612,16 +610,12 @@ async def stream_conversation(
                 # Safety-net fallback: check DB every 5s for missed signals
                 if not signaled and (now - last_fallback) >= fallback_interval:
                     last_fallback = now
-                    new_messages = await asyncio.to_thread(
-                        store.get_messages_since, conv_id, last_msg_id
-                    )
+                    new_messages = await asyncio.to_thread(store.get_messages_since, conv_id, last_msg_id)
                     for msg in new_messages:
                         last_msg_id = msg.id
                         yield _format_msg(msg)
 
-                    updated = await asyncio.to_thread(
-                        store.get_conversation, conv_id, False
-                    )
+                    updated = await asyncio.to_thread(store.get_conversation, conv_id, False)
                     if updated and not updated.needs_response:
                         for chunk in await _drain_unseen(last_msg_id):
                             yield chunk
