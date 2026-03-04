@@ -63,19 +63,18 @@ class SignalRegistry:
     async def wait_for_message(self, conv_id: str, timeout: float = 3.0) -> bool:
         """Wait for a message signal. Returns True if signaled, False on timeout.
 
-        Uses a monotonic counter to avoid losing signals: if the PM fires
-        between clear() and wait(), the counter increment is still visible.
+        Uses a monotonic counter as safety net: if a signal fires but the
+        event wait times out (e.g. thread-safety edge cases), the counter
+        increment is still visible.
         """
         sig = self._get_or_create(conv_id)
         counter_before = sig.counter
-        sig.message_event.clear()
-        if sig.counter > counter_before:
-            return True
         try:
             await asyncio.wait_for(sig.message_event.wait(), timeout=timeout)
+            sig.message_event.clear()
             return True
         except asyncio.TimeoutError:
-            return False
+            return sig.counter > counter_before
 
     def is_finished(self, conv_id: str) -> bool:
         """Check if the PM has finished processing this conversation."""

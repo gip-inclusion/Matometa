@@ -188,6 +188,135 @@ class TestApiSignalCardIdZero:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Fixed: Matomo HTML timeout response raises MatomoError
+# ---------------------------------------------------------------------------
+
+
+class TestMatomoHtmlTimeoutRaises:
+    @patch("lib._matomo.emit_api_signal")
+    @patch("lib._matomo.log_query")
+    def test_html_response_raises_matomo_error(self, mock_log, mock_signal):
+        from lib._matomo import MatomoAPI, MatomoError
+
+        api = MatomoAPI(url="fake.example.com", token="fake", instance="test")
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.headers = {"Content-Type": "text/html"}
+        mock_resp.text = "<!DOCTYPE html><html><body>Gateway Timeout</body></html>"
+        mock_resp.raise_for_status = MagicMock()
+        api._session.get = MagicMock(return_value=mock_resp)
+
+        with pytest.raises(MatomoError, match="HTML instead of JSON"):
+            api._request("VisitsSummary.get", {"idSite": 1}, timeout=10)
+
+        assert mock_log.called
+        assert mock_log.call_args.kwargs["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# Fixed: SignalRegistry cold start — is_pm_alive() True on init
+# ---------------------------------------------------------------------------
+
+
+class TestSignalRegistryColdStart:
+    def test_pm_alive_on_init(self):
+        from web.signals import SignalRegistry
+
+        reg = SignalRegistry()
+        assert reg.is_pm_alive(), "PM should be considered alive immediately after init"
+
+
+# ---------------------------------------------------------------------------
+# Fixed: notify_message does not leak signals for unlistened conversations
+# ---------------------------------------------------------------------------
+
+
+class TestSignalRegistryOrphanedLeak:
+    def test_notify_message_does_not_create_signal(self):
+        from web.signals import SignalRegistry
+
+        reg = SignalRegistry()
+        reg.notify_message("no-listener")
+        assert "no-listener" not in reg._signals
+
+    def test_notify_finished_does_create_signal(self):
+        from web.signals import SignalRegistry
+
+        reg = SignalRegistry()
+        reg.notify_finished("no-listener")
+        assert "no-listener" in reg._signals
+        assert reg.is_finished("no-listener")
+
+
+# ---------------------------------------------------------------------------
+# Fixed: monotonic counter prevents signal loss on clear/set race
+# ---------------------------------------------------------------------------
+
+
+class TestSignalRegistryCounter:
+    def test_counter_increments_on_notify(self):
+        from web.signals import SignalRegistry
+
+        reg = SignalRegistry()
+        sig = reg._get_or_create("conv1")
+        assert sig.counter == 0
+        reg.notify_message("conv1")
+        assert sig.counter == 1
+        reg.notify_finished("conv1")
+        assert sig.counter == 2
+
+    def test_wait_returns_true_if_counter_advanced_before_wait(self):
+        import asyncio
+
+        from web.signals import SignalRegistry
+
+        reg = SignalRegistry()
+        sig = reg._get_or_create("conv1")
+        # Simulate: PM fires signal, then SSE calls wait_for_message
+        reg.notify_message("conv1")
+
+        async def _run():
+            return await reg.wait_for_message("conv1", timeout=0.01)
+
+        assert asyncio.run(_run()) is True
+
+
+# ---------------------------------------------------------------------------
+# Fixed: TTL eviction removes finished signals that cleanup() missed
+# ---------------------------------------------------------------------------
+
+
+class TestSignalRegistryEviction:
+    def test_stale_finished_signals_are_evicted(self):
+        from web.signals import SignalRegistry
+
+        reg = SignalRegistry()
+        reg.notify_finished("old-conv")
+        # Backdate created_at to make it stale
+        reg._signals["old-conv"].created_at -= 700
+        reg._evict_stale(max_age=600)
+        assert "old-conv" not in reg._signals
+
+    def test_recent_finished_signals_are_kept(self):
+        from web.signals import SignalRegistry
+
+        reg = SignalRegistry()
+        reg.notify_finished("fresh-conv")
+        reg._evict_stale(max_age=600)
+        assert "fresh-conv" in reg._signals
+
+    def test_unfinished_signals_are_never_evicted(self):
+        from web.signals import SignalRegistry
+
+        reg = SignalRegistry()
+        reg._get_or_create("active-conv")
+        reg._signals["active-conv"].created_at -= 700
+        reg._evict_stale(max_age=600)
+        assert "active-conv" in reg._signals
+
+
 class TestMetabaseSearchQueryType:
     @patch("lib._metabase.log_query")
     @patch("lib._metabase.emit_api_signal")
