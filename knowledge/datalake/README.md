@@ -234,7 +234,6 @@ See `knowledge/webinaires/_index.md` for schema details and query examples.
 |-------|------|-------------|
 | `brevo_conso` | ~13 | Brevo email consumption |
 | `webinaires_pilotage_participants` | ~3.7k | Pilotage webinar participants |
-| `support_emplois_tickets_infos` | - | Support ticket info |
 | `statsfile_active_gip` | ~65 | Active file stats |
 
 ### Reference Tables
