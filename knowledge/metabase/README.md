@@ -303,6 +303,25 @@ Logs d'activité de l'application GPS (Mon Suivi), importés depuis Datadog.
 
 **Note :** Contrairement à Matomo (comportement web), ces logs capturent les actions métier côté serveur.
 
+### Support Emplois (Zendesk)
+
+Tickets du support utilisateurs des Emplois de l'Inclusion, alimentés depuis Zendesk
+via webhooks n8n (mise à jour en temps réel).
+
+| Table | Granularité | Description |
+|-------|-------------|-------------|
+| `public.support_emplois_tickets_metrics` | 1 ligne/ticket | Métriques de traitement (délais de réponse, résolution, réouvertures) |
+| `public.support_emplois_tickets_infos` | 1 ligne/ticket | Contexte du ticket (demandeur, sujet, canal, horodatage) |
+| `public.support_emplois_tickets_tags` | N lignes/ticket | Tags (automatiques ou manuels) — un tag par ligne |
+
+**Clé de jointure :** `id_du_ticket` (integer) — commune aux trois tables.
+
+**Délais disponibles :** `first_reply_time_minutes`, `first_resolution_time_minutes`, `full_resolution_time_minutes` (en minutes).
+
+**Lien utilisateurs :** Joindre `support_emplois_tickets_infos.e_mail_du_demandeur` à `public.utilisateurs.email` pour identifier le type d'utilisateur.
+
+Voir [documentation complète](../stats/support-emplois.md).
+
 ### public.ref_clpe_ft
 
 Table de liaison commune → CLPE (Comité Local Pour l'Emploi). 357 CLPE, ~35 000 liaisons.
