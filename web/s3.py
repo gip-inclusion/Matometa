@@ -172,6 +172,56 @@ def get_file_url(path: str, expires_in: int = 3600) -> Optional[str]:
     return None
 
 
+def stream_file(path: str, chunk_size: int = 65_536):
+    """
+    Stream a file from S3 in fixed-size chunks (bounded memory).
+
+    Args:
+        path: Relative path within the interactive directory
+        chunk_size: Bytes per chunk (default 64 KB)
+
+    Returns:
+        A generator yielding bytes chunks, or None if the file is not found.
+        Local-storage fallback reads the whole file (no streaming benefit).
+    """
+    if config.USE_S3:
+        try:
+            key = _get_s3_key(path)
+            response = _s3_client.get_object(Bucket=config.S3_BUCKET, Key=key)
+            body = response["Body"]
+
+            def _chunks():
+                try:
+                    while True:
+                        chunk = body.read(chunk_size)
+                        if not chunk:
+                            break
+                        yield chunk
+                finally:
+                    body.close()
+
+            return _chunks()
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "NoSuchKey":
+                logger.debug(f"S3 file not found: {path}")
+                return None
+            logger.error(f"S3 stream failed for {path}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"S3 stream failed for {path}: {e}")
+            return None
+    else:
+        # Local fallback: yield whole file (still works with StreamingResponse)
+        try:
+            local_path = _get_local_path(path)
+            if local_path.exists():
+                return iter([local_path.read_bytes()])
+            return None
+        except Exception as e:
+            logger.error(f"Local stream failed for {path}: {e}")
+            return None
+
+
 def file_exists(path: str) -> bool:
     """
     Check if a file exists in storage.

@@ -4,12 +4,20 @@ import asyncio
 import logging
 import mimetypes
 from contextlib import asynccontextmanager
+from pathlib import PurePosixPath
 
-from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import config
+from .deps import get_current_user
+
+# Extensions safe to serve via presigned URL redirect (no sensitive data)
+_STATIC_ASSET_EXTS = frozenset({
+    ".css", ".js", ".mjs", ".png", ".jpg", ".jpeg", ".gif",
+    ".svg", ".ico", ".woff", ".woff2", ".ttf", ".eot", ".map",
+})
 
 # Configure logging (stdout only)
 logging.basicConfig(
@@ -81,17 +89,24 @@ if config.COMMON_DIR.exists():
 
 @app.get("/interactive/{filename:path}")
 @app.get("/interactive/")
-def serve_interactive(request: Request, filename: str = ""):
-    """Serve static files from S3 or local data/interactive directory.
+def serve_interactive(
+    request: Request,
+    filename: str = "",
+    user_email: str = Depends(get_current_user),
+):
+    """Serve interactive files to authenticated users.
 
-    When S3 is enabled, tries S3 first then falls back to local filesystem.
-    Content is proxied (not redirected) to avoid exposing internal S3 endpoints.
+    Auth is checked on every request (via oauth2-proxy in prod,
+    DEFAULT_USER in dev).  Static assets (CSS/JS/images) are served
+    via presigned URL redirect (5 min TTL); other files are streamed
+    through the app in 64 KB chunks.
 
     File state matrix (USE_S3=True):
-      S3 hit            → proxy with Cache-Control (common case)
-      S3 miss, local hit → FileResponse (file just created, not yet synced)
-      S3 miss, local dir → 301 redirect to trailing slash
-      both miss          → 404
+      S3 hit, static asset → 307 presigned URL redirect
+      S3 hit, other        → StreamingResponse (bounded memory)
+      S3 miss, local hit   → FileResponse (not yet synced)
+      S3 miss, local dir   → 301 redirect to trailing slash
+      both miss            → 404
     """
     # Block .py files from being served
     if filename.endswith(".py"):
@@ -120,10 +135,22 @@ def serve_interactive(request: Request, filename: str = ""):
     if config.USE_S3:
         from . import s3
 
-        content = s3.download_file(filename)
-        if content is not None:
-            return Response(
-                content=content,
+        # Static assets: redirect to a short-lived presigned URL (5 min)
+        # — offloads bandwidth from the app server, S3 serves directly
+        suffix = PurePosixPath(filename).suffix.lower()
+        if suffix in _STATIC_ASSET_EXTS and s3.file_exists(filename):
+            url = s3.get_file_url(filename, expires_in=300)
+            if url is not None:
+                return RedirectResponse(url, status_code=307, headers={
+                    "Cache-Control": "private, max-age=300",
+                    "Referrer-Policy": "no-referrer",
+                })
+
+        # HTML, CSV, JSON, etc.: stream chunks (bounded memory, S3 not exposed)
+        stream = s3.stream_file(filename)
+        if stream is not None:
+            return StreamingResponse(
+                stream,
                 media_type=mime_type,
                 headers={"Cache-Control": cache_control},
             )
