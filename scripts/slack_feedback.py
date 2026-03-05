@@ -19,6 +19,7 @@ from urllib.parse import quote
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import requests
+
 from web.database import get_db, init_db
 
 TALLY_FORM_URL = "https://tally.so/r/9qdZvp"

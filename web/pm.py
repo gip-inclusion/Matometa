@@ -11,6 +11,7 @@ import logging
 import os
 
 from lib.api_signals import parse_api_signals
+from lib.failure_detection import extract_snippet, find_failure_marker
 from lib.tool_taxonomy import classify_tool
 
 from . import config
@@ -105,6 +106,7 @@ class ProcessManager:
 
         assistant_text_parts: list[str] = []
         assistant_msg_id: int | None = None
+        all_assistant_texts: list[str] = []  # collect all text across tool_use resets
 
         try:
             async for event in self.backend.send_message(
@@ -126,6 +128,8 @@ class ProcessManager:
 
                 elif event.type in ("tool_use", "tool_result"):
                     if event.type == "tool_use":
+                        if assistant_text_parts:
+                            all_assistant_texts.extend(assistant_text_parts)
                         assistant_msg_id = None
                         assistant_text_parts = []
                     content = self._serialize_tool_event(event, conversation_id, user_email)
@@ -139,6 +143,15 @@ class ProcessManager:
                             store.update_conversation(conversation_id, session_id=new_session_id)
                     if event.raw.get("usage"):
                         self._persist_usage(conversation_id, event.raw["usage"])
+
+            # Collect final segment
+            if assistant_text_parts:
+                all_assistant_texts.extend(assistant_text_parts)
+
+            # Check for failure markers in the full assistant response
+            full_response = " ".join(all_assistant_texts)
+            if full_response:
+                self._check_failure_markers(conversation_id, full_response)
 
         except Exception:
             logger.exception(f"Agent error for {conversation_id}")
@@ -211,3 +224,86 @@ class ProcessManager:
         """Check if an agent is running for a conversation."""
         task = self.running.get(conversation_id)
         return task is not None and not task.done()
+
+    def _check_failure_markers(self, conversation_id: str, text: str):
+        """Check assistant text for failure markers and send Slack notification."""
+        marker = find_failure_marker(text)
+        if not marker:
+            return
+
+        snippet = extract_snippet(text, marker)
+        conv = store.get_conversation(conversation_id)
+        title = conv.title if conv and conv.title else "Sans titre"
+
+        import threading
+
+        threading.Thread(
+            target=self._send_failure_notification,
+            args=(conversation_id, title, snippet),
+            daemon=True,
+        ).start()
+
+    @staticmethod
+    def _send_failure_notification(conv_id: str, title: str, snippet: str):
+        """Send a Slack DM about a detected failure (runs in background thread)."""
+        import requests as req
+
+        notify_email = os.environ.get("EMAIL_ANNAELLE", "")
+        if not notify_email:
+            logger.warning("EMAIL_ANNAELLE not set, skipping failure notification")
+            return
+        token = os.environ.get("SLACK_BOT_TOKEN", "")
+        if not token:
+            logger.warning("SLACK_BOT_TOKEN not set, skipping failure notification")
+            return
+
+        base_url = config.BASE_URL
+        url = f"{base_url}/explorations/{conv_id}"
+        message = (
+            f":warning: *Erreur détectée dans une conversation*\n\n"
+            f'<{url}|{title}> — "{snippet}"\n\n'
+            f"_Vérifiez que la réponse est correcte._"
+        )
+
+        try:
+            # Resolve Slack user ID
+            resp = req.get(
+                "https://slack.com/api/users.lookupByEmail",
+                headers={"Authorization": f"Bearer {token}"},
+                params={"email": notify_email},
+                timeout=10,
+            )
+            data = resp.json()
+            if not data.get("ok"):
+                logger.warning(f"Slack user not found for {notify_email}")
+                return
+
+            slack_id = data["user"]["id"]
+
+            # Send DM
+            resp = req.post(
+                "https://slack.com/api/chat.postMessage",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"channel": slack_id, "text": message},
+                timeout=10,
+            )
+            if resp.json().get("ok"):
+                logger.info(f"Failure notification sent for conversation {conv_id}")
+            else:
+                logger.warning(f"Failed to send Slack DM: {resp.json()}")
+        except Exception:
+            logger.exception("Error sending failure notification")
+
+
+async def main():
+    """Entry point for the process manager."""
+    logging.basicConfig(
+        level=logging.DEBUG if config.DEBUG else logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+    pm = ProcessManager()
+    await pm.run()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
