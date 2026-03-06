@@ -180,6 +180,36 @@ volumes:
 - Environment variables for configuration (no hardcoded secrets)
 - README.md with setup instructions if the app has dependencies
 
+## Deployment Troubleshooting
+
+When a deploy fails or the app is unreachable, use these commands:
+
+```bash
+# Check status of all deployed projects
+python -m scripts.deploy status
+
+# Check a specific project
+python -m scripts.deploy status bold-crane
+
+# View container logs
+python -m scripts.deploy logs bold-crane --env staging
+
+# Restart crashed containers
+python -m scripts.deploy restart bold-crane --env staging
+
+# Validate compose file for common issues
+python -m scripts.deploy validate bold-crane
+
+# Deploy staging
+python -m scripts.deploy staging bold-crane
+```
+
+Common issues:
+- **Hardcoded ports** — compose uses `8080:8080` instead of `${HOST_PORT:-8080}:8080`
+- **DB port exposed** — `5432:5432` on db service conflicts with host PostgreSQL
+- **Build failure** — check Dockerfile, missing dependencies
+- **App crash loop** — check logs for startup errors
+
 ## Container Environment
 
 When running in Docker:

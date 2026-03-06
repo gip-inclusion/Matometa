@@ -84,34 +84,62 @@ Coolify adds more complexity than value for this use case. The expert mode needs
 
 All of this can be done with `docker compose` + the existing preview proxy.
 
+## Design Constraint: Agent-Independent + Agent-Troubleshootable
+
+Deployment MUST NOT depend on the agent (Claude CLI). The agent is one user of the
+deploy system, not the only one. Specifically:
+
+- **`lib/docker_deploy.py`** is a pure Python library with no agent dependency
+- **`scripts/deploy.py`** is a standalone CLI: `python -m scripts.deploy staging bold-crane`
+- **API endpoints** (`/api/expert/projects/{id}/deploy-staging`) are HTTP-callable
+- **Gitea webhook** can trigger deploys without any agent involvement
+
+At the same time, the agent MUST be able to troubleshoot deployment issues:
+
+- Agent can run `python -m scripts.deploy status` / `logs` / `restart` via Bash tool
+- Agent can read `docker-compose.yml`, Dockerfile, and container logs
+- Agent can call `validate_compose()` to check for common issues
+- Agent has full access to project workdir for code fixes
+- API endpoints for logs/restart/stop are accessible from the frontend too
+
+This means the deploy system has three interfaces:
+1. **CLI** (`scripts/deploy.py`) — for humans and cron jobs
+2. **API** (FastAPI routes) — for the web frontend and webhooks
+3. **Library** (`lib/docker_deploy.py`) — for the agent via Bash or for internal use
+
 ## Implementation Plan (Option A)
 
-### Phase 1: Slug & naming (quick win)
-- Generate slugs as 2 random words (e.g. `brave-falcon`, `quiet-river`) using a wordlist
+### Phase 1: Slug & naming (quick win) ✅
+- Generate slugs as 2 random words (e.g. `bold-crane`, `quiet-river`) using a wordlist
 - Use slug for: Gitea repo name, Docker project name, preview URL
-- Add rename support that updates Gitea repo name
+- Migration script renames existing `nouveau-projet-*` projects + Gitea repos
 
-### Phase 2: Direct Docker management
+### Phase 2: Direct Docker management ✅
 - New `lib/docker_deploy.py` replacing `lib/coolify.py`
   - `deploy(project_id)` → builds image, starts compose, returns port
   - `status(project_id)` → container health, port, uptime
-  - `logs(project_id, lines=50)` → container logs
+  - `logs(project_id, lines=100)` → container logs
   - `stop(project_id)` / `restart(project_id)`
-- Compose template with `${HOST_PORT}` injected by matometa
-- Port allocation: simple counter in DB, no scanning
+  - `validate_compose(project_id)` → check for common issues
+  - `health_check_all()` → restart crashed containers
+- Standalone CLI: `scripts/deploy.py` (status, deploy, logs, restart, stop, validate, health)
+- Port allocation from deploy URL, fallback to sequential scan in range
 - Mount Docker socket in matometa container (`/var/run/docker.sock`)
+- Deploy endpoints auto-detect Docker → fall back to Coolify
 
-### Phase 3: Agent-generated compose files
-- Agent MUST produce a `docker-compose.yml` (enforce in system prompt)
+### Phase 3: Agent-generated compose files ✅
+- Agent MUST produce a `docker-compose.yml` (enforce in AGENTS_EXPERT.md)
 - Template includes: app service, optional db service, healthcheck
 - `HOST_PORT` is the only external variable
-- DB services use named volumes (persist across redeploys)
+- DB services: no exposed ports, named volumes for persistence
+- `_ensure_deployable_repo` auto-generates compose from Dockerfile EXPOSE
+- `validate_compose()` warns on hardcoded ports before deploy
 
-### Phase 4: Health & self-healing
-- Startup: check all project containers, restart crashed ones
-- Preview proxy: if container is stopped, auto-restart before returning 502
-- Background health poll every 60s, auto-restart exited containers
+### Phase 4: Health & self-healing ✅ (partial)
+- Background health poll every 60s, auto-restart exited containers (entrypoint.sh)
 - Token refresh loop (already implemented)
+- TODO: Preview proxy auto-restart on 502
+- TODO: Startup container check
 
 ### Phase 5: Cleanup
 - Remove `lib/coolify.py`
