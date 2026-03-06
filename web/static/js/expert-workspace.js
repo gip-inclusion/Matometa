@@ -25,6 +25,12 @@ function initExpertWorkspace(config) {
 // =============================================================================
 
 function initSpecPanel() {
+  // Clear any previous polling timer (prevents accumulation on htmx navigation)
+  if (_specPollTimer) {
+    clearInterval(_specPollTimer);
+    _specPollTimer = null;
+  }
+
   // Tab switching
   const tabs = document.querySelectorAll('.spec-tab');
   tabs.forEach(tab => {
@@ -179,13 +185,13 @@ async function deployProduction() {
     const data = await res.json();
 
     if (!res.ok) {
-      console.error('Deploy failed:', data.error);
+      alert('Erreur de déploiement : ' + (data.error || 'Erreur inconnue'));
     }
 
     // Refresh status after a short delay
     setTimeout(refreshDeployStatus, 3000);
   } catch (err) {
-    console.error('Deploy error:', err);
+    alert('Erreur de connexion : ' + err.message);
   } finally {
     if (btn) {
       btn.disabled = false;

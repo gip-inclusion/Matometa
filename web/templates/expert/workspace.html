@@ -196,7 +196,10 @@
           startStream(0);
         } else if (res.status === 409) {
           const data = await res.json().catch(() => ({}));
-          if (data.status === 'already_running') startStream(0);
+          if (data.status === 'already_running') {
+            startStream(0);
+          }
+          // 'already_initialized' or 'not_planning' — conversation already has content, nothing to do
         }
       } catch (err) {
         console.warn('Planning welcome trigger failed', err);

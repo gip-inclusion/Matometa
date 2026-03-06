@@ -71,7 +71,7 @@ class CLIBackend(AgentBackend):
 
     def _build_env(self, conversation_id: str) -> dict:
         """Build subprocess environment. Override in subclasses."""
-        env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+        env = dict(os.environ)
         env["MATOMETA_CONVERSATION_ID"] = conversation_id
         return env
 
@@ -163,6 +163,7 @@ class CLIBackend(AgentBackend):
             config.CLAUDE_CLI,
             "--output-format", "stream-json",
             "--verbose",
+            "--model", config.CLAUDE_MODEL,
             "--setting-sources", "project",  # Only load project skills, not user plugins
         ]
 

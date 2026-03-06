@@ -83,9 +83,13 @@ class CoolifyClient:
         resp = self._session.get(self._url("/security/keys"))
         if resp.status_code != 200:
             return None
-        for key in resp.json():
+        keys = resp.json()
+        # Try matching by name first, fall back to first available key
+        for key in keys:
             if name_contains.lower() in key.get("name", "").lower():
                 return key.get("uuid")
+        if keys:
+            return keys[0].get("uuid")
         return None
 
     def deploy(self, app_uuid: str) -> dict:

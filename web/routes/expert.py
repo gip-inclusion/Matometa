@@ -21,6 +21,7 @@ from lib.expert_git import (
     ensure_local_git_repo as ensure_project_local_git_repo,
     ensure_project_branches,
     promote_staging_to_production,
+    run_git as _run_git,
 )
 
 logger = logging.getLogger(__name__)
@@ -150,41 +151,31 @@ def _rewrite_proxy_html(content: str, slug: str, environment: str) -> str:
     return content
 
 
-def _run_git(workdir, *args, timeout=30):
-    """Run a git command in a project workdir and return stdout."""
-    result = subprocess.run(
-        ["git", *args],
-        cwd=workdir,
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
-    return result.stdout.strip()
-
-
-def _is_port_free(port: int) -> bool:
-    """Check whether a local TCP port is available."""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
-        sock.bind(("127.0.0.1", port))
-        return True
-    except OSError:
-        return False
-    finally:
-        sock.close()
+def _detect_exposed_port(workdir) -> int:
+    """Read EXPOSE from Dockerfile to determine the container port. Defaults to 5000."""
+    dockerfile = workdir / "Dockerfile"
+    if dockerfile.exists():
+        import re
+        for line in dockerfile.read_text().splitlines():
+            m = re.match(r"^\s*EXPOSE\s+(\d+)", line, re.IGNORECASE)
+            if m:
+                return int(m.group(1))
+    return 5000
 
 
 def _pick_host_port(start: int = 18080, end: int | None = 19999, reserved_ports: set[int] | None = None) -> int:
-    """Pick a free host port for direct app exposure."""
+    """Pick a free host port for direct app exposure.
+
+    Uses reserved_ports (from existing project deploy URLs) as the primary check.
+    Falls back to socket bind on 0.0.0.0 when running outside containers.
+    """
     reserved = reserved_ports or set()
     if end is None or end < start:
         end = start + 2000
     for port in range(start, end + 1):
         if port in reserved:
             continue
-        if _is_port_free(port):
-            return port
+        return port
     raise RuntimeError("No free host port available for Coolify app mapping")
 
 
@@ -435,11 +426,22 @@ def _create_coolify_application(
 
     ports_mappings = None
     deploy_url = None
+    host_port = None
     if _use_local_direct_port_mode():
         reserved_ports = _reserved_local_deploy_ports(exclude_project_id=project.id)
         host_port = _pick_host_port(start=local_port_start, reserved_ports=reserved_ports)
-        ports_mappings = f"{host_port}:5000"
         deploy_url = _local_deploy_url(host_port)
+
+    # Use docker-compose if project has one, otherwise plain Dockerfile
+    workdir = config.PROJECTS_DIR / project.id
+    has_compose = (workdir / "docker-compose.yml").exists() or (workdir / "docker-compose.yaml").exists()
+    build_pack = "dockercompose" if has_compose else "dockerfile"
+
+    # For dockerfile build pack, Coolify uses ports_mappings directly.
+    # For dockercompose, port mapping is in the compose file via HOST_PORT env var.
+    if host_port and build_pack == "dockerfile":
+        container_port = _detect_exposed_port(workdir)
+        ports_mappings = f"{host_port}:{container_port}"
 
     result = coolify.create_application(
         name=app_name,
@@ -449,6 +451,7 @@ def _create_coolify_application(
         project_uuid=coolify_proj["uuid"],
         ports_mappings=ports_mappings,
         private_key_uuid=deploy_key_uuid,
+        build_pack=build_pack,
     )
     app_uuid = result.get("uuid", "")
 
@@ -468,12 +471,17 @@ def _ensure_staging_application(project, coolify):
     if app_uuid:
         if _use_local_direct_port_mode():
             app_state = coolify.get_status(app_uuid)
-            mapped_port = _extract_host_port_mapping(app_state.get("ports_mappings"))
-            reserved_ports = _reserved_local_deploy_ports(exclude_project_id=project.id)
-            if not mapped_port or mapped_port in reserved_ports:
-                mapped_port = _pick_host_port(start=18080, reserved_ports=reserved_ports)
-                coolify.set_ports_mapping(app_uuid, f"{mapped_port}:5000")
-            deploy_url = _local_deploy_url(mapped_port)
+            build_pack = app_state.get("build_pack", "dockerfile")
+            # Only manage port mappings for dockerfile apps; compose handles its own
+            if build_pack != "dockercompose":
+                mapped_port = _extract_host_port_mapping(app_state.get("ports_mappings"))
+                reserved_ports = _reserved_local_deploy_ports(exclude_project_id=project.id)
+                if not mapped_port or mapped_port in reserved_ports:
+                    workdir = config.PROJECTS_DIR / project.id
+                    container_port = _detect_exposed_port(workdir)
+                    mapped_port = _pick_host_port(start=18080, reserved_ports=reserved_ports)
+                    coolify.set_ports_mapping(app_uuid, f"{mapped_port}:{container_port}")
+                deploy_url = _local_deploy_url(mapped_port)
     else:
         app_uuid, deploy_url = _create_coolify_application(
             coolify=coolify,
@@ -507,12 +515,16 @@ def _ensure_production_application(project, coolify):
     if app_uuid:
         if _use_local_direct_port_mode():
             app_state = coolify.get_status(app_uuid)
-            mapped_port = _extract_host_port_mapping(app_state.get("ports_mappings"))
-            reserved_ports = _reserved_local_deploy_ports(exclude_project_id=project.id)
-            if not mapped_port or mapped_port in reserved_ports:
-                mapped_port = _pick_host_port(start=28080, reserved_ports=reserved_ports)
-                coolify.set_ports_mapping(app_uuid, f"{mapped_port}:5000")
-            deploy_url = _local_deploy_url(mapped_port)
+            build_pack = app_state.get("build_pack", "dockerfile")
+            if build_pack != "dockercompose":
+                mapped_port = _extract_host_port_mapping(app_state.get("ports_mappings"))
+                reserved_ports = _reserved_local_deploy_ports(exclude_project_id=project.id)
+                if not mapped_port or mapped_port in reserved_ports:
+                    workdir = config.PROJECTS_DIR / project.id
+                    container_port = _detect_exposed_port(workdir)
+                    mapped_port = _pick_host_port(start=28080, reserved_ports=reserved_ports)
+                    coolify.set_ports_mapping(app_uuid, f"{mapped_port}:{container_port}")
+                deploy_url = _local_deploy_url(mapped_port)
     else:
         app_uuid, deploy_url = _create_coolify_application(
             coolify=coolify,
@@ -529,6 +541,10 @@ def _ensure_production_application(project, coolify):
         status="deployed" if deploy_url else project.status,
     )
     _sync_legacy_deploy_fields(project.id, app_uuid=app_uuid, deploy_url=deploy_url)
+
+    if app_uuid:
+        _setup_gitea_webhook(project, app_uuid, coolify, branch_filter=production_branch)
+
     return app_uuid, deploy_url
 
 
@@ -566,7 +582,6 @@ def expert_new(user_email: str = Depends(get_current_user)):
         raise HTTPException(status_code=404)
 
     project = store.create_project(name="Nouveau projet", user_id=user_email)
-    _try_create_gitea_repo(project)
 
     # Initialize .specify/ structure for spec-driven workflow
     workdir = config.PROJECTS_DIR / project.id
@@ -580,6 +595,16 @@ def expert_new(user_email: str = Depends(get_current_user)):
     conv = store.create_conversation(
         conv_type="project", project_id=project.id, user_id=user_email
     )
+
+    # Run Gitea repo creation in background (frontend triggers /welcome for speckit)
+    import threading
+    def _background_setup():
+        try:
+            _try_create_gitea_repo(project)
+        except Exception:
+            logger.exception("Background Gitea setup failed for %s", project.id)
+    threading.Thread(target=_background_setup, daemon=True).start()
+
     return RedirectResponse(f"/expert/{project.slug}/{conv.id}", status_code=302)
 
 
@@ -606,7 +631,7 @@ def expert_project(slug: str, user_email: str = Depends(get_current_user)):
 
 
 @router.get("/expert/{slug}/settings")
-def expert_settings(slug: str, request: Request):
+def expert_settings(slug: str, request: Request, user_email: str = Depends(get_current_user)):
     """Project settings: deploy status, deploy actions, project config."""
     if not config.EXPERT_MODE_ENABLED:
         raise HTTPException(status_code=404)
@@ -621,8 +646,8 @@ def expert_settings(slug: str, request: Request):
     })
 
 
-@router.api_route("/expert/{slug}/preview/{environment}/", methods=["GET", "HEAD"])
-@router.api_route("/expert/{slug}/preview/{environment}/{subpath:path}", methods=["GET", "HEAD"])
+@router.api_route("/expert/{slug}/preview/{environment}/", methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"])
+@router.api_route("/expert/{slug}/preview/{environment}/{subpath:path}", methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"])
 async def expert_project_preview(slug: str, environment: str, request: Request, subpath: str = ""):
     """Proxy project preview through Matometa host so localhost ports are not required client-side."""
     if not config.EXPERT_MODE_ENABLED:
@@ -756,6 +781,7 @@ def expert_conversation(slug: str, conv_id: str, request: Request, user_email: s
 # API endpoints
 # =============================================================================
 
+
 @router.post("/api/expert/projects")
 async def api_create_project(request: Request, user_email: str = Depends(get_current_user)):
     """Create project + first conversation."""
@@ -769,7 +795,6 @@ async def api_create_project(request: Request, user_email: str = Depends(get_cur
     description = data.get("description")
 
     project = store.create_project(name=name, user_id=user_email, description=description)
-    _try_create_gitea_repo(project)
 
     # Initialize .specify/ structure
     workdir = config.PROJECTS_DIR / project.id
@@ -780,11 +805,18 @@ async def api_create_project(request: Request, user_email: str = Depends(get_cur
     except Exception:
         logger.exception("Failed to init .specify/ for project %s", project.id)
 
-    # Re-fetch so gitea fields are included in response
-    project = store.get_project(project.id) or project
     conv = store.create_conversation(
         conv_type="project", project_id=project.id, user_id=user_email
     )
+
+    # Run Gitea repo creation in background (frontend triggers /welcome for speckit)
+    import threading
+    def _background_setup():
+        try:
+            _try_create_gitea_repo(project)
+        except Exception:
+            logger.exception("Background Gitea setup failed for %s", project.id)
+    threading.Thread(target=_background_setup, daemon=True).start()
 
     return JSONResponse({
         "project": _project_to_public_dict(project, request),

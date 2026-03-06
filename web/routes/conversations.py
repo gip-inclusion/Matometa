@@ -592,9 +592,9 @@ async def trigger_planning_welcome(conv_id: str, user_email: str = Depends(get_c
         logger.warning("Failed to prepare expert branches for welcome on %s: %s", project.id, exc)
 
     welcome_prompt = (
-        "Welcome the user in French with 3-4 sentences. "
-        "Confirm you are ready to start plan mode, ask what they want to build, "
-        "and mention you will draft a specification before implementation."
+        "Accueille l'utilisateur en 2-3 phrases courtes en français. "
+        "Demande-lui de décrire l'application qu'il souhaite créer. "
+        "Ne mentionne pas le nom du projet."
     )
     prompt = _build_project_prompt(
         project=project,
@@ -643,7 +643,7 @@ async def stream_conversation(
     if not conv:
         return JSONResponse({"error": "Conversation not found"}, status_code=404)
 
-    if after == 0 and not conv.messages:
+    if after == 0 and not conv.messages and not conv.needs_response:
         return JSONResponse({"error": "No messages in conversation"}, status_code=400)
 
     # Tail the messages table: poll for new messages written by the PM.
@@ -667,7 +667,7 @@ async def stream_conversation(
         last_msg_id = after if after > 0 else (conv.messages[-1].id if conv.messages else 0)
         logger.debug(f"SSE stream start: conv={conv_id}, after={after}, watermark={last_msg_id}")
         poll_count = 0
-        max_polls = 600  # 5 minutes at 0.5s intervals
+        max_polls = 1800  # 15 minutes at 0.5s intervals
 
         while poll_count < max_polls:
             new_messages = await asyncio.to_thread(

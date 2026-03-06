@@ -53,6 +53,23 @@ def run_git(workdir: Path, *args: str, timeout: int = 40) -> str:
     return result.stdout.strip()
 
 
+def _ensure_authenticated_remote(workdir: Path):
+    """Re-set the origin remote URL with embedded Gitea credentials if needed."""
+    try:
+        current = run_git(workdir, "remote", "get-url", "origin")
+    except subprocess.CalledProcessError:
+        return
+
+    token = config.GITEA_API_TOKEN
+    if not token or f"{token}@" in current:
+        return  # already authenticated or no token
+
+    parts = urlsplit(current)
+    netloc = f"{quote(token, safe='')}@{parts.netloc}"
+    authed = urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+    run_git(workdir, "remote", "set-url", "origin", authed)
+
+
 def ensure_local_git_repo(project) -> bool:
     """Ensure project working directory is a valid local clone of its Gitea repository."""
     workdir = config.PROJECTS_DIR / project.id
@@ -147,6 +164,7 @@ def _resolve_base_branch(workdir: Path) -> str:
 
 def ensure_branch(workdir: Path, branch: str):
     """Ensure a branch exists locally/remotely and checkout it."""
+    _ensure_authenticated_remote(workdir)
     run_git(workdir, "fetch", "origin")
     remote_exists = _remote_branch_exists(workdir, branch)
     local_exists = _local_branch_exists(workdir, branch)

@@ -14,12 +14,13 @@ function autoGrow(textarea) {
 }
 
 function isAtBottom() {
-  const chatOutput = document.getElementById('chatOutput');
-  if (!chatOutput) return true;
+  // Use .chat-main as scroll container (matches scrollToBottom)
+  const container = document.querySelector('.chat-main') || document.getElementById('chatOutput');
+  if (!container) return true;
 
   // Consider "at bottom" if within 100px of the bottom
   const threshold = 100;
-  return chatOutput.scrollHeight - chatOutput.scrollTop - chatOutput.clientHeight < threshold;
+  return container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
 }
 
 function scrollToBottom() {
