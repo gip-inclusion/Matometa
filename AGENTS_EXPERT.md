@@ -60,12 +60,123 @@ Use whatever fits the spec. Defaults:
 - **Backend:** Python (Flask or FastAPI)
 - **Frontend:** HTMX, vanilla JS, or lightweight frameworks
 - **Database:** SQLite for simple apps, PostgreSQL for production
-- **Deployment:** Docker (Dockerfile required in project root)
+- **Deployment:** Docker Compose (see rules below)
+
+## Deployment: docker-compose.yml (MANDATORY)
+
+Every project MUST have a `docker-compose.yml` in the project root. This is how
+the platform deploys the app. Follow these rules exactly:
+
+### Port mapping — use `${HOST_PORT}`
+
+The platform assigns a unique host port via the `HOST_PORT` environment variable.
+**Never hardcode host ports.** Use this pattern:
+
+```yaml
+services:
+  app:
+    build: .
+    ports:
+      - "${HOST_PORT:-8080}:8080"   # HOST_PORT is set by the platform
+```
+
+The container-side port (after `:`) should match your app's EXPOSE port.
+
+### Database services — no exposed ports
+
+Database containers must NOT expose ports to the host. They are only reachable
+from the app service via Docker networking:
+
+```yaml
+  db:
+    image: postgres:16-alpine
+    # NO ports: section — db is internal only
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+```
+
+### App healthcheck
+
+Always include a healthcheck on the app service:
+
+```yaml
+  app:
+    build: .
+    ports:
+      - "${HOST_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+```
+
+### Named volumes for persistence
+
+Use named volumes for database data so it survives container recreation:
+
+```yaml
+volumes:
+  pgdata:
+```
+
+### Complete example
+
+```yaml
+services:
+  app:
+    build: .
+    ports:
+      - "${HOST_PORT:-8080}:8080"
+    environment:
+      - DATABASE_URL=postgresql://app:app@db:5432/app
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  db:
+    image: postgres:16-alpine
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
+```
+
+### What NOT to do
+
+- `ports: ["8080:8080"]` — WRONG, hardcodes host port (will conflict)
+- `ports: ["5432:5432"]` on db — WRONG, exposes db to host (conflicts with system PostgreSQL)
+- `ports: ["80:80"]` — WRONG, port 80 is reserved for the reverse proxy
 
 ## Code Quality
 
 - Production-ready: error handling, input validation, logging
 - Dockerfile required: the app must be deployable via `docker build && docker run`
+- docker-compose.yml required: must use `${HOST_PORT}` pattern (see above)
 - Environment variables for configuration (no hardcoded secrets)
 - README.md with setup instructions if the app has dependencies
 

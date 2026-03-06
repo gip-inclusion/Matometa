@@ -26,6 +26,8 @@ python -m skills.speckit_checklist.scripts.save_checklist \
 
 ## Technical
 - [ ] Dockerfile builds successfully
+- [ ] docker-compose.yml uses `${HOST_PORT}` for port mapping
+- [ ] Database services have no exposed host ports
 - [ ] App starts and responds on configured port
 - [ ] Environment variables documented in README
 - [ ] Error responses return appropriate HTTP status codes

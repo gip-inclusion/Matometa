@@ -51,6 +51,36 @@ def docker_available() -> bool:
         return False
 
 
+def validate_compose(project_id: str) -> list[str]:
+    """Check a project's docker-compose.yml for common issues.
+
+    Returns a list of warning strings (empty = OK).
+    """
+    compose_file = config.PROJECTS_DIR / project_id / "docker-compose.yml"
+    if not compose_file.exists():
+        return ["No docker-compose.yml found"]
+
+    content = compose_file.read_text()
+    warnings = []
+
+    # Check for hardcoded host port (should use ${HOST_PORT})
+    import re
+    # Match ports like "8080:8080", "80:80", "5432:5432" (without HOST_PORT)
+    port_lines = re.findall(r'ports:\s*\n((?:\s+-\s*.*\n)*)', content)
+    for block in port_lines:
+        for line in block.strip().splitlines():
+            line = line.strip().lstrip("- ").strip('"').strip("'")
+            if "HOST_PORT" not in line and re.match(r'^\d+:\d+$', line):
+                warnings.append(f"Hardcoded port mapping: {line} (use ${{HOST_PORT}} instead)")
+
+    # Check for exposed database ports
+    for bad_port in ("5432:5432", "3306:3306", "6379:6379", "27017:27017"):
+        if bad_port in content:
+            warnings.append(f"Database port exposed to host: {bad_port} (remove this)")
+
+    return warnings
+
+
 def deploy(project_id: str, environment: str = "staging") -> dict:
     """Build and start a project's containers.
 
@@ -67,6 +97,11 @@ def deploy(project_id: str, environment: str = "staging") -> dict:
 
     if not compose_file.exists():
         return {"status": "error", "error": "No docker-compose.yml found"}
+
+    # Validate compose file
+    warnings = validate_compose(project_id)
+    if warnings:
+        logger.warning("Compose validation for %s: %s", project_id, "; ".join(warnings))
 
     # Determine port
     port = _get_or_assign_port(project, environment, store)

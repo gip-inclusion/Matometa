@@ -589,7 +589,7 @@ class TestExpertHelpers:
         def fake_run_git(cwd, *args, **kwargs):
             calls.append(args)
             if args[:3] == ("diff", "--cached", "--name-only"):
-                return "Dockerfile\nindex.html"
+                return "Dockerfile\nindex.html\ndocker-compose.yml"
             return ""
 
         monkeypatch.setattr(config, "PROJECTS_DIR", tmp_path)
@@ -598,18 +598,55 @@ class TestExpertHelpers:
         changed = _ensure_deployable_repo(P())
         assert changed is True
         assert (workdir / "Dockerfile").exists()
+        assert (workdir / "docker-compose.yml").exists()
         assert (workdir / "index.html").exists()
+        # Compose must use HOST_PORT
+        compose_content = (workdir / "docker-compose.yml").read_text()
+        assert "HOST_PORT" in compose_content
         assert any(c[:2] == ("commit", "-m") for c in calls)
         assert any(c[:3] == ("push", "origin", "main") for c in calls)
 
-    def test_ensure_deployable_repo_noop_when_dockerfile_exists(self, monkeypatch, tmp_path):
+    def test_ensure_deployable_repo_adds_compose_when_only_dockerfile(self, monkeypatch, tmp_path):
         from web import config
         from web.routes.expert import _ensure_deployable_repo
 
         project_id = "proj-2"
         workdir = tmp_path / project_id
         (workdir / ".git").mkdir(parents=True)
+        (workdir / "Dockerfile").write_text("FROM scratch\nEXPOSE 8080\n")
+
+        class P:
+            id = project_id
+            name = "Demo"
+            slug = "demo"
+
+        calls = []
+
+        def fake_run_git(cwd, *args, **kwargs):
+            calls.append(args)
+            if args[:3] == ("diff", "--cached", "--name-only"):
+                return "docker-compose.yml"
+            return ""
+
+        monkeypatch.setattr(config, "PROJECTS_DIR", tmp_path)
+        monkeypatch.setattr("web.routes.expert._run_git", fake_run_git)
+
+        changed = _ensure_deployable_repo(P())
+        assert changed is True
+        assert (workdir / "docker-compose.yml").exists()
+        compose = (workdir / "docker-compose.yml").read_text()
+        assert "HOST_PORT" in compose
+        assert "8080" in compose
+
+    def test_ensure_deployable_repo_noop_when_both_exist(self, monkeypatch, tmp_path):
+        from web import config
+        from web.routes.expert import _ensure_deployable_repo
+
+        project_id = "proj-3"
+        workdir = tmp_path / project_id
+        (workdir / ".git").mkdir(parents=True)
         (workdir / "Dockerfile").write_text("FROM scratch\n")
+        (workdir / "docker-compose.yml").write_text("services:\n  app:\n    build: .\n")
 
         class P:
             id = project_id

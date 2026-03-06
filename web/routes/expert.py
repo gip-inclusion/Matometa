@@ -227,7 +227,7 @@ def _reserved_local_deploy_ports(exclude_project_id: str | None = None) -> set[i
 
 
 def _ensure_deployable_repo(project):
-    """Ensure repo contains a minimal Dockerfile so first deploy can boot.
+    """Ensure repo contains Dockerfile + docker-compose.yml for deployment.
 
     Returns True when files were added and pushed, False otherwise.
     """
@@ -236,21 +236,45 @@ def _ensure_deployable_repo(project):
         return False
 
     dockerfile = workdir / "Dockerfile"
-    if dockerfile.exists():
+    compose_file = workdir / "docker-compose.yml"
+
+    # If both exist, nothing to do
+    if dockerfile.exists() and compose_file.exists():
         return False
 
+    # If neither exists, this is a brand new project — bootstrap both
     created_files = []
-    dockerfile.write_text(
-        "FROM python:3.12-slim\n"
-        "WORKDIR /app\n"
-        "COPY . /app\n"
-        "EXPOSE 5000\n"
-        "CMD [\"python\", \"-m\", \"http.server\", \"5000\", \"--bind\", \"0.0.0.0\"]\n"
-    )
-    created_files.append("Dockerfile")
+
+    if not dockerfile.exists():
+        dockerfile.write_text(
+            "FROM python:3.12-slim\n"
+            "WORKDIR /app\n"
+            "COPY . /app\n"
+            "EXPOSE 5000\n"
+            "CMD [\"python\", \"-m\", \"http.server\", \"5000\", \"--bind\", \"0.0.0.0\"]\n"
+        )
+        created_files.append("Dockerfile")
+
+    if not compose_file.exists():
+        # Generate compose from Dockerfile's EXPOSE port
+        container_port = _detect_exposed_port(workdir)
+        compose_file.write_text(
+            "services:\n"
+            "  app:\n"
+            "    build: .\n"
+            "    ports:\n"
+            f'      - "${{HOST_PORT:-{container_port}}}:{container_port}"\n'
+            "    healthcheck:\n"
+            f'      test: ["CMD", "curl", "-f", "http://localhost:{container_port}/"]\n'
+            "      interval: 10s\n"
+            "      timeout: 5s\n"
+            "      retries: 3\n"
+            "    restart: unless-stopped\n"
+        )
+        created_files.append("docker-compose.yml")
 
     index_html = workdir / "index.html"
-    if not index_html.exists():
+    if not index_html.exists() and "Dockerfile" in created_files:
         safe_name = (project.name or project.slug or "Application").replace("<", "").replace(">", "")
         index_html.write_text(
             "<!doctype html>\n"
@@ -264,6 +288,9 @@ def _ensure_deployable_repo(project):
         )
         created_files.append("index.html")
 
+    if not created_files:
+        return False
+
     try:
         _run_git(workdir, "config", "user.email", "matometa@localhost")
         _run_git(workdir, "config", "user.name", "Matometa")
@@ -275,7 +302,7 @@ def _ensure_deployable_repo(project):
         _run_git(workdir, "commit", "-m", "chore: add deployment bootstrap")
         current_branch = _run_git(workdir, "rev-parse", "--abbrev-ref", "HEAD") or "main"
         _run_git(workdir, "push", "origin", current_branch)
-        logger.info("Bootstrapped deploy files for project %s", project.id)
+        logger.info("Bootstrapped deploy files for project %s: %s", project.id, created_files)
         return True
     except Exception:
         logger.exception("Failed to bootstrap deploy files for project %s", project.id)

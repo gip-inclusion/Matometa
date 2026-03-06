@@ -43,5 +43,5 @@ python -m skills.speckit_plan.scripts.save_plan \
 
 - Reference the spec: every architectural choice should trace back to a requirement
 - Be concrete: name specific libraries, frameworks, file paths
-- Include the Dockerfile approach
+- Include the Dockerfile and docker-compose.yml approach (use `${HOST_PORT}` for port mapping)
 - Keep it actionable — someone should be able to start coding from this
