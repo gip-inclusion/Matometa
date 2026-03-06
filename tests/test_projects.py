@@ -26,22 +26,27 @@ class TestProjectCRUD:
     def test_create_project(self, app, project):
         assert project.id
         assert project.name == "Test App"
-        assert project.slug == "test-app"
+        # Slug is now a random 2-word combo (e.g. "bold-crane")
+        assert "-" in project.slug
+        assert project.slug.replace("-", "").isalpha()
         assert project.status == "draft"
         assert project.user_id == "dev@example.com"
 
     def test_create_project_slug_uniqueness(self, app):
         from web.storage import store
-        p1 = store.create_project(name="Mon App", user_id="a@b.com")
-        p2 = store.create_project(name="Mon App", user_id="a@b.com")
-        assert p1.slug == "mon-app"
-        assert p2.slug == "mon-app-1"
-        assert p1.id != p2.id
+        slugs = set()
+        for _ in range(10):
+            p = store.create_project(name="Mon App", user_id="a@b.com")
+            assert p.slug not in slugs
+            slugs.add(p.slug)
 
-    def test_create_project_french_chars(self, app):
+    def test_create_project_slug_format(self, app):
         from web.storage import store
         p = store.create_project(name="Résumé des données", user_id="a@b.com")
-        assert p.slug == "resume-des-donnees"
+        # Slug is random, not derived from the name
+        parts = p.slug.split("-")
+        assert len(parts) == 2
+        assert all(part.isalpha() for part in parts)
 
     def test_get_project(self, app, project):
         from web.storage import store
@@ -51,7 +56,7 @@ class TestProjectCRUD:
 
     def test_get_project_by_slug(self, app, project):
         from web.storage import store
-        fetched = store.get_project_by_slug("test-app")
+        fetched = store.get_project_by_slug(project.slug)
         assert fetched is not None
         assert fetched.id == project.id
 
@@ -95,7 +100,7 @@ class TestProjectCRUD:
         d = project.to_dict()
         assert d["id"] == project.id
         assert d["name"] == "Test App"
-        assert d["slug"] == "test-app"
+        assert "-" in d["slug"]
         assert "created_at" in d
         assert "updated_at" in d
 
@@ -400,7 +405,7 @@ class TestExpertAPI:
                 return "key-1"
 
             def create_application(self, **kwargs):
-                assert kwargs["git_repo_url"] == "git@matometa-gitea:apps/test-app.git"
+                assert kwargs["git_repo_url"].startswith("git@matometa-gitea:apps/")
                 created_apps.append(kwargs)
                 return {
                     "uuid": f"{kwargs['name']}-uuid",
@@ -449,14 +454,15 @@ class TestExpertAPI:
             data = resp.get_json()
             assert data["status"] == "production_deploying"
             assert data["promotion"]["commit"] == "abc1234"
-            assert data["project"]["staging_coolify_app_uuid"] == "test-app-staging-uuid"
-            assert data["project"]["production_coolify_app_uuid"] == "test-app-prod-uuid"
-            assert data["project"]["production_deploy_url"] == "http://test-app-prod.example.test"
-            assert data["project"]["coolify_app_uuid"] == "test-app-prod-uuid"
-            assert data["project"]["deploy_url"] == "http://test-app-prod.example.test"
+            slug = data["project"]["slug"]
+            assert data["project"]["staging_coolify_app_uuid"] == f"{slug}-staging-uuid"
+            assert data["project"]["production_coolify_app_uuid"] == f"{slug}-prod-uuid"
+            assert data["project"]["production_deploy_url"] == f"http://{slug}-prod.example.test"
+            assert data["project"]["coolify_app_uuid"] == f"{slug}-prod-uuid"
+            assert data["project"]["deploy_url"] == f"http://{slug}-prod.example.test"
             assert data["project"]["status"] == "deployed"
             assert len(created_apps) == 2
-            assert {entry["git_branch"] for entry in created_apps} == {"stagging", "prod"}
+            assert {entry["git_branch"] for entry in created_apps} == {"staging", "prod"}
         finally:
             config.EXPERT_MODE_ENABLED = original_enabled
             config.COOLIFY_API_TOKEN = original_coolify

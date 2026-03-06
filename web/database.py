@@ -58,7 +58,7 @@ class Project:
     gitea_url: Optional[str] = None
     coolify_app_uuid: Optional[str] = None
     deploy_url: Optional[str] = None
-    staging_branch: str = "stagging"
+    staging_branch: str = "staging"
     production_branch: str = "prod"
     staging_coolify_app_uuid: Optional[str] = None
     staging_deploy_url: Optional[str] = None
@@ -486,48 +486,30 @@ class ConversationStore:
     # Projects (expert mode)
     # -------------------------------------------------------------------------
 
-    @staticmethod
-    def _slugify(name: str) -> str:
-        """Generate a URL-safe slug from a project name."""
-        import re
-        slug = name.lower().strip()
-        slug = re.sub(r'[àáâãäå]', 'a', slug)
-        slug = re.sub(r'[èéêë]', 'e', slug)
-        slug = re.sub(r'[ìíîï]', 'i', slug)
-        slug = re.sub(r'[òóôõö]', 'o', slug)
-        slug = re.sub(r'[ùúûü]', 'u', slug)
-        slug = re.sub(r'[ç]', 'c', slug)
-        slug = re.sub(r'[^a-z0-9]+', '-', slug)
-        slug = slug.strip('-')
-        return slug or 'projet'
+    def _generate_unique_slug(self, conn) -> str:
+        """Generate a unique 2-random-word slug for a project."""
+        from lib.slugs import generate_slug
+        rows = conn.execute("SELECT slug FROM projects").fetchall()
+        existing = {row["slug"] for row in rows}
+        return generate_slug(existing)
 
     def create_project(self, name: str, user_id: Optional[str] = None, description: Optional[str] = None) -> Project:
         """Create a new expert-mode project."""
         project_id = str(uuid.uuid4())
-        base_slug = self._slugify(name)
-        slug = base_slug
 
         now = datetime.now()
         project = Project(
             id=project_id,
             user_id=user_id,
             name=name,
-            slug=slug,
+            slug="",  # set below inside transaction
             description=description,
             created_at=now,
             updated_at=now,
         )
 
         with get_db() as conn:
-            # Ensure slug uniqueness by appending suffix if needed
-            counter = 1
-            while True:
-                existing = conn.execute("SELECT id FROM projects WHERE slug = ?", (slug,)).fetchone()
-                if not existing:
-                    break
-                slug = f"{base_slug}-{counter}"
-                counter += 1
-            project.slug = slug
+            project.slug = self._generate_unique_slug(conn)
 
             conn.execute(
                 """INSERT INTO projects (id, user_id, name, slug, description, spec, status,
@@ -621,7 +603,7 @@ class ConversationStore:
 
         row_keys = set(row.keys())
 
-        staging_branch = row["staging_branch"] if "staging_branch" in row_keys and row["staging_branch"] else "stagging"
+        staging_branch = row["staging_branch"] if "staging_branch" in row_keys and row["staging_branch"] else "staging"
         production_branch = row["production_branch"] if "production_branch" in row_keys and row["production_branch"] else "prod"
         staging_coolify_app_uuid = row["staging_coolify_app_uuid"] if "staging_coolify_app_uuid" in row_keys else row["coolify_app_uuid"]
         staging_deploy_url = row["staging_deploy_url"] if "staging_deploy_url" in row_keys else row["deploy_url"]
