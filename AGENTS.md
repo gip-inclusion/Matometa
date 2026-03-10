@@ -332,60 +332,113 @@ if result.success:
 **Prefer Python over curl** — The clients handle auth automatically and curl
 may be blocked by permission settings.
 
-### Matomo Timeout Troubleshooting
+### Matomo Query Performance
 
-Queries with segments on large date ranges frequently timeout (30s limit),
-returning HTML instead of JSON.
+**⚠️ CRITICAL: Matomo segments are SLOW unless pre-computed.**
 
-**Symptoms:**
+Matomo generates segment reports asynchronously. A segmented query
+(any query with `segment=...`) triggers a full table scan of raw visit data.
+On large sites like Emplois (site 117), a single segmented query for one month
+can take **30–180 seconds**. For non-pre-computed segments on large date ranges,
+queries **will** timeout.
+
+**Symptoms of timeout:**
 - `jq: parse error: Invalid numeric literal at line 1, column 10`
 - Response starts with `<!DOCTYPE html>`
+- lib.query returns `result.success = False` with HTML in error
 
-**Solutions:**
+#### The N+1 Problem
 
-1. **Query month-by-month:**
-   ```bash
-   # BAD: times out
-   curl "...&date=2025-01-01,2025-12-31&segment=..."
+**NEVER write a script that makes more than 5 sequential segmented Matomo
+API calls.** This is the single biggest cause of stuck conversations.
 
-   # GOOD: each month separately
-   for month in 01 02 03 04 05 06 07 08 09 10 11 12; do
-     curl "...&date=2025-${month}-01&period=month&segment=..."
-   done
-   ```
+A script with 40 sequential segment queries at 30-60s each = 20-40 minutes
+of wall-clock time. The Bash tool will timeout, the command gets backgrounded,
+and you end up in a polling loop that blocks the conversation.
 
-2. **Start simple, add complexity incrementally:**
-   ```bash
-   curl "...&period=month&date=2025-12-01"                    # No segment
-   curl "...&period=month&date=2025-12-01&segment=pageUrl..." # Add segment
-   ```
+```python
+# BAD — 12 sequential segmented queries, will take 6-20 minutes
+for month in months:
+    execute_matomo_query(..., params={"segment": "outlinkUrl=@dora"})
 
-3. **Check response before parsing:**
-   ```bash
-   response=$(curl -s "...")
-   if echo "$response" | grep -q "DOCTYPE"; then
-     echo "Timeout - query too expensive"
-   else
-     echo "$response" | jq .
-   fi
-   ```
+# GOOD — one query, no loop
+execute_matomo_query(..., params={
+    "period": "month",
+    "date": "2025-01-01,2025-12-31",  # range returns dict keyed by month
+})
+# Note: range queries WITHOUT segments are fast. With segments, even
+# range queries can timeout — in that case, limit to 3-4 months max.
 
-4. **Use lib.query** (has built-in timeout handling and logging):
+# ACCEPTABLE — small number of targeted queries
+for month in ["2025-12-01", "2026-01-01", "2026-02-01"]:
+    execute_matomo_query(..., params={"segment": seg, "date": month})
+```
+
+**If you need many months with a segment:** query 2-3 months, show results
+to the user, and offer to fetch more. Do NOT try to get everything at once.
+
+#### Script Execution Rules
+
+When writing Python scripts that make multiple API calls:
+
+1. **Print progress after every query.** Never buffer all output.
    ```python
-   from lib.query import execute_matomo_query, CallerType
-
-   result = execute_matomo_query(
-       instance="inclusion",
-       caller=CallerType.AGENT,
-       method="VisitsSummary.get",
-       params={"idSite": 117, "period": "month", "date": "2025-12-01"},
-       timeout=180,
-   )
-   if result.success:
-       print(result.data)
-   else:
-       print(f"Query failed: {result.error}")
+   print(f"  {month}: {result.data.get('nb_visits', 0)} visits")
+   # NOT: results.append(data)  # then print everything at the end
    ```
+   If the script runs in background, an empty output file makes diagnosis
+   impossible.
+
+2. **Limit to 5 segmented queries per script.** Split larger analyses into
+   separate scripts or separate conversation turns.
+
+3. **Use `flush=True`** for progress output:
+   ```python
+   print(f"Query {i}/{n}...", flush=True)
+   ```
+
+#### Background Tasks and Polling
+
+When a Bash command exceeds its timeout, it gets backgrounded automatically.
+You then poll with `TaskOutput`. **This polling can loop forever.**
+
+**Rules:**
+- If `TaskOutput` times out **twice** on the same task, **stop polling**.
+  Read the partial output file, kill the task with `TaskStop`, and adapt.
+  Report what you have to the user.
+- **Never** retry `TaskOutput` more than twice on the same task ID.
+- Prefer running scripts directly (not in background) with shorter timeouts
+  and fewer queries.
+
+#### Safe Patterns
+
+```python
+# 1. No segment — fast, can use date ranges
+execute_matomo_query(method="VisitsSummary.get",
+    params={"idSite": 117, "period": "month", "date": "2025-01-01,2025-12-31"})
+
+# 2. Segment on a single month — acceptable
+execute_matomo_query(method="VisitsSummary.get",
+    params={"idSite": 117, "period": "month", "date": "2025-12-01",
+            "segment": "pageUrl=@/dashboard/"}, timeout=180)
+
+# 3. Start simple, verify, then add segment
+result = execute_matomo_query(...)  # no segment first — is there data?
+result = execute_matomo_query(...)  # now add segment on same month
+
+# 4. Use lib.query (has built-in timeout handling and logging)
+from lib.query import execute_matomo_query, CallerType
+result = execute_matomo_query(
+    instance="inclusion", caller=CallerType.AGENT,
+    method="VisitsSummary.get",
+    params={"idSite": 117, "period": "month", "date": "2025-12-01"},
+    timeout=180,
+)
+if result.success:
+    print(result.data)
+else:
+    print(f"Query failed: {result.error}")
+```
 
 ## Output & Reports
 
