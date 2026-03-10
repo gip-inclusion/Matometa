@@ -95,8 +95,8 @@ WEB_DEBUG=false
 ADMIN_USERS=admin@localhost
 DEFAULT_USER=admin@localhost
 
-# Ollama (remote GPU server)
-OLLAMA_BASE_URL=http://62.210.193.208:11434
+# Ollama (remote GPU server) — set OLLAMA_HOST before running deploy
+OLLAMA_BASE_URL=http://\${OLLAMA_HOST:?Set OLLAMA_HOST in env}:11434
 OLLAMA_MODEL=qwen2.5-coder:14b-32k
 OLLAMA_TITLE_MODEL=qwen2.5-coder:14b
 OLLAMA_TAG_MODEL=qwen2.5-coder:14b
@@ -183,4 +183,5 @@ echo "==> Waiting for startup..."
 sleep 5
 ssh "$HOST" "cd $REMOTE_DIR && $COMPOSE ps && curl -sf http://localhost:5002/ >/dev/null && echo 'OK: matometa responding on :5002' || echo 'WARN: not responding yet'"
 
-echo "==> Done. Access at http://163.172.181.216:5002/"
+REMOTE_IP=$(ssh -G "$HOST" | awk '/^hostname / {print $2}')
+echo "==> Done. Access at http://${REMOTE_IP}:5002/"

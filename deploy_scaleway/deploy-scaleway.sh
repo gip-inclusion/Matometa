@@ -3,10 +3,10 @@
 # Run from your laptop:  bash deploy/deploy-scaleway.sh
 set -euo pipefail
 
-SERVER="scaleway"              # SSH alias (user alexis @ 163.172.144.13)
+SERVER="scaleway"              # SSH alias (defined in ~/.ssh/config)
 REMOTE_DIR="~/matometa"
 COMPOSE="docker compose -f deploy/docker-compose.scaleway.yml --project-directory ."
-PUBLIC_IP="163.172.144.13"
+PUBLIC_IP=$(ssh -G "$SERVER" | awk '/^hostname / {print $2}')
 
 echo "=== Deploying matometa to Scaleway ($PUBLIC_IP) ==="
 echo ""

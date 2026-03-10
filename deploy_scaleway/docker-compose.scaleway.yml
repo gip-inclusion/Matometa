@@ -30,7 +30,7 @@ services:
       - GITEA_ORG=${GITEA_ORG:-apps}
       - COOLIFY_URL=${COOLIFY_URL:-http://host.docker.internal:8001}
       - COOLIFY_API_TOKEN=${COOLIFY_API_TOKEN}
-      - EXPERT_DEPLOY_PUBLIC_HOST=${EXPERT_DEPLOY_PUBLIC_HOST:-163.172.144.13}
+      - EXPERT_DEPLOY_PUBLIC_HOST=${EXPERT_DEPLOY_PUBLIC_HOST:?Set EXPERT_DEPLOY_PUBLIC_HOST in .env}
       - SKIP_CLI_AUTH_CHECK=${SKIP_CLI_AUTH_CHECK:-false}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -59,7 +59,7 @@ services:
     volumes:
       - gitea_data:/data
     environment:
-      - GITEA__server__ROOT_URL=${GITEA_PUBLIC_URL:-http://163.172.144.13:3300}
+      - GITEA__server__ROOT_URL=${GITEA_PUBLIC_URL:-http://${EXPERT_DEPLOY_PUBLIC_HOST}:3300}
       - GITEA__server__HTTP_PORT=3000
       - GITEA__database__DB_TYPE=sqlite3
       - GITEA__service__DISABLE_REGISTRATION=true
