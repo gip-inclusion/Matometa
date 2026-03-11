@@ -240,6 +240,39 @@ function formatReport(content, reportInfo) {
 }
 
 /**
+ * Auto-link Metabase references like "card #123", "question #456", "dashboard #78".
+ * Only matches text outside of existing <a> tags and HTML attributes.
+ */
+function linkMetabaseReferences(html) {
+  const METABASE_BASE = 'https://stats.inclusion.beta.gouv.fr';
+
+  // Split HTML by tags to avoid replacing inside <a href="..."> or other tags
+  const parts = html.split(/(<[^>]+>)/);
+  let insideLink = false;
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+
+    // Track whether we're inside an <a> tag
+    if (part.match(/^<a[\s>]/i)) insideLink = true;
+    if (part.match(/^<\/a>/i)) insideLink = false;
+
+    // Only process text nodes outside links
+    if (insideLink || part.startsWith('<')) continue;
+
+    parts[i] = part.replace(
+      /\b(card|question|carte)\s*#\s*(\d+)/gi,
+      `<a href="${METABASE_BASE}/question/$2" target="_blank" rel="noopener" class="metabase-ref" title="Ouvrir la question #$2 sur Metabase">$1 #$2 <i class="ri-external-link-line"></i></a>`
+    ).replace(
+      /\b(dashboard|tableau de bord)\s*#\s*(\d+)/gi,
+      `<a href="${METABASE_BASE}/dashboard/$2" target="_blank" rel="noopener" class="metabase-ref" title="Ouvrir le dashboard #$2 sur Metabase">$1 #$2 <i class="ri-external-link-line"></i></a>`
+    );
+  }
+
+  return parts.join('');
+}
+
+/**
  * Format assistant content using marked.js for proper markdown
  */
 function formatAssistantContent(content) {
@@ -247,13 +280,27 @@ function formatAssistantContent(content) {
 
   // Use marked.js if available, fallback to simple formatting
   if (typeof marked !== 'undefined') {
+    // Custom renderer: open external links in new tab
+    const renderer = new marked.Renderer();
+    renderer.link = function({ href, title, text }) {
+      const titleAttr = title ? ` title="${title}"` : '';
+      const isExternal = href && (href.startsWith('http://') || href.startsWith('https://'));
+      const targetAttr = isExternal ? ' target="_blank" rel="noopener"' : '';
+      return `<a href="${href}"${titleAttr}${targetAttr}>${text}</a>`;
+    };
+
     // Configure marked for safe rendering
     marked.setOptions({
       breaks: true,  // GFM line breaks
       gfm: true,     // GitHub Flavored Markdown
     });
 
-    return marked.parse(content);
+    let html = marked.parse(content, { renderer });
+
+    // Auto-link Metabase references (card/question/dashboard #N)
+    html = linkMetabaseReferences(html);
+
+    return html;
   }
 
   // Fallback: simple markdown-ish
