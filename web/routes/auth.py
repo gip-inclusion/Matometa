@@ -74,7 +74,7 @@ async def start(request: Request):
     force = data.get("force", False)
     result = claude_auth.start_auth(force=force)
     if result.get("status") == "error":
-        logger.error("Auth start failed: %s", result.get("error"))
+        logger.error("Auth start failed")
         return JSONResponse({"status": "error", "error": "Authentication failed"}, status_code=500)
     return result
 
@@ -93,7 +93,7 @@ async def complete(request: Request):
         )
     result = claude_auth.complete_auth(data["code"])
     if result.get("status") == "error":
-        logger.error("Auth completion failed: %s", result.get("error"))
+        logger.error("Auth completion failed")
         return JSONResponse({"status": "error", "error": "Authentication failed"}, status_code=500)
     return result
 
