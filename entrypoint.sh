@@ -3,10 +3,13 @@
 python -m web.pm &
 PM_PID=$!
 
-# Keep OAuth token alive (refresh every 30 minutes)
-(while true; do
-  claude auth status >/dev/null 2>&1
-  sleep 1800
+# Keep OAuth token alive (check every 10 minutes, refresh if < 1h remaining)
+(sleep 10; while true; do
+  python -c "
+from web.claude_credentials import ensure_valid_token
+ensure_valid_token()
+" 2>&1 | head -5
+  sleep 600
 done) &
 REFRESH_PID=$!
 

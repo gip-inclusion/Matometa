@@ -49,10 +49,38 @@ Use these skills to manage spec artifacts:
 ## Git Rules
 
 **Do not run git commit or git push.** Matometa auto-commits all changes to the
-staging branch after each response. The staging branch auto-deploys on push via
-Gitea webhook.
+staging branch after each response. After push, staging is **automatically deployed**
+via Docker if a `docker-compose.yml` exists.
 
 Production deployment requires explicit promotion (staging -> production merge).
+
+## Deploy Commands
+
+After auto-deploy, if you need to manually deploy or troubleshoot:
+
+```bash
+# List all projects (shows slugs AND UUIDs)
+python -m scripts.deploy list
+
+# Deploy staging — accepts slug OR UUID
+python -m scripts.deploy staging gold-falcon
+python -m scripts.deploy staging 1642712b-4fc3-451b-ab40-88dcdee34e29
+
+# Full pipeline (commit + validate + deploy + health check)
+python -m skills.speckit_deploy.scripts.deploy --project-id gold-falcon --env staging
+
+# Check status
+python -m scripts.deploy status gold-falcon
+
+# View logs on failure (read these BEFORE retrying)
+python -m scripts.deploy logs gold-falcon --env staging
+
+# Validate compose file
+python -m scripts.deploy validate gold-falcon
+```
+
+**On deploy failure:** Always read the container logs before retrying. The deploy
+CLI and skill both show logs automatically on failure.
 
 ## Tech Stack
 

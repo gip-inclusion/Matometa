@@ -5,15 +5,18 @@ Independent of the agent — can be run manually, by cron, or via webhook.
 The agent can also call this via Bash tool for troubleshooting.
 
 Usage:
-    python -m scripts.deploy status                     # All projects
-    python -m scripts.deploy status <slug>              # One project
-    python -m scripts.deploy staging <slug>             # Deploy staging
-    python -m scripts.deploy production <slug>          # Deploy production
-    python -m scripts.deploy logs <slug> [--env ENV]    # View logs
-    python -m scripts.deploy restart <slug> [--env ENV] # Restart
-    python -m scripts.deploy stop <slug> [--env ENV]    # Stop
-    python -m scripts.deploy validate <slug>            # Check compose file
-    python -m scripts.deploy health                     # Health check all
+    python -m scripts.deploy list                              # List all projects
+    python -m scripts.deploy status                            # All projects status
+    python -m scripts.deploy status <slug-or-uuid>             # One project
+    python -m scripts.deploy staging <slug-or-uuid>            # Deploy staging
+    python -m scripts.deploy production <slug-or-uuid>         # Deploy production
+    python -m scripts.deploy logs <slug-or-uuid> [--env ENV]   # View logs
+    python -m scripts.deploy restart <slug-or-uuid> [--env ENV] # Restart
+    python -m scripts.deploy stop <slug-or-uuid> [--env ENV]   # Stop
+    python -m scripts.deploy validate <slug-or-uuid>           # Check compose file
+    python -m scripts.deploy health                            # Health check all
+
+Note: <slug-or-uuid> accepts either project slug (e.g. gold-falcon) or UUID.
 """
 
 import argparse
@@ -27,17 +30,44 @@ from lib import docker_deploy
 from web.database import ConversationStore
 
 
+def _resolve_project(store, identifier: str):
+    """Resolve a project by slug or UUID."""
+    project = store.get_project_by_slug(identifier)
+    if project:
+        return project
+    # Try as UUID (full or partial)
+    project = store.get_project(identifier)
+    if project:
+        return project
+    return None
+
+
+def cmd_list(args):
+    """List all projects with their slugs and IDs."""
+    store = ConversationStore()
+    projects = store.list_projects(limit=500)
+    if not projects:
+        print("No projects found")
+        return 0
+    print(f"{'SLUG':20s} {'ID':38s} {'STATUS':12s} {'STAGING URL'}")
+    print("-" * 100)
+    for p in projects:
+        print(f"{p.slug:20s} {p.id:38s} {p.status or '-':12s} {p.staging_deploy_url or '-'}")
+    return 0
+
+
 def cmd_status(args):
     store = ConversationStore()
     if args.slug:
-        project = store.get_project_by_slug(args.slug)
+        project = _resolve_project(store, args.slug)
         if not project:
             print(f"Project not found: {args.slug}")
+            print("Hint: use 'python -m scripts.deploy list' to see available projects")
             return 1
         for env in ("staging", "production"):
             st = docker_deploy.status(project.id, env)
             if st["status"] != "not_deployed":
-                print(f"{args.slug}/{env}: {st['status']}")
+                print(f"{project.slug}/{env}: {st['status']}")
                 for c in st.get("containers", []):
                     print(f"  {c['name']}: {c['state']} ({c['status_text']})")
     else:
@@ -56,22 +86,30 @@ def cmd_status(args):
 
 def cmd_deploy(args, environment):
     store = ConversationStore()
-    project = store.get_project_by_slug(args.slug)
+    project = _resolve_project(store, args.slug)
     if not project:
         print(f"Project not found: {args.slug}")
+        print("Hint: use 'python -m scripts.deploy list' to see available projects")
         return 1
 
-    print(f"Deploying {args.slug}/{environment}...")
+    print(f"Deploying {project.slug}/{environment}...")
     result = docker_deploy.deploy(project.id, environment)
     print(json.dumps(result, indent=2))
+    if result["status"] not in ("running",):
+        # Show container logs on failure for diagnostics
+        log_text = docker_deploy.logs(project.id, environment, lines=30)
+        if log_text and log_text != "No logs available":
+            print(f"\n--- Container logs ({environment}) ---")
+            print(log_text)
     return 0 if result["status"] == "running" else 1
 
 
 def cmd_logs(args):
     store = ConversationStore()
-    project = store.get_project_by_slug(args.slug)
+    project = _resolve_project(store, args.slug)
     if not project:
         print(f"Project not found: {args.slug}")
+        print("Hint: use 'python -m scripts.deploy list' to see available projects")
         return 1
 
     log_text = docker_deploy.logs(project.id, args.env, lines=args.lines)
@@ -81,9 +119,10 @@ def cmd_logs(args):
 
 def cmd_restart(args):
     store = ConversationStore()
-    project = store.get_project_by_slug(args.slug)
+    project = _resolve_project(store, args.slug)
     if not project:
         print(f"Project not found: {args.slug}")
+        print("Hint: use 'python -m scripts.deploy list' to see available projects")
         return 1
 
     result = docker_deploy.restart(project.id, args.env)
@@ -93,9 +132,10 @@ def cmd_restart(args):
 
 def cmd_stop(args):
     store = ConversationStore()
-    project = store.get_project_by_slug(args.slug)
+    project = _resolve_project(store, args.slug)
     if not project:
         print(f"Project not found: {args.slug}")
+        print("Hint: use 'python -m scripts.deploy list' to see available projects")
         return 1
 
     result = docker_deploy.stop(project.id, args.env)
@@ -105,9 +145,10 @@ def cmd_stop(args):
 
 def cmd_validate(args):
     store = ConversationStore()
-    project = store.get_project_by_slug(args.slug)
+    project = _resolve_project(store, args.slug)
     if not project:
         print(f"Project not found: {args.slug}")
+        print("Hint: use 'python -m scripts.deploy list' to see available projects")
         return 1
 
     warnings = docker_deploy.validate_compose(project.id)
@@ -156,12 +197,17 @@ def main():
     p_validate.add_argument("slug", help="Project slug")
 
     sub.add_parser("health", help="Health check all projects")
+    sub.add_parser("list", help="List all projects (slugs and IDs)")
 
     args = parser.parse_args()
 
     if not args.command:
         parser.print_help()
         return 1
+
+    # 'list' doesn't need Docker
+    if args.command == "list":
+        return cmd_list(args)
 
     if not docker_deploy.docker_available():
         print("ERROR: Docker is not available")
@@ -176,6 +222,7 @@ def main():
         "stop": cmd_stop,
         "validate": cmd_validate,
         "health": cmd_health,
+        "list": cmd_list,
     }
 
     return handlers[args.command](args)

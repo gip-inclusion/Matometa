@@ -101,3 +101,34 @@ def backup():
     return JSONResponse(
         {"status": "error", "error": "Backup failed"}, status_code=500
     )
+
+
+@router.post("/refresh")
+def refresh():
+    """Force refresh the OAuth token."""
+    if not claude_credentials.token_needs_refresh():
+        return {"status": "ok", "message": "Token still valid, no refresh needed"}
+    success = claude_credentials.refresh_token()
+    if success:
+        return {"status": "ok", "message": "Token refreshed"}
+    return JSONResponse(
+        {"status": "error", "error": "Token refresh failed"}, status_code=500
+    )
+
+
+@router.get("/token-health")
+def token_health():
+    """Check token expiry status."""
+    import time
+    info = claude_credentials.get_credentials_info()
+    if not info:
+        return {"healthy": False, "reason": "no_credentials"}
+    expires_at = info.get("expires_at")
+    if not expires_at:
+        return {"healthy": True, "reason": "no_expiry_info"}
+    remaining = (expires_at / 1000) - time.time()
+    return {
+        "healthy": remaining > claude_credentials.REFRESH_MARGIN_SECONDS,
+        "expires_in_seconds": int(remaining),
+        "needs_refresh": remaining < claude_credentials.REFRESH_MARGIN_SECONDS,
+    }

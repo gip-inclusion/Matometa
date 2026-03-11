@@ -704,11 +704,26 @@ async def stream_conversation(
                                 conv_id,
                             )
                             deploy_triggered = False
-                            # Staging is expected to auto-redeploy on push via Gitea webhook.
-                            if commit_result:
-                                deploy_triggered = True
 
                             if commit_result:
+                                # Auto-deploy staging via Docker if available (replaces Gitea webhook).
+                                try:
+                                    from lib import docker_deploy
+                                    if docker_deploy.docker_available():
+                                        compose_file = config.PROJECTS_DIR / project.id / "docker-compose.yml"
+                                        if compose_file.exists():
+                                            deploy_result = await asyncio.to_thread(
+                                                docker_deploy.deploy, project.id, "staging"
+                                            )
+                                            deploy_triggered = deploy_result.get("status") == "running"
+                                            if not deploy_triggered:
+                                                logger.warning(
+                                                    "Auto-deploy staging failed for %s: %s",
+                                                    project.slug, deploy_result.get("error", "unknown"),
+                                                )
+                                except Exception as deploy_exc:
+                                    logger.warning("Auto-deploy staging error for %s: %s", conv_id, deploy_exc)
+
                                 yield _sse_event(
                                     "system",
                                     {

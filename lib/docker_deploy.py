@@ -81,10 +81,54 @@ def validate_compose(project_id: str) -> list[str]:
     return warnings
 
 
+def validate_build_context(project_id: str) -> list[str]:
+    """Check that files referenced in docker-compose.yml exist in the build context.
+
+    Returns a list of warning strings (empty = OK).
+    """
+    workdir = config.PROJECTS_DIR / project_id
+    compose_file = workdir / "docker-compose.yml"
+    if not compose_file.exists():
+        return ["No docker-compose.yml found"]
+
+    warnings = []
+
+    # Check Dockerfile exists
+    content = compose_file.read_text()
+    # If compose uses 'build: .' or 'build: { context: ... }', check Dockerfile
+    if "build:" in content:
+        dockerfile = workdir / "Dockerfile"
+        if not dockerfile.exists():
+            warnings.append("Dockerfile not found but docker-compose.yml has 'build:' directive")
+
+    # Check volume-mounted files/dirs exist
+    import yaml
+    try:
+        compose_data = yaml.safe_load(content)
+        if not compose_data or "services" not in compose_data:
+            return warnings
+
+        for svc_name, svc in compose_data.get("services", {}).items():
+            for vol in svc.get("volumes", []):
+                if isinstance(vol, str) and ":" in vol:
+                    host_path = vol.split(":")[0].strip()
+                    if host_path.startswith("./") or host_path.startswith("../"):
+                        abs_path = workdir / host_path
+                        if not abs_path.exists():
+                            warnings.append(
+                                f"Service '{svc_name}': volume mount '{host_path}' does not exist"
+                            )
+    except Exception:
+        pass  # yaml parsing failure is not fatal for validation
+
+    return warnings
+
+
 def deploy(project_id: str, environment: str = "staging") -> dict:
     """Build and start a project's containers.
 
     Returns dict with: status, port, container_name, error.
+    On failure, includes 'logs' key with recent container output for diagnostics.
     """
     from web.database import ConversationStore
     store = ConversationStore()
@@ -100,6 +144,11 @@ def deploy(project_id: str, environment: str = "staging") -> dict:
 
     # Validate compose file
     warnings = validate_compose(project_id)
+
+    # Validate build context (missing files, volumes)
+    context_warnings = validate_build_context(project_id)
+    warnings.extend(context_warnings)
+
     if warnings:
         logger.warning("Compose validation for %s: %s", project_id, "; ".join(warnings))
 
@@ -122,6 +171,7 @@ def deploy(project_id: str, environment: str = "staging") -> dict:
             "status": "build_failed",
             "error": result.stderr[-1000:],
             "port": port,
+            "warnings": warnings if warnings else None,
         }
 
     # Stop existing containers first (if any)
@@ -151,10 +201,14 @@ def deploy(project_id: str, environment: str = "staging") -> dict:
 
     if up_result.returncode != 0:
         logger.error("Up failed for %s/%s: %s", project.slug, environment, up_result.stderr[-500:])
+        # Collect container logs for diagnostics
+        diag_logs = logs(project_id, environment, lines=50)
         return {
             "status": "start_failed",
             "error": up_result.stderr[-1000:],
             "port": port,
+            "logs": diag_logs,
+            "warnings": warnings if warnings else None,
         }
 
     # Update DB with deploy URL
