@@ -148,6 +148,19 @@ def _rewrite_proxy_html(content: str, slug: str, environment: str) -> str:
         if head_close != -1:
             injection = f'<base href="{_preview_url(slug, environment)}">'
             content = content[: head_close + 1] + injection + content[head_close + 1 :]
+    # Inject a script to rewrite JS-assigned form.action with absolute paths
+    # (e.g. form.action = '/orders/5/status' -> '/expert/slug/preview/env/orders/5/status')
+    if "</body>" in content:
+        patch_script = (
+            f'<script>(function(){{'
+            f'var B="{base}";'
+            f'var _set=Object.getOwnPropertyDescriptor(HTMLFormElement.prototype,"action").set;'
+            f'Object.defineProperty(HTMLFormElement.prototype,"action",{{'
+            f'set:function(v){{if(typeof v==="string"&&v.startsWith("/")&&!v.startsWith(B))v=B+v;_set.call(this,v)}},'
+            f'get:function(){{return this.getAttribute("action")||""}}}})'
+            f'}})();</script>'
+        )
+        content = content.replace("</body>", patch_script + "</body>")
     return content
 
 
