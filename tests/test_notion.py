@@ -324,7 +324,7 @@ class TestPublishNotionEndpoint:
             headers={"X-Forwarded-Email": "test@example.com"},
         )
         assert resp.status_code == 500
-        assert "timeout" in resp.json()["error"]
+        assert resp.json()["error"] == "Failed to publish to Notion"
 
 
 # ---------------------------------------------------------------------------
