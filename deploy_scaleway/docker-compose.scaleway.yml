@@ -86,6 +86,29 @@ services:
       - default
     mem_limit: 512m
 
+  # ── Watchdog AI Agent (autonomous health monitoring) ──────────────
+  watchdog:
+    build:
+      context: .
+      dockerfile: watchdog/Dockerfile
+    container_name: matometa-watchdog
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/app/data
+    environment:
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3-coder-next}
+      - WATCHDOG_INTERVAL_AGENT=${WATCHDOG_INTERVAL_AGENT:-120}
+      - WATCHDOG_MEMORY_MAX_REPORTS=20
+      - WATCHDOG_MEMORY_MAX_SIZE_KB=64
+      - WATCHDOG_WEBHOOK_URL=${WATCHDOG_WEBHOOK_URL:-}
+    networks:
+      - default
+    mem_limit: 256m
+    depends_on:
+      - matometa
+
 networks: {}
 
 volumes:
