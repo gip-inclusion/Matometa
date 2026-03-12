@@ -263,7 +263,9 @@ def complete_auth(code: str) -> dict:
                 logger.warning("Could not confirm paste prompt, proceeding anyway")
 
             # Send the code (use send + newline separately for better control)
-            logger.info("Sending auth code: %s...", code[:10])
+            from .logging_utils import sanitize_log_value
+
+            logger.info("Sending auth code: %s...", sanitize_log_value(code[:10]))
             child.send(code)
             time_module.sleep(0.3)
             child.send("\r")

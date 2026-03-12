@@ -583,9 +583,11 @@ async def stream_conversation(
 
     async def generate():
         last_msg_id = after if after > 0 else (conv.messages[-1].id if conv.messages else 0)
+        from ..logging_utils import sanitize_log_value
+
         logger.debug(
             "SSE stream start: conv=%s, after=%d, watermark=%d",
-            conv_id,
+            sanitize_log_value(conv_id),
             after,
             last_msg_id,
         )

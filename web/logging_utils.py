@@ -22,6 +22,19 @@ class SafeFormatter(logging.Formatter):
         return msg
 
 
+def sanitize_log_value(value: object) -> str:
+    """Sanitize a value before passing it to a logger.
+
+    Strips control characters that could be used for log injection /
+    log forging so that static-analysis tools (CodeQL) can see an
+    explicit sanitization boundary at the call-site.
+    """
+    text = str(value)
+    text = text.replace("\n", "\\n").replace("\r", "\\r").replace("\x00", "")
+    text = _ANSI_RE.sub("", text)
+    return text
+
+
 def setup_logging(level: int = logging.INFO) -> None:
     """Configure the root logger with the safe formatter."""
     handler = logging.StreamHandler()
