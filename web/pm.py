@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 
 from . import config
 from .agents import get_agent
@@ -23,11 +24,15 @@ logger = logging.getLogger(__name__)
 MAX_CONCURRENT_AGENTS = int(os.environ.get("MAX_CONCURRENT_AGENTS", "2"))
 
 
+STALE_FLAG_TIMEOUT_S = 300  # 5 minutes — clear needs_response if no active task
+
+
 class ProcessManager:
     def __init__(self):
         self.backend: AgentBackend = get_agent()
         self.running: dict[str, asyncio.Task] = {}
         self._queued: list[tuple[str, dict]] = []  # (conv_id, payload) waiting for a slot
+        self._last_stale_check = 0.0
 
     async def run(self):
         """Main loop: poll for commands, execute them."""
@@ -44,6 +49,12 @@ class ProcessManager:
                 # Drain finished tasks and start queued ones
                 self._reap_finished()
                 self._start_queued()
+
+                # Periodically clear stale needs_response flags (every 30s)
+                now = time.monotonic()
+                if now - self._last_stale_check > 30:
+                    self._last_stale_check = now
+                    await self._reap_stale_flags()
 
                 commands = await asyncio.to_thread(store.claim_pending_pm_commands)
                 for cmd in commands:
@@ -130,7 +141,18 @@ class ProcessManager:
         except Exception:
             logger.exception(f"Agent error for {conversation_id}")
         finally:
-            store.update_conversation(conversation_id, needs_response=False)
+            # Clear needs_response with retry — if this fails, the flag stays stuck
+            for attempt in range(3):
+                try:
+                    store.update_conversation(conversation_id, needs_response=False)
+                    break
+                except Exception:
+                    logger.exception(
+                        f"Failed to clear needs_response for {conversation_id} "
+                        f"(attempt {attempt + 1}/3)"
+                    )
+                    if attempt < 2:
+                        await asyncio.sleep(1)
             self.running.pop(conversation_id, None)
             logger.info(f"Agent finished for {conversation_id}")
 
@@ -191,7 +213,52 @@ class ProcessManager:
         if task:
             await self.backend.cancel(conversation_id)
             self.running.pop(conversation_id, None)
+            # BUG FIX: _cancel_agent was not clearing needs_response,
+            # causing "Matometa réfléchit..." to stay forever after cancel
+            try:
+                await asyncio.to_thread(
+                    store.update_conversation, conversation_id, needs_response=False
+                )
+            except Exception:
+                logger.exception(f"Failed to clear needs_response on cancel for {conversation_id}")
+            store.add_message(conversation_id, "assistant", "*Interrompu.*")
             logger.info(f"Cancelled agent for {conversation_id}")
+
+    async def _reap_stale_flags(self):
+        """Clear needs_response=1 for conversations with no active task.
+
+        Catches the case where the finally block or cancel failed to clear the flag.
+        Only clears if the conversation has been waiting > STALE_FLAG_TIMEOUT_S.
+        """
+        try:
+            waiting_ids = await asyncio.to_thread(store.get_running_conversation_ids)
+            queued_ids = {c for c, _ in self._queued}
+            for conv_id in waiting_ids:
+                if conv_id in self.running or conv_id in queued_ids:
+                    continue  # legitimately processing or queued
+                # Check how long it's been stuck
+                conv = await asyncio.to_thread(store.get_conversation, conv_id)
+                if not conv:
+                    continue
+                from datetime import datetime, timezone
+                updated = conv.updated_at
+                if isinstance(updated, str):
+                    updated = datetime.fromisoformat(updated)
+                if updated.tzinfo is None:
+                    updated = updated.replace(tzinfo=timezone.utc)
+                age_s = (datetime.now(timezone.utc) - updated).total_seconds()
+                if age_s > STALE_FLAG_TIMEOUT_S:
+                    logger.warning(
+                        f"Reaping stale needs_response for {conv_id} "
+                        f"(stuck {age_s:.0f}s, no active task)"
+                    )
+                    store.update_conversation(conv_id, needs_response=False)
+                    store.add_message(
+                        conv_id, "assistant",
+                        "*Interrompu (délai d'attente dépassé).*"
+                    )
+        except Exception:
+            logger.exception("Error reaping stale flags")
 
     def is_running(self, conversation_id: str) -> bool:
         """Check if an agent is running for a conversation."""
