@@ -719,6 +719,24 @@ body.has-sidebar {
   white-space: pre-wrap;
 }
 
+/* Metabase auto-linked references */
+.metabase-ref {
+  text-decoration: none;
+  border-bottom: 1px dashed var(--bs-primary);
+  white-space: nowrap;
+}
+.metabase-ref i {
+  font-size: 0.75em;
+  vertical-align: super;
+  opacity: 0.6;
+}
+.metabase-ref:hover {
+  border-bottom-style: solid;
+}
+.metabase-ref:hover i {
+  opacity: 1;
+}
+
 /* Assistant messages - clean, no box */
 .event-assistant {
   padding: 0.5rem 0;
