@@ -12,7 +12,13 @@ from fastapi.responses import RedirectResponse
 
 from ..config import ADMIN_USERS, DISPLAY_TIMEZONE, FEATURE_KNOWLEDGE_CHAT
 from ..deps import get_current_user, templates
-from ..helpers import list_knowledge_files, list_knowledge_sections, list_staged_files, validate_knowledge_path
+from ..helpers import (
+    _validate_conv_id,
+    list_knowledge_files,
+    list_knowledge_sections,
+    list_staged_files,
+    validate_knowledge_path,
+)
 from ..storage import store
 from .research import find_similar_pages, get_corpus_stats, get_page, search_corpus
 
@@ -438,7 +444,7 @@ def explorations(
     """Legacy explorations list — redirects to /rechercher."""
     if conv:
         # Validate conv is a UUID to prevent open redirect
-        if re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", conv, re.IGNORECASE):
+        if _validate_conv_id(conv):
             return RedirectResponse(f"/explorations/{conv}", status_code=301)
         return RedirectResponse("/rechercher?show=convos", status_code=301)
 
