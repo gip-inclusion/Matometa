@@ -696,6 +696,8 @@ async def stream_conversation(
                 # Expert-mode post-run hook: commit/push staged changes and trigger staging deploy.
                 if updated.conv_type == "project" and updated.project_id:
                     try:
+                        from lib.expert_git import commit_and_push_staging_if_changed
+
                         project = await asyncio.to_thread(store.get_project, updated.project_id)
                         if project:
                             commit_result = await asyncio.to_thread(
@@ -705,34 +707,69 @@ async def stream_conversation(
                             )
                             deploy_triggered = False
                             deploy_result = None
+                            review_result = None
 
                             if commit_result:
-                                # Auto-deploy staging via Docker if available (replaces Gitea webhook).
+                                # Run deploy and code review in parallel.
+                                deploy_task = None
+                                review_task = None
+
+                                # Auto-deploy staging via Docker if available.
                                 try:
                                     from lib import docker_deploy
                                     if docker_deploy.docker_available():
                                         compose_file = config.PROJECTS_DIR / project.id / "docker-compose.yml"
                                         if compose_file.exists():
-                                            deploy_result = await asyncio.to_thread(
-                                                docker_deploy.deploy, project.id, "staging"
-                                            )
-                                            deploy_triggered = deploy_result.get("status") == "running"
-                                            if not deploy_triggered:
-                                                logger.warning(
-                                                    "Auto-deploy staging failed for %s: %s",
-                                                    project.slug, deploy_result.get("error", "unknown"),
+                                            deploy_task = asyncio.create_task(
+                                                asyncio.to_thread(
+                                                    docker_deploy.deploy, project.id, "staging"
                                                 )
+                                            )
                                 except Exception as deploy_exc:
                                     logger.warning("Auto-deploy staging error for %s: %s", conv_id, deploy_exc)
 
+                                # Code review via local Ollama model (advisory).
+                                try:
+                                    from lib.expert_review import review_commit
+                                    review_task = asyncio.create_task(
+                                        asyncio.to_thread(
+                                            review_commit, project.id, commit_result["commit"]
+                                        )
+                                    )
+                                except Exception as review_exc:
+                                    logger.warning("Code review setup error for %s: %s", conv_id, review_exc)
+
+                                # Await deploy result.
+                                if deploy_task:
+                                    try:
+                                        deploy_result = await deploy_task
+                                        deploy_triggered = deploy_result.get("status") == "running"
+                                        if not deploy_triggered:
+                                            logger.warning(
+                                                "Auto-deploy staging failed for %s: %s",
+                                                project.slug, deploy_result.get("error", "unknown"),
+                                            )
+                                    except Exception as deploy_exc:
+                                        logger.warning("Auto-deploy staging error for %s: %s", conv_id, deploy_exc)
+
+                                # Await review result.
+                                if review_task:
+                                    try:
+                                        review_result = await review_task
+                                    except Exception as review_exc:
+                                        logger.warning("Code review error for %s: %s", conv_id, review_exc)
+
                                 sse_content = {
-                                            "subtype": "auto_commit",
-                                            "branch": commit_result["branch"],
-                                            "commit": commit_result["commit"],
-                                            "files_changed": len(commit_result["files"]),
-                                            "staging_deploy_triggered": deploy_triggered,
-                                        }
-                                # Include smoke test results if available
+                                    "subtype": "auto_commit",
+                                    "branch": commit_result["branch"],
+                                    "commit": commit_result["commit"],
+                                    "files_changed": len(commit_result["files"]),
+                                    "staging_deploy_triggered": deploy_triggered,
+                                }
+                                # Include lint warnings from quality gate.
+                                if commit_result.get("lint_warnings"):
+                                    sse_content["lint_warnings"] = commit_result["lint_warnings"]
+                                # Include smoke test results if available.
                                 if deploy_triggered and deploy_result and deploy_result.get("smoke_test"):
                                     sse_content["smoke_test"] = deploy_result["smoke_test"]
 
@@ -740,6 +777,18 @@ async def stream_conversation(
                                     "system",
                                     {"type": "system", "content": sse_content},
                                 )
+
+                                # Send code review as a separate SSE event (can arrive after deploy).
+                                if review_result:
+                                    yield _sse_event(
+                                        "system",
+                                        {"type": "system", "content": {
+                                            "subtype": "code_review",
+                                            "review": review_result["review"],
+                                            "model": review_result["model"],
+                                            "commit": commit_result["commit"],
+                                        }},
+                                    )
                     except Exception as exc:
                         logger.warning("Expert auto-commit failed for conversation %s: %s", conv_id, exc)
 

@@ -137,5 +137,8 @@ EXPERT_PRODUCTION_BRANCH = os.getenv("EXPERT_PRODUCTION_BRANCH", "prod")
 PROJECTS_DIR = DATA_DIR / "projects"
 EXPERT_MODE_ENABLED = bool(os.getenv("GITEA_API_TOKEN"))  # Auto-enable when configured
 
+# Claude OAuth (used by credential refresh)
+OAUTH_CLIENT_ID = os.getenv("OAUTH_CLIENT_ID", "")
+
 # Feature flags
 FEATURE_KNOWLEDGE_CHAT = False  # Chat from Connaissance tab disabled (requires GitHub PAT)

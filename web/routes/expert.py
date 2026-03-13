@@ -286,6 +286,34 @@ def _ensure_deployable_repo(project):
         )
         created_files.append("docker-compose.yml")
 
+    gitignore = workdir / ".gitignore"
+    if not gitignore.exists():
+        gitignore.write_text(
+            "__pycache__/\n"
+            "*.pyc\n"
+            ".env\n"
+            ".venv/\n"
+            "node_modules/\n"
+            ".DS_Store\n"
+            "*.egg-info/\n"
+            "dist/\n"
+            "build/\n"
+        )
+        created_files.append(".gitignore")
+
+    pyproject = workdir / "pyproject.toml"
+    if not pyproject.exists():
+        pyproject.write_text(
+            "[tool.ruff]\n"
+            "target-version = \"py312\"\n"
+            "line-length = 120\n"
+            "\n"
+            "[tool.ruff.lint]\n"
+            'select = ["E", "F", "W", "I", "UP", "S", "B"]\n'
+            'ignore = ["S101"]\n'
+        )
+        created_files.append("pyproject.toml")
+
     index_html = workdir / "index.html"
     if not index_html.exists() and "Dockerfile" in created_files:
         safe_name = (project.name or project.slug or "Application").replace("<", "").replace(">", "")

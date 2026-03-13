@@ -1,1 +1,31 @@
 Read AGENTS.md. If AGENTS.local.md exists, read it too (local overrides).
+
+## Session Ledger
+<!-- Auto-maintained by session-ledger. Do not edit between markers. -->
+
+| Date | Type | Summary | Lesson |
+|------|------|---------|--------|
+| 2026-02-06 | feat | Add Ollama as default LLM backend with tool protocol | Introduced an Ollama backend with a JSON tool-call protocol and allowlisted Bash execution, plus a shared LLM helper ... |
+| 2026-02-06 | config | Add local Ollama env config to gitignore and validate llama3.2:1b | Docker compose ollama start failed because port 11434 is already in use, so the host service was used for the smoke test |
+| 2026-02-06 | test | Adjust local compose ports and data mount for Ollama smoke test | Updated docker-compose.local.yml to avoid port conflicts (MinIO now on 19000/19001, Ollama on 11435) and to mount /tm... |
+| 2026-02-06 | config | Allow Ollama model overrides in compose | Switched Ollama-related compose env entries to use env var defaults so .env.ollama.local can select lightweight model... |
+| 2026-02-06 | sec | Stream Ollama chat tokens over SSE | Added buffering to avoid per-token newlines while still streaming |
+| 2026-02-24 | config | Stabilized expert-mode deploy UX and sidebar tab behavior | Fixed expert-mode UI and backend edge cases end-to-end: added robust URL parsing/normalization in expert deploy flow,... |
+| 2026-02-24 | config | Fixed Gitea webhook allowlist to enable Coolify auto-redeploy | Diagnosed failed auto-redeploy by inspecting Gitea logs after push: webhooks to `http://coolify:8080/...` were blocke... |
+| 2026-02-24 | feat | Expert mode: workflow staging/prod avec auto-commit et déploiements séparés | Ajout d’un workflow Git/Coolify à deux branches pour le mode Expert: commits automatiques sur la branche stagging apr... |
+| 2026-02-24 | config | Expert deploy URLs: réécriture host public + stabilité ports prod | Ajustement de l’allocation de ports locaux pour la production (fallback plage start+2000) afin d’éviter l’erreur no f... |
+| 2026-02-24 | config | Expert previews: proxy via Matometa host to avoid localhost:port failures | Ajout d’un proxy de prévisualisation Expert: /expert/<slug>/preview/staging\|production(/path) qui relaie les apps dép... |
+| 2026-02-24 | fix | Fix final user access: preview links now default, deploy status exposes previ... | Suppression des liens techniques localhost dans l’UI Expert de déploiement et remplacement par des liens d’aperçu pro... |
+| 2026-02-24 | feat | Ajout bouton dédié Ouvrir la production dans l’onglet Déploiement Expert | Ajout d’un bouton explicite 'Ouvrir la production' au niveau des actions de la section Production (manuel), équivalen... |
+| 2026-02-24 | sec | Hardening pre-commit: ignore local metadata, secure expert setup creds, one-c... | Préparation au commit/push: ajout de .code/ dans .gitignore pour éviter les artefacts locaux; durcissement de scripts... |
+| 2026-02-24 | feat | Merged main into mode_expert with conflict resolution | Resolved merge conflicts prioritizing main migration to FastAPI while preserving expert-mode git/coolify hooks. |
+| 2026-02-24 | feat | Post-merge stabilization: expert routes + PM schema fixes | Added PM coordination tables (pm_commands, pm_heartbeat) creation safeguards in database init/schema so streaming liv... |
+| 2026-02-24 | feat | Fixed expert setup password reset behavior and rebuilt app | This prevents API token creation failures on reruns |
+| 2026-02-24 | sec | Implemented auto-review fixes: SSRF guard, project_workdir propagation, cance... | Applied three findings from latest auto-review directly on mode_expert: (1) hardened expert preview proxy to reject a... |
+| 2026-02-24 | fix | Committed setup script fix and prepared mode_expert for push | Committed scripts/setup_expert_test.sh change to ensure Gitea admin password resets with --must-change-password=false... |
+| 2026-02-24 | config | Applied auto-review fixes: config globals, proxy header stripping, PM ordering | Implemented latest auto-review findings on mode_expert_stagging: injected config into FastAPI Jinja globals to avoid ... |
+| 2026-02-25 | test | Stabilized default pytest run by gating integrations and fixing Notion testab... | Reclassified Metabase answer discovery/end-to-end tests as integration and guarded them when cards.db is absent |
+| 2026-02-25 | config | Ran full expert-mode local E2E and fixed bootstrap host resolution issues | Also adjusted the E2E helper script to handle Coolify 'running:unknown' status and write project files inside the con... |
+| 2026-02-25 | feat | Narrowed Gitea fixture skip to network-only errors and verified no duplicate ... | 401/403/500) to fail normally. |
+| 2026-02-25 | fix | Fix cli-ollama conversation flow and prove expert conversation E2E | Added model availability validation via Ollama /api/tags, synthetic compat action execution (Write/Edit), and a deter... |
+| 2026-02-25 | fix | Record cli-ollama compatibility fix and successful conversation-driven expert... | Updated tests in tests/test_backend.py and tests/test_backend_cli_ollama.py for sdk fallback routing and new compatib... |

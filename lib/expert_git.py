@@ -196,6 +196,58 @@ def ensure_project_branches(project):
     ensure_branch(workdir, staging)
 
 
+def run_quality_checks(workdir: Path) -> dict:
+    """Run lint checks on staged files. Advisory only — never blocks commit.
+
+    Returns a dict with check results:
+        {"ruff": {"ok": bool, "output": str}, "node": {"ok": bool, "output": str}}
+    """
+    results = {}
+
+    # Ruff (Python lint)
+    if shutil.which("ruff") and (workdir / "pyproject.toml").exists():
+        try:
+            proc = subprocess.run(
+                ["ruff", "check", "--diff", "."],
+                cwd=workdir,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            results["ruff"] = {"ok": proc.returncode == 0, "output": proc.stdout + proc.stderr}
+        except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+            results["ruff"] = {"ok": True, "output": f"skipped: {exc}"}
+    else:
+        results["ruff"] = {"ok": True, "output": "skipped: ruff not available or no pyproject.toml"}
+
+    # Node --check (JS/TS syntax check on changed files)
+    if shutil.which("node"):
+        try:
+            staged = run_git(workdir, "diff", "--cached", "--name-only")
+            js_files = [f for f in staged.splitlines() if f.strip().endswith((".js", ".mjs"))]
+            if js_files:
+                proc = subprocess.run(
+                    ["node", "--check", *js_files],
+                    cwd=workdir,
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+                results["node"] = {"ok": proc.returncode == 0, "output": proc.stderr}
+            else:
+                results["node"] = {"ok": True, "output": "no JS files staged"}
+        except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+            results["node"] = {"ok": True, "output": f"skipped: {exc}"}
+    else:
+        results["node"] = {"ok": True, "output": "skipped: node not available"}
+
+    for tool, result in results.items():
+        if not result["ok"]:
+            logger.warning("Quality check %s failed in %s:\n%s", tool, workdir, result["output"])
+
+    return results
+
+
 def commit_and_push_staging_if_changed(project, conversation_id: str | None = None) -> dict | None:
     """Commit and push all local changes to the staging branch if needed."""
     workdir = config.PROJECTS_DIR / project.id
@@ -220,6 +272,9 @@ def commit_and_push_staging_if_changed(project, conversation_id: str | None = No
     if not changed:
         return None
 
+    # Advisory lint gate — logs warnings but never blocks the commit.
+    quality = run_quality_checks(workdir)
+
     changed_files = [line for line in changed.splitlines() if line.strip()]
     suffix = conversation_id[:8] if conversation_id else "manual"
     message = f"chore(expert): update via conversation {suffix}"
@@ -228,11 +283,17 @@ def commit_and_push_staging_if_changed(project, conversation_id: str | None = No
     run_git(workdir, "push", "origin", staging)
     commit_hash = run_git(workdir, "rev-parse", "--short", "HEAD")
 
-    return {
+    result = {
         "branch": staging,
         "commit": commit_hash,
         "files": changed_files,
     }
+    # Include lint warnings if any check failed (advisory only).
+    lint_warnings = {k: v["output"] for k, v in quality.items() if not v["ok"]}
+    if lint_warnings:
+        result["lint_warnings"] = lint_warnings
+
+    return result
 
 
 def promote_staging_to_production(project) -> dict:

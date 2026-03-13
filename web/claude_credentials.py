@@ -17,7 +17,7 @@ from . import config
 logger = logging.getLogger(__name__)
 
 TOKEN_ENDPOINT = "https://platform.claude.com/v1/oauth/token"
-OAUTH_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+OAUTH_CLIENT_ID = config.OAUTH_CLIENT_ID
 REFRESH_MARGIN_SECONDS = 3600  # Refresh when < 1 hour remaining
 
 # Claude credentials location inside container
