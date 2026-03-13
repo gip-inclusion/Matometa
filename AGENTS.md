@@ -270,7 +270,6 @@ print(model.transmat_)  # Probability of transitioning between states
 | Package | Purpose |
 |---------|---------|
 | `requests` | HTTP client |
-| `httpx` | Async HTTP client |
 | `anthropic` | Claude API |
 | `boto3` | S3-compatible storage |
 
