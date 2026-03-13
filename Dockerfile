@@ -11,6 +11,9 @@ RUN apt-get update && apt-get install -y \
     clamav-daemon \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list \
+    && apt-get update && apt-get install -y docker-ce-cli docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/*
 
 # Update ClamAV virus definitions (run as root before switching user)
@@ -21,7 +24,8 @@ RUN freshclam --no-dns || echo "Warning: Could not update ClamAV definitions dur
 RUN npm install -g @anthropic-ai/claude-code
 
 # Create non-root user (UID 1004 to match host for volume permissions)
-RUN useradd -m -s /bin/bash -u 1004 matometa
+# Add to docker group (GID 988 on host) for Docker socket access
+RUN groupadd -g 988 docker && useradd -m -s /bin/bash -u 1004 -G docker matometa
 
 # Set up app directory
 WORKDIR /app
