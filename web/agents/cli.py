@@ -8,7 +8,7 @@ import signal
 from typing import AsyncIterator, Optional
 
 from .. import config
-from .base import AgentBackend, AgentMessage
+from .base import AgentBackend, AgentMessage, build_system_prompt
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -123,14 +123,9 @@ class CLIBackend(AgentBackend):
             cmd.extend(["--add-dir", d])
 
         # Add AGENTS.md as system prompt
-        agents_md_path = config.BASE_DIR / "AGENTS.md"
-        if agents_md_path.exists():
-            from datetime import date
-
-            today = date.today().strftime("%A %d %B %Y")
-            agents_content = agents_md_path.read_text()
-            agents_content = f"Aujourd'hui, nous sommes le {today}.\n\n{agents_content}"
-            cmd.extend(["--system-prompt", agents_content])
+        system_prompt = build_system_prompt()
+        if system_prompt:
+            cmd.extend(["--system-prompt", system_prompt])
 
         # In a container, skip permission checks (container is the security boundary).
         # Outside containers, restrict tools to a whitelist.

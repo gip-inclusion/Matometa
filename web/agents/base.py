@@ -3,7 +3,10 @@
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any, AsyncIterator, Optional
+
+from .. import config
 
 
 @dataclass
@@ -26,6 +29,20 @@ class AgentMessage:
         if self.type == "system" and self.raw:
             result["raw"] = self.raw
         return result
+
+
+def build_system_prompt() -> str | None:
+    """Build the system prompt from AGENTS.md with today's date appended.
+
+    The date comes after the main content so the bulk of the prompt
+    stays cache-stable across days.
+    """
+    agents_md_path = config.BASE_DIR / "AGENTS.md"
+    if not agents_md_path.exists():
+        return None
+    today = date.today().strftime("%A %d %B %Y")
+    agents_content = agents_md_path.read_text()
+    return f"{agents_content}\n\nAujourd'hui, nous sommes le {today}."
 
 
 class AgentBackend(ABC):

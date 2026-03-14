@@ -11,6 +11,7 @@ dependencies = [
 
     # Claude API
     "anthropic>=0.75.0",
+    "claude-agent-sdk>=0.1.48",
 
     # Templating
     "jinja2>=3.1.6",

@@ -14,7 +14,7 @@ load_dotenv(BASE_DIR / ".env")
 # Default: ./data (relative to BASE_DIR)
 DATA_DIR = Path(os.getenv("DATA_DIR", BASE_DIR / "data")).resolve()
 
-# Agent backend: "cli" or "cli-ollama"
+# Agent backend: "cli", "sdk", or "cli-ollama"
 AGENT_BACKEND = os.getenv("AGENT_BACKEND", "cli").lower()
 
 # LLM backend for short prompts (titles, tags). Defaults to AGENT_BACKEND.
@@ -49,7 +49,7 @@ OLLAMA_TAG_MODEL = os.getenv("OLLAMA_TAG_MODEL", OLLAMA_MODEL)
 OLLAMA_REQUEST_TIMEOUT = float(os.getenv("OLLAMA_REQUEST_TIMEOUT", "120"))
 
 # Backend capability helpers
-USES_CLAUDE_CLI = AGENT_BACKEND == "cli" or LLM_BACKEND == "cli"
+USES_CLAUDE_CLI = AGENT_BACKEND in ("cli", "sdk") or LLM_BACKEND in ("cli", "sdk")
 
 # Display timezone (IANA name, e.g. "Europe/Paris")
 DISPLAY_TIMEZONE = os.getenv("DISPLAY_TIMEZONE", "Europe/Paris")
