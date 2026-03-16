@@ -153,3 +153,35 @@ class TestPostSupport:
         assert mock_session.get.called
         assert not mock_session.post.called
         assert result == {"nb_visits": 100}
+
+    @patch('lib._matomo.requests.Session')
+    def test_post_method_convenience(self, mock_session_class):
+        """post() method is a convenience wrapper for POST requests."""
+        mock_session = Mock()
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = {"value": 789}
+        mock_response.text = '{"value": 789}'
+        mock_session.post.return_value = mock_response
+        mock_session_class.return_value = mock_session
+
+        api = MatomoAPI(url="matomo.example.com", token="test_token")
+        api._session = mock_session
+
+        # Use convenience method with **kwargs
+        result = api.post(
+            "TagManager.addContainerTrigger",
+            timeout=30,
+            idSite=210,
+            idContainer="xg8aydM9",
+            type="PageView"
+        )
+
+        assert mock_session.post.called
+        assert result == {"value": 789}
+
+        # Verify parameters were passed
+        call_data = mock_session.post.call_args[1]['data']
+        assert call_data['idSite'] == 210
+        assert call_data['idContainer'] == "xg8aydM9"

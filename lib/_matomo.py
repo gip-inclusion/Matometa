@@ -199,6 +199,33 @@ class MatomoAPI:
         """
         return self._request(method, params, timeout)
 
+    def post(self, method: str, timeout: int = 30, **params) -> Any:
+        """
+        Generic POST for any Tag Manager write operation.
+
+        Args:
+            method: Matomo API method (e.g., "TagManager.addContainerTrigger")
+            timeout: Request timeout in seconds (default 30, lower than GET)
+            **params: Parameters to pass (nested dicts/lists auto-flattened)
+
+        Returns:
+            API response (typically {"value": id} for creates)
+
+        Example:
+            >>> api.post("TagManager.addContainerTrigger",
+            ...     idSite=210,
+            ...     idContainer="xg8aydM9",
+            ...     idContainerVersion=420,
+            ...     type="AllElementsClick",
+            ...     name="My Trigger",
+            ...     conditions=[
+            ...         {"comparison": "contains", "actual": "ClickClasses", "expected": "btn"}
+            ...     ]
+            ... )
+            {'value': 13994}
+        """
+        return self._request(method, params, timeout, http_method="POST")
+
     def get_api_url(self, method: str, params: dict) -> str:
         """Get the full API URL for a request (token redacted)."""
         base_params = {
