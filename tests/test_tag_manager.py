@@ -1,8 +1,10 @@
 """Tests for Tag Manager functionality in lib._matomo."""
 
+from unittest.mock import Mock, patch
+
 import pytest
+
 from lib._matomo import MatomoAPI
-from unittest.mock import Mock, patch, MagicMock
 
 
 class TestFlattenParams:
