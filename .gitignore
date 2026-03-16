@@ -11,7 +11,7 @@ __pycache__
 /data/
 !/data/interactive/
 /data-remote/
-
+/evals/results
 reports/
 knowledge-drafts/
 claude-credentials/
