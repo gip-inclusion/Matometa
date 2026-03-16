@@ -239,3 +239,102 @@ class TestContainerHelpers:
         draft_id = api.get_draft_version(site_id=210, container_id="xg8aydM9")
 
         assert draft_id == 420
+
+
+class TestTriggerHelpers:
+    """Test trigger-related helper methods."""
+
+    @patch('lib._matomo.requests.Session')
+    def test_add_trigger_valid_type(self, mock_session_class):
+        """add_trigger creates trigger with valid type."""
+        mock_session = Mock()
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = {"value": 13994}
+        mock_response.text = '{"value": 13994}'
+        mock_session.post.return_value = mock_response
+        mock_session_class.return_value = mock_session
+
+        api = MatomoAPI(url="matomo.example.com", token="test_token")
+        api._session = mock_session
+
+        trigger_id = api.add_trigger(
+            site_id=210,
+            container_id="xg8aydM9",
+            version_id=420,
+            trigger_type="PageView",
+            name="Test Trigger",
+            conditions=[{"comparison": "equals", "actual": "PageUrl", "expected": "/test"}]
+        )
+
+        assert trigger_id == 13994
+        assert mock_session.post.called
+
+    def test_add_trigger_invalid_type_raises(self):
+        """add_trigger raises ValueError for invalid trigger type."""
+        api = MatomoAPI(url="matomo.example.com", token="test_token")
+
+        with pytest.raises(ValueError) as exc_info:
+            api.add_trigger(
+                site_id=210,
+                container_id="xg8aydM9",
+                version_id=420,
+                trigger_type="InvalidTriggerType",
+                name="Test",
+                conditions=[]
+            )
+
+        assert "Invalid trigger_type" in str(exc_info.value)
+        assert "AllElementsClick" in str(exc_info.value)  # Lists valid types
+
+    @patch('lib._matomo.requests.Session')
+    def test_update_trigger(self, mock_session_class):
+        """update_trigger modifies existing trigger."""
+        mock_session = Mock()
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = {"value": True}
+        mock_response.text = '{"value": true}'
+        mock_session.post.return_value = mock_response
+        mock_session_class.return_value = mock_session
+
+        api = MatomoAPI(url="matomo.example.com", token="test_token")
+        api._session = mock_session
+
+        api.update_trigger(
+            site_id=210,
+            container_id="xg8aydM9",
+            version_id=420,
+            trigger_id=13994,
+            name="Updated Name"
+        )
+
+        assert mock_session.post.called
+        call_data = mock_session.post.call_args[1]['data']
+        assert call_data['idTrigger'] == 13994
+
+    @patch('lib._matomo.requests.Session')
+    def test_delete_trigger(self, mock_session_class):
+        """delete_trigger removes trigger from version."""
+        mock_session = Mock()
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = {"value": True}
+        mock_response.text = '{"value": true}'
+        mock_session.post.return_value = mock_response
+        mock_session_class.return_value = mock_session
+
+        api = MatomoAPI(url="matomo.example.com", token="test_token")
+        api._session = mock_session
+
+        api.delete_trigger(
+            site_id=210,
+            container_id="xg8aydM9",
+            version_id=420,
+            trigger_id=13994
+        )
+
+        assert mock_session.post.called
