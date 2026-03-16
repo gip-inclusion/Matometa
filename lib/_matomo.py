@@ -534,3 +534,47 @@ class MatomoAPI:
         if segment:
             params["segment"] = segment
         return self._request("VisitFrequency.get", params)
+
+    def _flatten_params(self, params: dict, prefix: str = "") -> dict:
+        """
+        Flatten nested dicts/lists to PHP array notation.
+
+        PHP array notation is required for POST requests to Matomo API.
+        Converts Python data structures to the format Matomo expects.
+
+        Args:
+            params: Parameters to flatten (can contain nested dicts/lists)
+            prefix: Internal - used for recursion to build key paths
+
+        Returns:
+            Flattened dict with PHP array notation keys
+
+        Examples:
+            >>> api._flatten_params({"customHtml": "<script></script>"})
+            {'customHtml': '<script></script>'}
+
+            >>> api._flatten_params({"parameters": {"customHtml": "..."}})
+            {'parameters[customHtml]': '...'}
+
+            >>> api._flatten_params({"conditions": [{"comparison": "equals"}]})
+            {'conditions[0][comparison]': 'equals'}
+        """
+        result = {}
+        for key, value in params.items():
+            new_key = f"{prefix}[{key}]" if prefix else key
+
+            if isinstance(value, dict):
+                # Recursively flatten nested dicts
+                result.update(self._flatten_params(value, new_key))
+            elif isinstance(value, list):
+                # Flatten lists: indexed for dicts, direct for simple values
+                for i, item in enumerate(value):
+                    if isinstance(item, dict):
+                        result.update(self._flatten_params(item, f"{new_key}[{i}]"))
+                    else:
+                        result[f"{new_key}[{i}]"] = item
+            else:
+                # Leaf value - add to result
+                result[new_key] = value
+
+        return result
