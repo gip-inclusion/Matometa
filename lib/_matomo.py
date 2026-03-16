@@ -706,3 +706,141 @@ class MatomoAPI:
         """
         container = self.get_container(site_id, container_id)
         return container["draft"]["idcontainerversion"]
+
+    # --- Tag Manager: Trigger operations ---
+
+    def add_trigger(
+        self,
+        site_id: int,
+        container_id: str,
+        version_id: int,
+        trigger_type: str,
+        name: str,
+        conditions: list[dict],
+        description: str = "",
+        **kwargs,
+    ) -> int:
+        """
+        Add trigger to container version.
+
+        Args:
+            site_id: Matomo site ID
+            container_id: Container ID
+            version_id: Version ID (typically draft)
+            trigger_type: Type of trigger (validated against VALID_TRIGGER_TYPES)
+            name: Trigger name
+            conditions: List of condition dicts with comparison/actual/expected
+            description: Optional description
+            **kwargs: Additional parameters passed to API
+
+        Returns:
+            Trigger ID (int)
+
+        Raises:
+            ValueError: If trigger_type is invalid
+
+        Example:
+            >>> trigger_id = api.add_trigger(
+            ...     site_id=210,
+            ...     container_id="xg8aydM9",
+            ...     version_id=420,
+            ...     trigger_type="PageView",
+            ...     name="Service Page View",
+            ...     conditions=[
+            ...         {"comparison": "starts_with", "actual": "PageUrl",
+            ...          "expected": "/services/"}
+            ...     ]
+            ... )
+        """
+        if trigger_type not in VALID_TRIGGER_TYPES:
+            raise ValueError(
+                f"Invalid trigger_type '{trigger_type}'. "
+                f"Must be one of: {', '.join(sorted(VALID_TRIGGER_TYPES))}"
+            )
+
+        params = {
+            "idSite": site_id,
+            "idContainer": container_id,
+            "idContainerVersion": version_id,
+            "type": trigger_type,
+            "name": name,
+            "conditions": conditions,
+        }
+        if description:
+            params["description"] = description
+        params.update(kwargs)
+
+        result = self.post("TagManager.addContainerTrigger", **params)
+        return result["value"]
+
+    def update_trigger(
+        self,
+        site_id: int,
+        container_id: str,
+        version_id: int,
+        trigger_id: int,
+        **kwargs,
+    ):
+        """
+        Update existing trigger.
+
+        Args:
+            site_id: Matomo site ID
+            container_id: Container ID
+            version_id: Version ID
+            trigger_id: Trigger ID to update
+            **kwargs: Fields to update (name, conditions, etc.)
+
+        Example:
+            >>> api.update_trigger(
+            ...     site_id=210,
+            ...     container_id="xg8aydM9",
+            ...     version_id=420,
+            ...     trigger_id=13994,
+            ...     name="Updated Trigger Name"
+            ... )
+        """
+        params = {
+            "idSite": site_id,
+            "idContainer": container_id,
+            "idContainerVersion": version_id,
+            "idTrigger": trigger_id,
+        }
+        params.update(kwargs)
+        return self.post("TagManager.updateContainerTrigger", **params)
+
+    def delete_trigger(
+        self,
+        site_id: int,
+        container_id: str,
+        version_id: int,
+        trigger_id: int,
+    ):
+        """
+        Delete trigger from container version.
+
+        Args:
+            site_id: Matomo site ID
+            container_id: Container ID
+            version_id: Version ID
+            trigger_id: Trigger ID to delete
+
+        Note:
+            Deleting from draft doesn't remove from published versions.
+            Delete from both if needed.
+
+        Example:
+            >>> api.delete_trigger(
+            ...     site_id=210,
+            ...     container_id="xg8aydM9",
+            ...     version_id=420,
+            ...     trigger_id=13994
+            ... )
+        """
+        return self.post(
+            "TagManager.deleteContainerTrigger",
+            idSite=site_id,
+            idContainer=container_id,
+            idContainerVersion=version_id,
+            idTrigger=trigger_id,
+        )
