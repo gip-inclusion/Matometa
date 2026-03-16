@@ -9,7 +9,6 @@ Usage:
 """
 
 import logging
-import time
 import urllib.parse
 from typing import Any, Optional
 
@@ -17,7 +16,6 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from ._audit import log_query
 from ._matomo_ui import get_ui_url
 from .api_signals import emit_api_signal
 
@@ -76,10 +74,7 @@ class MatomoAPI:
         self.close()
 
     def _request(self, method: str, params: dict, timeout: int = 180) -> Any:
-        """Make an API request with automatic logging."""
-        start_time = time.time()
-        query_details = {"method": method, "params": params}
-
+        """Make an API request."""
         base_params = {
             "module": "API",
             "method": method,
@@ -107,22 +102,6 @@ class MatomoAPI:
             if isinstance(data, dict) and data.get("result") == "error":
                 raise MatomoError(data.get("message", "Unknown error"))
 
-            execution_time_ms = int((time.time() - start_time) * 1000)
-            row_count = len(data) if isinstance(data, list) else None
-
-            log_query(
-                source="matomo",
-                instance=self.instance,
-                caller=self.caller,
-                conversation_id=None,
-                query_type=method,
-                query_details=query_details,
-                success=True,
-                error=None,
-                execution_time_ms=execution_time_ms,
-                row_count=row_count,
-            )
-
             # Emit signal for observability sidebar
             ui_url = None
             if get_ui_url and all(k in params for k in ("idSite", "period", "date")):
@@ -144,37 +123,13 @@ class MatomoAPI:
 
             return data
 
-        except MatomoError as e:
-            execution_time_ms = int((time.time() - start_time) * 1000)
-            log_query(
-                source="matomo",
-                instance=self.instance,
-                caller=self.caller,
-                conversation_id=None,
-                query_type=method,
-                query_details=query_details,
-                success=False,
-                error=str(e),
-                execution_time_ms=execution_time_ms,
-            )
+        except MatomoError:
             raise
 
         except requests.RequestException as e:
-            execution_time_ms = int((time.time() - start_time) * 1000)
             status = getattr(getattr(e, "response", None), "status_code", None)
             body = getattr(getattr(e, "response", None), "text", str(e))
             error_msg = f"HTTP {status}: {body}" if status else str(e)
-            log_query(
-                source="matomo",
-                instance=self.instance,
-                caller=self.caller,
-                conversation_id=None,
-                query_type=method,
-                query_details=query_details,
-                success=False,
-                error=error_msg,
-                execution_time_ms=execution_time_ms,
-            )
             raise MatomoError(f"Request failed: {error_msg}")
 
     def request(self, method: str, timeout: int = 180, **params) -> Any:
