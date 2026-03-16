@@ -75,7 +75,7 @@ class MatomoAPI:
     def __exit__(self, *args):
         self.close()
 
-    def _request(self, method: str, params: dict, timeout: int = 180) -> Any:
+    def _request(self, method: str, params: dict, timeout: int = 180, http_method: str = "GET") -> Any:
         """Make an API request with automatic logging."""
         start_time = time.time()
         query_details = {"method": method, "params": params}
@@ -86,12 +86,20 @@ class MatomoAPI:
             "format": "JSON",
             "token_auth": self.token,
         }
-        base_params.update(params)
-
         url = f"https://{self.url}/"
 
         try:
-            resp = self._session.get(url, params=base_params, timeout=(10, timeout))
+            # Choose HTTP method and prepare parameters
+            if http_method == "POST":
+                # POST: flatten nested params and use data= (form-encoded)
+                flattened = self._flatten_params(params)
+                base_params.update(flattened)
+                resp = self._session.post(url, data=base_params, timeout=(10, timeout))
+            else:
+                # GET: use params= (query string)
+                base_params.update(params)
+                resp = self._session.get(url, params=base_params, timeout=(10, timeout))
+
             resp.raise_for_status()
 
             # Matomo returns HTML instead of JSON on server-side timeouts.
