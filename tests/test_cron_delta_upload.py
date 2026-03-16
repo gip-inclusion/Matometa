@@ -2,8 +2,9 @@
 
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
+
 from web.cron import _prepare_s3_workdir, _upload_s3_results
-from unittest.mock import patch, MagicMock
 
 
 @patch("web.s3.list_files")

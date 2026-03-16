@@ -1,9 +1,10 @@
 """Tests for interactive file serving with S3 optimizations."""
 
-import pytest
-from unittest.mock import patch, MagicMock
-from web.app import app
+from unittest.mock import patch
+
 from fastapi.testclient import TestClient
+
+from web.app import app
 
 client = TestClient(app)
 
