@@ -844,3 +844,216 @@ class MatomoAPI:
             idContainerVersion=version_id,
             idTrigger=trigger_id,
         )
+
+    # --- Tag Manager: Tag operations ---
+
+    def add_tag(
+        self,
+        site_id: int,
+        container_id: str,
+        version_id: int,
+        tag_type: str,
+        name: str,
+        parameters: dict,
+        fire_trigger_ids: list[int],
+        fire_limit: str = "unlimited",
+        status: str = "active",
+        priority: int = 999,
+        description: str = "",
+        **kwargs,
+    ) -> int:
+        """
+        Add tag to container version.
+
+        Args:
+            site_id: Matomo site ID
+            container_id: Container ID
+            version_id: Version ID (typically draft)
+            tag_type: Type of tag (validated against VALID_TAG_TYPES)
+            name: Tag name
+            parameters: Tag-specific parameters (e.g., customHtml, htmlPosition)
+            fire_trigger_ids: List of trigger IDs that fire this tag
+            fire_limit: How often tag fires (validated against VALID_FIRE_LIMITS)
+            status: Tag status (active or paused)
+            priority: Execution priority (999 = standard)
+            description: Optional description
+            **kwargs: Additional parameters (block_trigger_ids, etc.)
+
+        Returns:
+            Tag ID (int)
+
+        Raises:
+            ValueError: If tag_type, fire_limit, or htmlPosition (for CustomHtml) is invalid
+
+        Example:
+            >>> tag_id = api.add_tag(
+            ...     site_id=210,
+            ...     container_id="xg8aydM9",
+            ...     version_id=420,
+            ...     tag_type="CustomHtml",
+            ...     name="Tally Popup",
+            ...     parameters={"customHtml": "<script>...</script>", "htmlPosition": "bodyEnd"},
+            ...     fire_trigger_ids=[13994],
+            ...     fire_limit="once_24hours"
+            ... )
+        """
+        if tag_type not in VALID_TAG_TYPES:
+            raise ValueError(
+                f"Invalid tag_type '{tag_type}'. "
+                f"Must be one of: {', '.join(sorted(VALID_TAG_TYPES))}"
+            )
+
+        if fire_limit not in VALID_FIRE_LIMITS:
+            raise ValueError(
+                f"Invalid fire_limit '{fire_limit}'. "
+                f"Must be one of: {', '.join(sorted(VALID_FIRE_LIMITS))}"
+            )
+
+        # Validate htmlPosition for CustomHtml tags
+        if tag_type == "CustomHtml" and "htmlPosition" in parameters:
+            html_position = parameters["htmlPosition"]
+            if html_position not in VALID_HTML_POSITIONS:
+                raise ValueError(
+                    f"Invalid htmlPosition '{html_position}'. "
+                    f"Must be one of: {', '.join(sorted(VALID_HTML_POSITIONS))}"
+                )
+
+        params = {
+            "idSite": site_id,
+            "idContainer": container_id,
+            "idContainerVersion": version_id,
+            "type": tag_type,
+            "name": name,
+            "parameters": parameters,
+            "fireTriggerIds": fire_trigger_ids,
+            "fireLimit": fire_limit,
+            "status": status,
+            "priority": priority,
+        }
+        if description:
+            params["description"] = description
+        params.update(kwargs)
+
+        result = self.post("TagManager.addContainerTag", **params)
+        return result["value"]
+
+    def update_tag(
+        self,
+        site_id: int,
+        container_id: str,
+        version_id: int,
+        tag_id: int,
+        **kwargs,
+    ):
+        """
+        Update existing tag.
+
+        Args:
+            site_id: Matomo site ID
+            container_id: Container ID
+            version_id: Version ID
+            tag_id: Tag ID to update
+            **kwargs: Fields to update (name, parameters, fire_trigger_ids, etc.)
+
+        Example:
+            >>> api.update_tag(
+            ...     site_id=210,
+            ...     container_id="xg8aydM9",
+            ...     version_id=420,
+            ...     tag_id=11149,
+            ...     name="Updated Tag Name",
+            ...     fire_limit="once_page"
+            ... )
+        """
+        params = {
+            "idSite": site_id,
+            "idContainer": container_id,
+            "idContainerVersion": version_id,
+            "idTag": tag_id,
+        }
+        params.update(kwargs)
+        return self.post("TagManager.updateContainerTag", **params)
+
+    def delete_tag(
+        self,
+        site_id: int,
+        container_id: str,
+        version_id: int,
+        tag_id: int,
+    ):
+        """
+        Delete tag from container version.
+
+        Args:
+            site_id: Matomo site ID
+            container_id: Container ID
+            version_id: Version ID
+            tag_id: Tag ID to delete
+
+        Note:
+            Deleting from draft doesn't remove from published versions.
+
+        Example:
+            >>> api.delete_tag(210, "xg8aydM9", 420, 11149)
+        """
+        return self.post(
+            "TagManager.deleteContainerTag",
+            idSite=site_id,
+            idContainer=container_id,
+            idContainerVersion=version_id,
+            idTag=tag_id,
+        )
+
+    def pause_tag(
+        self,
+        site_id: int,
+        container_id: str,
+        version_id: int,
+        tag_id: int,
+    ):
+        """
+        Pause tag (set status=paused).
+
+        Args:
+            site_id: Matomo site ID
+            container_id: Container ID
+            version_id: Version ID
+            tag_id: Tag ID to pause
+
+        Example:
+            >>> api.pause_tag(210, "xg8aydM9", 420, 11149)
+        """
+        return self.post(
+            "TagManager.pauseContainerTag",
+            idSite=site_id,
+            idContainer=container_id,
+            idContainerVersion=version_id,
+            idTag=tag_id,
+        )
+
+    def resume_tag(
+        self,
+        site_id: int,
+        container_id: str,
+        version_id: int,
+        tag_id: int,
+    ):
+        """
+        Resume tag (set status=active).
+
+        Args:
+            site_id: Matomo site ID
+            container_id: Container ID
+            version_id: Version ID
+            tag_id: Tag ID to resume
+
+        Example:
+            >>> api.resume_tag(210, "xg8aydM9", 420, 11149)
+        """
+        return self.post(
+            "TagManager.resumeContainerTag",
+            idSite=site_id,
+            idContainer=container_id,
+            idContainerVersion=version_id,
+            idTag=tag_id,
+        )
