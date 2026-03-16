@@ -149,9 +149,7 @@ class SDKBackend(AgentBackend):
         cancel_event = asyncio.Event()
         self._cancel_events[conversation_id] = cancel_event
 
-        logger.info(
-            f"Starting SDK query (prompt length: {len(prompt)}, session: {session_id or 'none'})"
-        )
+        logger.info(f"Starting SDK query (prompt length: {len(prompt)}, session: {session_id or 'none'})")
 
         try:
             async for sdk_msg in query(prompt=prompt, options=options):
