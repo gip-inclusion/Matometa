@@ -17,14 +17,16 @@ from . import config
 logger = logging.getLogger(__name__)
 
 
-# Initialize S3 client if configured
+# Initialize S3 clients if configured
 _s3_client = None
+_s3_presign_client = None  # Separate client for presigned URLs with public endpoint
 
 if config.USE_S3:
     import boto3
     from botocore.config import Config as BotoConfig
     from botocore.exceptions import ClientError
 
+    # Main client for actual S3 operations (uses internal endpoint)
     _s3_client = boto3.client(
         "s3",
         endpoint_url=config.S3_ENDPOINT,
@@ -33,7 +35,20 @@ if config.USE_S3:
         region_name=config.S3_REGION,
         config=BotoConfig(signature_version="s3v4"),
     )
+
+    # Presign client for generating URLs (uses public endpoint if different)
+    _s3_presign_client = boto3.client(
+        "s3",
+        endpoint_url=config.S3_PUBLIC_ENDPOINT,
+        aws_access_key_id=config.S3_ACCESS_KEY,
+        aws_secret_access_key=config.S3_SECRET_KEY,
+        region_name=config.S3_REGION,
+        config=BotoConfig(signature_version="s3v4"),
+    )
+
     logger.info(f"S3 storage enabled: bucket={config.S3_BUCKET}, endpoint={config.S3_ENDPOINT}")
+    if config.S3_PUBLIC_ENDPOINT != config.S3_ENDPOINT:
+        logger.info(f"S3 public endpoint for presigned URLs: {config.S3_PUBLIC_ENDPOINT}")
 else:
     logger.info("S3 storage disabled, using local filesystem")
 
@@ -164,7 +179,7 @@ def get_file_url(path: str, expires_in: int = 3600) -> Optional[str]:
     if config.USE_S3:
         try:
             key = _get_s3_key(path)
-            url = _s3_client.generate_presigned_url(
+            url = _s3_presign_client.generate_presigned_url(
                 "get_object",
                 Params={"Bucket": config.S3_BUCKET, "Key": key},
                 ExpiresIn=expires_in,

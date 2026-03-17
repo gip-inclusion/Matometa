@@ -28,28 +28,26 @@ WORKDIR /app
 
 # Install uv (fast Python package manager)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-ENV UV_SYSTEM_PYTHON=1 UV_COMPILE_BYTECODE=1
+ENV UV_COMPILE_BYTECODE=1
 
 # Copy dependency files first for layer caching
 COPY pyproject.toml uv.lock .python-version ./
 
-# Install CPU-only PyTorch (server has no GPU).
-# Avoids pulling ~7GB of CUDA/nvidia libraries.
-# Local dev on macOS gets MPS support from the default torch wheel.
-RUN uv pip install --no-cache torch --index-url https://download.pytorch.org/whl/cpu
+# Install all dependencies including embeddings extra using uv sync
+RUN uv sync --frozen --no-dev --extra embeddings
 
-# Install all dependencies including embeddings group.
-# Filter out torch/nvidia (CPU-only torch already installed above).
-RUN uv export --frozen --group embeddings --no-hashes | \
-    grep -v '^\(torch\|nvidia-\|cuda-\)' | \
-    uv pip install --no-cache -r -
+# Replace default torch with CPU-only version (server has no GPU).
+# Avoids pulling ~7GB of CUDA/nvidia libraries.
+RUN uv pip uninstall torch && \
+    uv pip install --no-cache torch --index-url https://download.pytorch.org/whl/cpu
 
 # Copy application code
 COPY --chown=matometa:matometa . .
 
 # Create data directories for SQLite, uploads, and modified files
+# Also fix ownership of .venv for the matometa user
 RUN mkdir -p /app/data /app/data/uploads /app/data/modified \
-    && chown matometa:matometa /app/data /app/data/uploads /app/data/modified
+    && chown -R matometa:matometa /app/data /app/data/uploads /app/data/modified /app/.venv
 
 # Switch to non-root user
 USER matometa
