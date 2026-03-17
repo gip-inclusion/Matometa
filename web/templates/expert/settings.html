@@ -115,12 +115,19 @@
                   </span>
                 </td>
               </tr>
-              {% if project.gitea_url %}
               <tr>
                 <td class="text-muted">Repository</td>
-                <td><a href="{{ project.gitea_url }}" target="_blank">{{ project.gitea_url }}</a></td>
+                <td>
+                  {% if project.gitea_url %}
+                  <a href="{{ project.gitea_url }}" target="_blank">{{ project.gitea_url }}</a>
+                  {% else %}
+                  <span class="text-danger">Non initialisé</span>
+                  <button type="button" class="btn btn-sm btn-outline-warning ms-2" id="retryGiteaBtn">
+                    <i class="ri-refresh-line"></i> Créer le dépôt
+                  </button>
+                  {% endif %}
+                </td>
               </tr>
-              {% endif %}
               {% if project.staging_deploy_url %}
               <tr>
                 <td class="text-muted">URL staging</td>
@@ -284,6 +291,33 @@ document.addEventListener('DOMContentLoaded', () => {
   if (sr) sr.addEventListener('click', () => restartEnv('staging', sr));
   const pr = document.getElementById('productionRestartBtn');
   if (pr) pr.addEventListener('click', () => restartEnv('production', pr));
+
+  // Retry Gitea repo creation
+  const retryBtn = document.getElementById('retryGiteaBtn');
+  if (retryBtn) {
+    retryBtn.addEventListener('click', async () => {
+      retryBtn.disabled = true;
+      retryBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Création...';
+      try {
+        const res = await fetch(`/api/expert/projects/${PROJECT_ID}/retry-gitea`, { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.gitea_url) {
+          retryBtn.parentElement.innerHTML = `<a href="${data.gitea_url}" target="_blank">${data.gitea_url}</a>`;
+          // Enable deploy buttons
+          document.getElementById('deployStagingBtn')?.removeAttribute('disabled');
+          document.getElementById('deployProductionBtn')?.removeAttribute('disabled');
+        } else {
+          alert(data.error || 'Échec de la création du dépôt');
+          retryBtn.disabled = false;
+          retryBtn.innerHTML = '<i class="ri-refresh-line"></i> Réessayer';
+        }
+      } catch (err) {
+        alert('Erreur: ' + err.message);
+        retryBtn.disabled = false;
+        retryBtn.innerHTML = '<i class="ri-refresh-line"></i> Réessayer';
+      }
+    });
+  }
 });
 </script>
 {% endblock %}

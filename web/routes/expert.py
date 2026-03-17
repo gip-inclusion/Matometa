@@ -359,13 +359,16 @@ def _ensure_local_git_repo(project):
     return ensure_project_local_git_repo(project)
 
 
-def _try_create_gitea_repo(project):
+def _try_create_gitea_repo(project, raise_on_error: bool = False) -> bool:
     """Auto-create a Gitea repo and clone it into the project working directory.
 
-    Non-blocking: logs errors but never raises.
+    Returns True on success, False on failure.
+    When raise_on_error=True, raises instead of returning False.
     """
     if not config.GITEA_API_TOKEN:
-        return
+        if raise_on_error:
+            raise RuntimeError("GITEA_API_TOKEN not configured")
+        return False
     try:
         from lib.gitea import GiteaClient
         import requests as _requests
@@ -385,15 +388,26 @@ def _try_create_gitea_repo(project):
         gitea_url = repo.get("html_url", "")
         full_name = repo.get("full_name", "")  # e.g. "apps/nouveau-projet"
 
-        # Clone repo into project working directory so the agent can commit/push
+        # Set up git in project working directory
         workdir = config.PROJECTS_DIR / project.id
         if full_name and not (workdir / ".git").exists():
             clone_url = _authenticated_clone_url(full_name)
             workdir.mkdir(parents=True, exist_ok=True)
-            subprocess.run(
-                ["git", "clone", clone_url, str(workdir)],
-                check=True, capture_output=True, timeout=30,
-            )
+
+            # If dir has existing files (agent already wrote code), init + push
+            # instead of clone (git clone fails on non-empty dirs)
+            has_files = any(workdir.iterdir())
+            if has_files:
+                subprocess.run(["git", "init"], cwd=workdir, check=True, capture_output=True, timeout=10)
+                subprocess.run(["git", "remote", "add", "origin", clone_url], cwd=workdir, check=True, capture_output=True, timeout=10)
+                logger.info("Initialized git in existing project dir %s", workdir)
+            else:
+                subprocess.run(
+                    ["git", "clone", clone_url, str(workdir)],
+                    check=True, capture_output=True, timeout=30,
+                )
+                logger.info("Cloned repo into %s", workdir)
+
             # Configure git user for commits inside the container
             subprocess.run(
                 ["git", "config", "user.email", "matometa@localhost"],
@@ -403,7 +417,13 @@ def _try_create_gitea_repo(project):
                 ["git", "config", "user.name", "Matometa"],
                 cwd=workdir, check=True, capture_output=True,
             )
-            logger.info("Cloned repo into %s", workdir)
+
+            # If we initialized in an existing dir, do initial commit + push
+            if has_files:
+                subprocess.run(["git", "add", "-A"], cwd=workdir, check=True, capture_output=True, timeout=10)
+                subprocess.run(["git", "commit", "-m", "chore: initial commit"], cwd=workdir, check=True, capture_output=True, timeout=10)
+                subprocess.run(["git", "push", "-u", "origin", "main"], cwd=workdir, check=True, capture_output=True, timeout=30)
+                logger.info("Pushed existing files to Gitea for %s", workdir)
 
         # Ensure dedicated expert workflow branches are present.
         ensure_project_branches(project)
@@ -436,8 +456,12 @@ def _try_create_gitea_repo(project):
                 logger.exception("Failed to bootstrap staging deploy for project %s", project.id)
 
         logger.info("Auto-created Gitea repo %s for project %s", gitea_url, project.id)
+        return True
     except Exception:
         logger.exception("Failed to auto-create Gitea repo for project %s", project.id)
+        if raise_on_error:
+            raise
+        return False
 
 
 def _setup_gitea_webhook(project, app_uuid, coolify, branch_filter: str | None = None):
@@ -1138,7 +1162,12 @@ def api_deploy_project(project_id: str, request: Request):
         return JSONResponse({"error": "Project not found"}, status_code=404)
 
     if not project.gitea_url:
-        return JSONResponse({"error": "Project has no Gitea repo yet"}, status_code=400)
+        try:
+            _try_create_gitea_repo(project, raise_on_error=True)
+            project = store.get_project(project_id) or project
+        except Exception as e:
+            logger.exception("Gitea repo creation failed for %s", project_id)
+            return JSONResponse({"error": f"Gitea repo creation failed: {e}"}, status_code=500)
 
     try:
         if not _use_docker_deploy():
@@ -1161,7 +1190,12 @@ def api_deploy_staging_project(project_id: str, request: Request):
         return JSONResponse({"error": "Project not found"}, status_code=404)
 
     if not project.gitea_url:
-        return JSONResponse({"error": "Project has no Gitea repo yet"}, status_code=400)
+        try:
+            _try_create_gitea_repo(project, raise_on_error=True)
+            project = store.get_project(project_id) or project
+        except Exception as e:
+            logger.exception("Gitea repo creation failed for %s", project_id)
+            return JSONResponse({"error": f"Gitea repo creation failed: {e}"}, status_code=500)
 
     try:
         if not _use_docker_deploy():
@@ -1170,6 +1204,30 @@ def api_deploy_staging_project(project_id: str, request: Request):
         return _docker_deploy_staging(project_id, project, request)
     except Exception as e:
         logger.exception("Staging deploy failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@router.post("/api/expert/projects/{project_id}/retry-gitea")
+def api_retry_gitea(project_id: str):
+    """Retry Gitea repo creation for a project that failed initial setup."""
+    if not config.EXPERT_MODE_ENABLED:
+        return JSONResponse({"error": "Expert mode not enabled"}, status_code=403)
+
+    project = store.get_project(project_id)
+    if not project:
+        return JSONResponse({"error": "Project not found"}, status_code=404)
+
+    if project.gitea_url:
+        return JSONResponse({"status": "already_exists", "gitea_url": project.gitea_url})
+
+    try:
+        _try_create_gitea_repo(project, raise_on_error=True)
+        updated = store.get_project(project_id)
+        return JSONResponse({
+            "status": "created",
+            "gitea_url": updated.gitea_url if updated else None,
+        })
+    except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
