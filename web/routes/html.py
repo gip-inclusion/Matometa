@@ -22,6 +22,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def conv_url(conv) -> str:
+    """Return the canonical URL for a conversation based on its type.
+
+    Project conversations go to /expert/{slug}/{conv_id},
+    everything else goes to /explorations/{conv_id}.
+    """
+    if getattr(conv, "conv_type", None) == "project" and getattr(conv, "project_id", None):
+        project = store.get_project(conv.project_id)
+        if project:
+            return f"/expert/{project.slug}/{conv.id}"
+    return f"/explorations/{conv.id}"
+
+
 def humanize_title(title: str) -> str:
     """Clean up a title: strip date prefix, ISO timestamps, separators; capitalize."""
     if not title:
@@ -95,6 +108,7 @@ def get_sidebar_data(user_email: str | None):
         if conv.title:
             conv.title = humanize_title(conv.title)
         conv.is_running = conv.needs_response
+        conv.url = conv_url(conv)
         if conv.is_running:
             running_ids.append(conv.id)
 
@@ -142,7 +156,7 @@ def index(request: Request, user_email: str = Depends(get_current_user)):
             conv = store.get_conversation(p.item_id, include_messages=False)
             if not conv:
                 continue
-            p.url = f"/explorations/{p.item_id}"
+            p.url = conv_url(conv)
             p.pin_url = f"/api/conversations/{p.item_id}/pin"
             p.title = humanize_title(conv.title) if conv.title else p.label
             p.icon = "ri-chat-3-fill"
@@ -265,6 +279,7 @@ def rechercher(
             if conv.title:
                 conv.title = humanize_title(conv.title)
             conv.is_running = conv.needs_response
+            conv.url = conv_url(conv)
             conv.tags = tags
             conv.is_mine = conv.user_id == user_email
 
@@ -400,6 +415,10 @@ def explorations(
 ):
     """Legacy explorations list — redirects to /rechercher."""
     if conv:
+        # Check if this is a project conversation that should go to /expert/
+        conv_obj = store.get_conversation(conv, include_messages=False)
+        if conv_obj:
+            return RedirectResponse(conv_url(conv_obj), status_code=301)
         return RedirectResponse(f"/explorations/{conv}", status_code=301)
 
     target = "/rechercher?show=mine" if mine == "1" else "/rechercher?show=convos"
@@ -431,6 +450,12 @@ def explorations_conversation(conv_id: str, request: Request, user_email: str = 
 
     if not current_conv:
         return RedirectResponse("/rechercher?show=convos", status_code=302)
+
+    # Redirect project conversations to expert workspace
+    if current_conv.conv_type == "project" and current_conv.project_id:
+        project = store.get_project(current_conv.project_id)
+        if project:
+            return RedirectResponse(f"/expert/{project.slug}/{conv_id}", status_code=302)
 
     # Check if this is a shared conversation (owned by someone else)
     is_shared = current_conv.user_id and current_conv.user_id != user_email

@@ -195,7 +195,7 @@
 
             {% if item.type == 'conversation' %}
             {% set conv = item.conv %}
-            <a href="/explorations/{{ conv.id }}"
+            <a href="{{ conv.url|default('/explorations/' ~ conv.id) }}"
                class="conv-list-item filterable-card"
                id="conv-{{ conv.id }}"
                hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true"

@@ -82,7 +82,7 @@
         <ul class="nav flex-column">
           {% for conv in conversations[:10] %}
           <li class="nav-item">
-            <a href="/explorations/{{ conv.id }}"
+            <a href="{{ conv.url|default('/explorations/' ~ conv.id) }}"
                class="nav-link nav-link-conversation {% if current_conv and current_conv.id == conv.id %}active{% endif %}"
                hx-boost="true" hx-target="#main" hx-select="#main > *" hx-push-url="true"
                title="{{ conv.title or 'Sans titre' }}">
@@ -151,7 +151,7 @@
         <ul class="nav flex-column">
           {% for conv in conversations[:10] %}
           <li class="nav-item">
-            <a href="/explorations/{{ conv.id }}" class="nav-link nav-link-conversation {% if current_conv and current_conv.id == conv.id %}active{% endif %}">
+            <a href="{{ conv.url|default('/explorations/' ~ conv.id) }}" class="nav-link nav-link-conversation {% if current_conv and current_conv.id == conv.id %}active{% endif %}">
               {{ conv.title or 'Sans titre' }}
             </a>
           </li>

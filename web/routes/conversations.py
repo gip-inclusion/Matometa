@@ -389,12 +389,13 @@ def fork_conversation(conv_id: str, user_email: str = Depends(get_current_user))
     if not new_conv:
         return JSONResponse({"error": "Failed to fork conversation"}, status_code=500)
 
+    from .html import conv_url
     return {
         "id": new_conv.id,
         "forked_from": conv_id,
         "links": {
             "self": f"/api/conversations/{new_conv.id}",
-            "view": f"/explorations/{new_conv.id}",
+            "view": conv_url(new_conv),
         },
     }
 
