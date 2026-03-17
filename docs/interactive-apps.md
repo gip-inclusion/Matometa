@@ -649,6 +649,38 @@ The `BASE_URL` environment variable (e.g., `BASE_URL=https://matometa.ljt.cc/`)
 provides the absolute base URL when needed (e.g., for sharing links outside the
 app), but relative URLs are the default.
 
+### S3 File Serving (Performance Optimization)
+
+When S3 storage is enabled (`USE_S3=true`), interactive files are served with performance optimizations:
+
+**Static Assets (CSS/JS/Images):**
+- Files with extensions `.css`, `.js`, `.mjs`, `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.ico`, `.woff`, `.woff2`, `.ttf`, `.eot`, `.map`
+- Served via **307 redirect to S3 presigned URLs** (5-minute TTL)
+- Offloads bandwidth from application server
+- S3 serves directly to client browser
+- Presigned URLs valid for 5 minutes after generation
+
+**Other Files (HTML/CSV/JSON):**
+- Streamed through application in 64KB chunks
+- Bounded memory usage
+- S3 URL not exposed to client
+
+**Authentication:**
+- All `/interactive/` routes protected by oauth2-proxy
+- Authentication enforced at infrastructure level (not application code)
+- Presigned URLs valid for 5 minutes after generation
+
+**Automatic Sync:**
+- Local files in `data/interactive/` automatically synced to S3
+- Background polling every 5 seconds
+- New or modified files uploaded automatically
+
+**Environment Variables:**
+- `USE_S3=true` — Enables S3 storage
+- `S3_BUCKET` — Bucket name
+- `S3_ENDPOINT` — S3 endpoint URL
+- oauth2-proxy must be configured to protect `/interactive/` routes
+
 ## Data Persistence (Datalake)
 
 Interactive apps are static frontends — they cannot modify the FastAPI backend.

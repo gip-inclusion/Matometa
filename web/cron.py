@@ -19,6 +19,8 @@ Usage:
 """
 
 import argparse
+import hashlib
+import logging
 import os
 import shutil
 import subprocess
@@ -30,6 +32,8 @@ from pathlib import Path
 
 from . import config, s3
 from .database import get_db
+
+logger = logging.getLogger(__name__)
 
 # Defaults
 DEFAULT_TIMEOUT = 300  # 5 minutes
@@ -225,9 +229,15 @@ def find_task(slug: str) -> dict | None:
     return None
 
 
-def _prepare_s3_workdir(slug: str) -> Path:
-    """Download all files for an S3 app into a temporary directory."""
+def _prepare_s3_workdir(slug: str) -> tuple[Path, dict[str, str]]:
+    """Download all files for an S3 app into a temporary directory.
+
+    Returns (workdir, pre_hashes) where pre_hashes maps relative paths to
+    their MD5 hex digests at download time — used by _upload_s3_results
+    to skip unchanged files.
+    """
     workdir = Path(tempfile.mkdtemp(prefix=f"cron-{slug}-"))
+    pre_hashes: dict[str, str] = {}
     for entry in s3.list_files(f"{slug}/"):
         rel_path = entry["path"]
         # rel_path is like "slug/cron.py" — strip the slug prefix
@@ -244,22 +254,31 @@ def _prepare_s3_workdir(slug: str) -> Path:
                 continue
             local_file.parent.mkdir(parents=True, exist_ok=True)
             local_file.write_bytes(content)
-    return workdir
+            pre_hashes[local_name] = hashlib.md5(content).hexdigest()
+    return workdir, pre_hashes
 
 
-def _upload_s3_results(slug: str, workdir: Path):
-    """Upload new/modified files from workdir back to S3."""
+def _upload_s3_results(slug: str, workdir: Path, pre_hashes: dict[str, str]):
+    """Upload only new or modified files from workdir back to S3."""
+    uploaded = skipped = 0
     workdir_resolved = workdir.resolve()
     for path in workdir.rglob("*"):
         if not path.is_file():
             continue
+        # Path traversal protection
         try:
             path.resolve().relative_to(workdir_resolved)
         except ValueError:
             continue
-        rel = path.relative_to(workdir)
-        s3_key = f"{slug}/{rel}"
-        s3.upload_file(s3_key, path.read_bytes())
+        rel = str(path.relative_to(workdir))
+        content = path.read_bytes()
+        # Skip if hash unchanged
+        if pre_hashes.get(rel) == hashlib.md5(content).hexdigest():
+            skipped += 1
+            continue
+        s3.upload_file(f"{slug}/{rel}", content)
+        uploaded += 1
+    logger.info(f"Cron upload {slug}: {uploaded} uploaded, {skipped} unchanged")
 
 
 def run_cron_task(slug: str, trigger: str = "scheduled") -> dict:
@@ -281,6 +300,7 @@ def run_cron_task(slug: str, trigger: str = "scheduled") -> dict:
     is_s3 = task.get("source") == "s3"
     timeout = task["timeout"]
     workdir = None
+    pre_hashes: dict[str, str] = {}
 
     started_at = datetime.now()
     start_time = time.monotonic()
@@ -292,7 +312,7 @@ def run_cron_task(slug: str, trigger: str = "scheduled") -> dict:
 
     try:
         if is_s3:
-            workdir = _prepare_s3_workdir(slug)
+            workdir, pre_hashes = _prepare_s3_workdir(slug)
             cron_script = str(workdir / "cron.py")
             cwd = str(workdir)
         else:
@@ -318,7 +338,7 @@ def run_cron_task(slug: str, trigger: str = "scheduled") -> dict:
         status = "success" if result.returncode == 0 else "failure"
 
         if is_s3 and status == "success" and workdir:
-            _upload_s3_results(slug, workdir)
+            _upload_s3_results(slug, workdir, pre_hashes)
 
     except subprocess.TimeoutExpired:
         elapsed_ms = int((time.monotonic() - start_time) * 1000)
