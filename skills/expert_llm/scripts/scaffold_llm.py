@@ -17,7 +17,7 @@ import requests
 
 SYNTHETIC_API_URL = os.getenv("SYNTHETIC_API_URL", "https://api.synthetic.new/openai/v1")
 SYNTHETIC_API_KEY = os.getenv("SYNTHETIC_API_KEY", "")
-DEFAULT_MODEL = os.getenv("LLM_MODEL", "hf:meta-llama/Llama-3.2-3B-Instruct")
+DEFAULT_MODEL = os.getenv("LLM_MODEL", "hf:zai-org/GLM-4.7")
 
 
 def chat(
@@ -37,14 +37,15 @@ def chat(
         timeout=timeout,
     )
     resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
+    msg = resp.json()["choices"][0]["message"]
+    return msg.get("content") or msg.get("reasoning_content", "")
 '''
 
 NODE_TEMPLATE = '''\
 // llm.js — LLM client (Synthetic, OpenAI-compatible)
 const SYNTHETIC_API_URL = process.env.SYNTHETIC_API_URL || 'https://api.synthetic.new/openai/v1';
 const SYNTHETIC_API_KEY = process.env.SYNTHETIC_API_KEY || '';
-const DEFAULT_MODEL = process.env.LLM_MODEL || 'hf:meta-llama/Llama-3.2-3B-Instruct';
+const DEFAULT_MODEL = process.env.LLM_MODEL || 'hf:zai-org/GLM-4.7';
 
 /**
  * Send a chat request to the LLM.
@@ -63,7 +64,8 @@ export async function chat(messages, model) {
   });
   if (!res.ok) throw new Error(`LLM error: ${res.status}`);
   const data = await res.json();
-  return data.choices[0].message.content;
+  const msg = data.choices[0].message;
+  return msg.content || msg.reasoning_content || '';
 }
 '''
 
