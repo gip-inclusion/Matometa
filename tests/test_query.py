@@ -1,12 +1,10 @@
 """
-Tests for lib/query.py - the public query API with logging.
+Tests for lib/query.py - the public query API.
 
 Run with: pytest tests/test_query.py -v
 Integration tests (require .env): pytest tests/test_query.py -v -m integration
 """
 
-import sqlite3
-from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -23,7 +21,6 @@ def test_query_module_imports():
     assert hasattr(query, "execute_matomo_query")
     assert hasattr(query, "CallerType")
     assert hasattr(query, "QueryResult")
-    assert hasattr(query, "get_query_stats")
     # Re-exported classes
     assert hasattr(query, "MatomoAPI")
     assert hasattr(query, "MetabaseAPI")
@@ -71,15 +68,6 @@ def test_public_api_exports():
     assert hasattr(query, "MetabaseAPI")
 
 
-def test_audit_module_exists():
-    """lib._audit module exists and has expected exports."""
-    from lib import _audit
-
-    assert hasattr(_audit, "log_query")
-    assert hasattr(_audit, "get_conversation_id")
-    assert hasattr(_audit, "_get_db_connection")
-
-
 # --- Unit tests (mocked) ---
 
 
@@ -103,9 +91,8 @@ class TestExecuteMetabaseQuery:
         mock_api.caller = "agent"
         return mock_api
 
-    @patch("lib._audit.log_query")
     @patch("lib.query.get_metabase")
-    def test_executes_sql_query(self, mock_get_metabase, mock_log, mock_metabase_api):
+    def test_executes_sql_query(self, mock_get_metabase, mock_metabase_api):
         from lib.query import CallerType, execute_metabase_query
 
         mock_get_metabase.return_value = mock_metabase_api
@@ -121,9 +108,8 @@ class TestExecuteMetabaseQuery:
         assert result.data["row_count"] == 1
         mock_metabase_api.execute_sql.assert_called_once()
 
-    @patch("lib._audit.log_query")
     @patch("lib.query.get_metabase")
-    def test_executes_card_query(self, mock_get_metabase, mock_log, mock_metabase_api):
+    def test_executes_card_query(self, mock_get_metabase, mock_metabase_api):
         from lib.query import CallerType, execute_metabase_query
 
         mock_get_metabase.return_value = mock_metabase_api
@@ -137,9 +123,8 @@ class TestExecuteMetabaseQuery:
         assert result.success is True
         mock_metabase_api.execute_card.assert_called_once_with(123, timeout=60)
 
-    @patch("lib._audit.log_query")
     @patch("lib.query.get_metabase")
-    def test_requires_sql_or_card_id(self, mock_get_metabase, mock_log, mock_metabase_api):
+    def test_requires_sql_or_card_id(self, mock_get_metabase, mock_metabase_api):
         from lib.query import CallerType, execute_metabase_query
 
         mock_get_metabase.return_value = mock_metabase_api
@@ -165,9 +150,8 @@ class TestExecuteMatomoQuery:
         mock_api.caller = "agent"
         return mock_api
 
-    @patch("lib._audit.log_query")
     @patch("lib.query.get_matomo")
-    def test_executes_matomo_query(self, mock_get_matomo, mock_log, mock_matomo_api):
+    def test_executes_matomo_query(self, mock_get_matomo, mock_matomo_api):
         from lib.query import CallerType, execute_matomo_query
 
         mock_get_matomo.return_value = mock_matomo_api
@@ -232,147 +216,11 @@ class TestExecuteQuery:
         assert "Unknown source" in result.error
 
 
-class TestQueryLogging:
-    """Tests for the actual logging to SQLite."""
-
-    @pytest.fixture
-    def temp_db(self, tmp_path):
-        """Create a temporary audit database."""
-        db_path = tmp_path / "test_audit.db"
-        return db_path
-
-    def test_log_query_creates_record(self, temp_db):
-        """log_query writes to the database."""
-        from lib._audit import log_query
-
-        # Create the table
-        conn = sqlite3.connect(str(temp_db))
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS query_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT NOT NULL,
-                source TEXT NOT NULL,
-                instance TEXT NOT NULL,
-                caller TEXT NOT NULL,
-                conversation_id TEXT,
-                query_type TEXT,
-                query_details TEXT,
-                success INTEGER NOT NULL,
-                error TEXT,
-                execution_time_ms INTEGER,
-                row_count INTEGER
-            );
-        """)
-        conn.commit()
-        conn.close()
-
-        # Patch the db path
-        with patch("lib._audit.AUDIT_DB_PATH", temp_db):
-            log_query(
-                source="metabase",
-                instance="stats",
-                caller="agent",
-                conversation_id="test-conv-123",
-                query_type="sql",
-                query_details={"sql": "SELECT 1"},
-                success=True,
-                error=None,
-                execution_time_ms=50,
-                row_count=1,
-            )
-
-        # Verify
-        conn = sqlite3.connect(str(temp_db))
-        row = conn.execute("SELECT * FROM query_log ORDER BY id DESC LIMIT 1").fetchone()
-        conn.close()
-
-        assert row is not None
-        # row[2] = source, row[3] = instance, row[4] = caller
-        assert row[2] == "metabase"
-        assert row[3] == "stats"
-        assert row[4] == "agent"
-        assert row[5] == "test-conv-123"
-
-
-class TestGetQueryStats:
-    """Tests for get_query_stats function."""
-
-    @pytest.fixture
-    def populated_db(self, tmp_path):
-        """Create a temp db with some query logs."""
-        db_path = tmp_path / "test_audit.db"
-        conn = sqlite3.connect(str(db_path))
-        conn.executescript("""
-            CREATE TABLE query_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT NOT NULL,
-                source TEXT NOT NULL,
-                instance TEXT NOT NULL,
-                caller TEXT NOT NULL,
-                conversation_id TEXT,
-                query_type TEXT,
-                query_details TEXT,
-                success INTEGER NOT NULL,
-                error TEXT,
-                execution_time_ms INTEGER,
-                row_count INTEGER
-            );
-        """)
-        # Insert test data
-        for i in range(5):
-            conn.execute(
-                """INSERT INTO query_log
-                   (timestamp, source, instance, caller, success, execution_time_ms)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (datetime.now(timezone.utc).isoformat(), "metabase", "stats", "agent", 1, 100),
-            )
-        for i in range(3):
-            conn.execute(
-                """INSERT INTO query_log
-                   (timestamp, source, instance, caller, success, execution_time_ms)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (datetime.now(timezone.utc).isoformat(), "matomo", "inclusion", "app", 1, 200),
-            )
-        # One failed query
-        conn.execute(
-            """INSERT INTO query_log
-               (timestamp, source, instance, caller, success, error, execution_time_ms)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (datetime.now(timezone.utc).isoformat(), "metabase", "stats", "agent", 0, "timeout", 5000),
-        )
-        conn.commit()
-        conn.close()
-        return db_path
-
-    def test_returns_stats_dict(self, populated_db):
-        with patch("lib._audit.AUDIT_DB_PATH", populated_db):
-            from lib.query import get_query_stats
-
-            stats = get_query_stats()
-
-            assert stats["total_queries"] == 9
-            assert stats["successful_queries"] == 8
-            assert stats["by_source"]["metabase"] == 6
-            assert stats["by_source"]["matomo"] == 3
-            assert stats["by_caller"]["agent"] == 6
-            assert stats["by_caller"]["app"] == 3
-
-    def test_filters_by_source(self, populated_db):
-        with patch("lib._audit.AUDIT_DB_PATH", populated_db):
-            from lib.query import get_query_stats
-
-            stats = get_query_stats(source="matomo")
-
-            assert stats["total_queries"] == 3
-            assert stats["by_source"] == {"matomo": 3}
-
-
 class TestConversationIdFromEnv:
     """Tests for auto-reading conversation_id from environment."""
 
-    @patch("lib._audit.log_query")
     @patch("lib.query.get_metabase")
-    def test_reads_conversation_id_from_env(self, mock_get_metabase, mock_log):
+    def test_reads_conversation_id_from_env(self, mock_get_metabase):
         from lib._metabase import QueryResult as MetabaseQueryResult
         from lib.query import CallerType, execute_metabase_query
 

@@ -17,7 +17,6 @@ from lib.tool_taxonomy import classify_tool
 from . import config
 from .agents import get_agent
 from .agents.base import AgentBackend
-from .audit import audit_log
 from .signals import signals
 from .storage import store
 
@@ -168,13 +167,6 @@ class ProcessManager:
             tool_input = event.content.get("input", {})
             category = classify_tool(tool_name, tool_input)
             enriched = {**event.content, "category": category}
-
-            audit_log(
-                conversation_id=conversation_id,
-                user_email=user_email or "",
-                tool_name=tool_name,
-                tool_input=tool_input,
-            )
             return json.dumps(enriched)
 
         elif event.type == "tool_result":

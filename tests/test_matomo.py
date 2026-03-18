@@ -15,7 +15,7 @@ Or edit conftest.py defaults.
 """
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -206,29 +206,25 @@ class TestMatomoAPIMocked:
         mock_resp.raise_for_status = MagicMock()
         api._session.get = MagicMock(return_value=mock_resp)
 
-    @patch("lib._audit.log_query")
-    def test_get_visits_returns_dict(self, mock_log, api):
+    def test_get_visits_returns_dict(self, api):
         self._mock_session_get(api, {"nb_visits": 100, "nb_uniq_visitors": 80})
         result = api.get_visits(site_id=117, period="month", date="2025-12-01")
         assert result["nb_visits"] == 100
         assert result["nb_uniq_visitors"] == 80
 
-    @patch("lib._audit.log_query")
-    def test_get_pages_returns_list(self, mock_log, api):
+    def test_get_pages_returns_list(self, api):
         self._mock_session_get(api, [{"label": "/home", "nb_visits": 50}, {"label": "/about", "nb_visits": 30}])
         result = api.get_pages(site_id=117, period="month", date="2025-12-01")
         assert isinstance(result, list)
         assert len(result) == 2
         assert result[0]["label"] == "/home"
 
-    @patch("lib._audit.log_query")
-    def test_api_error_raises_exception(self, mock_log, api):
+    def test_api_error_raises_exception(self, api):
         self._mock_session_get(api, {"result": "error", "message": "Invalid token"})
         with pytest.raises(MatomoError, match="Invalid token"):
             api.get_visits(site_id=117, period="month", date="2025-12-01")
 
-    @patch("lib._audit.log_query")
-    def test_get_visit_frequency_returns_dict(self, mock_log, api):
+    def test_get_visit_frequency_returns_dict(self, api):
         self._mock_session_get(
             api,
             {"nb_visits_returning": 500, "nb_visits_new": 200, "nb_actions_returning": 2500, "bounce_rate_new": "45%"},

@@ -53,9 +53,8 @@ class TestEnvSubstitutionStrictRecursion:
 
 
 class TestMetabaseQueryAcceptsSqlAlone:
-    @patch("lib._audit.log_query")
     @patch("lib.query.get_metabase")
-    def test_sql_without_database_id_uses_api_default(self, mock_get_metabase, mock_log):
+    def test_sql_without_database_id_uses_api_default(self, mock_get_metabase):
         from lib._metabase import QueryResult as MQR
         from lib.query import CallerType, execute_metabase_query
 
@@ -75,14 +74,12 @@ class TestMetabaseQueryAcceptsSqlAlone:
 
 
 # ---------------------------------------------------------------------------
-# Fixed: MatomoError now gets logged to audit
+# Fixed: MatomoError is raised on API error response
 # ---------------------------------------------------------------------------
 
 
-class TestMatomoErrorLogged:
-    @patch("lib._matomo.emit_api_signal")
-    @patch("lib._matomo.log_query")
-    def test_api_error_is_logged_to_audit(self, mock_log, mock_signal):
+class TestMatomoErrorRaised:
+    def test_api_error_raises_matomo_error(self):
         from lib._matomo import MatomoAPI, MatomoError
 
         api = MatomoAPI(url="fake.example.com", token="fake", instance="test")
@@ -97,11 +94,6 @@ class TestMatomoErrorLogged:
 
         with pytest.raises(MatomoError, match="Segment not valid"):
             api._request("VisitsSummary.get", {"idSite": 1}, timeout=10)
-
-        assert mock_log.called, "MatomoError was not logged to audit"
-        call_kwargs = mock_log.call_args.kwargs
-        assert call_kwargs["success"] is False
-        assert "Segment not valid" in call_kwargs["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -194,9 +186,7 @@ class TestApiSignalCardIdZero:
 
 
 class TestMatomoHtmlTimeoutRaises:
-    @patch("lib._matomo.emit_api_signal")
-    @patch("lib._matomo.log_query")
-    def test_html_response_raises_matomo_error(self, mock_log, mock_signal):
+    def test_html_response_raises_matomo_error(self):
         from lib._matomo import MatomoAPI, MatomoError
 
         api = MatomoAPI(url="fake.example.com", token="fake", instance="test")
@@ -210,9 +200,6 @@ class TestMatomoHtmlTimeoutRaises:
 
         with pytest.raises(MatomoError, match="HTML instead of JSON"):
             api._request("VisitsSummary.get", {"idSite": 1}, timeout=10)
-
-        assert mock_log.called
-        assert mock_log.call_args.kwargs["success"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -318,9 +305,7 @@ class TestSignalRegistryEviction:
 
 
 class TestMetabaseSearchQueryType:
-    @patch("lib._metabase.log_query")
-    @patch("lib._metabase.emit_api_signal")
-    def test_search_query_type_is_clean(self, mock_signal, mock_log):
+    def test_search_cards_returns_data(self):
         from lib._metabase import MetabaseAPI
 
         api = MetabaseAPI(url="https://fake.example.com", api_key="fake")
@@ -331,9 +316,5 @@ class TestMetabaseSearchQueryType:
         mock_resp.raise_for_status = MagicMock()
         api._session.request = MagicMock(return_value=mock_resp)
 
-        api.search_cards("revenue")
-
-        assert mock_log.called
-        logged_query_type = mock_log.call_args.kwargs["query_type"]
-        assert logged_query_type == "search"
-        assert "?" not in logged_query_type
+        result = api.search_cards("revenue")
+        assert result == []

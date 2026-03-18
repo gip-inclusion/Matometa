@@ -10,7 +10,6 @@ dependencies = [
     "python-multipart>=0.0.21",
 
     # Claude API
-    "anthropic>=0.75.0",
     "claude-agent-sdk>=0.1.48",
 
     # Templating

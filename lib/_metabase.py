@@ -12,7 +12,6 @@ Usage:
 import base64
 import json
 import logging
-import time
 import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -21,7 +20,6 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from ._audit import log_query
 from .api_signals import emit_api_signal
 
 logger = logging.getLogger(__name__)
@@ -151,57 +149,20 @@ class MetabaseAPI:
         timeout: int = 60,
         query_type: Optional[str] = None,
     ) -> Any:
-        """Make an API request with automatic logging."""
-        start_time = time.time()
+        """Make an API request."""
         url = f"{self.url}{endpoint}"
-
-        if query_type is None:
-            raw_type = endpoint.split("/")[2] if endpoint.startswith("/api/") else "request"
-            query_type = raw_type.split("?")[0]
-
-        query_details = {"endpoint": endpoint, "method": method}
-        if data:
-            if "native" in data and "query" in data.get("native", {}):
-                query_details["sql"] = data["native"]["query"][:500]
-            else:
-                query_details["data"] = str(data)[:200]
 
         try:
             resp = self._session.request(method, url, json=data if data else None, timeout=(10, timeout))
             resp.raise_for_status()
             result = resp.json()
 
-            execution_time_ms = int((time.time() - start_time) * 1000)
-            log_query(
-                source="metabase",
-                instance=self.instance,
-                caller=self.caller,
-                conversation_id=None,
-                query_type=query_type,
-                query_details=query_details,
-                success=True,
-                error=None,
-                execution_time_ms=execution_time_ms,
-            )
-
             return result
 
         except requests.RequestException as e:
-            execution_time_ms = int((time.time() - start_time) * 1000)
             status = getattr(getattr(e, "response", None), "status_code", None)
             body = getattr(getattr(e, "response", None), "text", str(e))
             error_msg = f"HTTP {status}: {body}" if status else str(e)
-            log_query(
-                source="metabase",
-                instance=self.instance,
-                caller=self.caller,
-                conversation_id=None,
-                query_type=query_type,
-                query_details=query_details,
-                success=False,
-                error=error_msg,
-                execution_time_ms=execution_time_ms,
-            )
             raise MetabaseError(error_msg)
 
     def _parse_result(self, data: dict) -> QueryResult:
