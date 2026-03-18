@@ -32,7 +32,7 @@ import requests
 
 SYNTHETIC_API_URL = os.getenv("SYNTHETIC_API_URL", "https://api.synthetic.new/openai/v1")
 SYNTHETIC_API_KEY = os.getenv("SYNTHETIC_API_KEY", "")
-DEFAULT_MODEL = os.getenv("LLM_MODEL", "llama3.2")
+DEFAULT_MODEL = os.getenv("LLM_MODEL", "hf:meta-llama/Llama-3.2-3B-Instruct")
 
 
 def chat(
@@ -61,7 +61,7 @@ def chat(
 // llm.js — LLM client (Synthetic, OpenAI-compatible)
 const SYNTHETIC_API_URL = process.env.SYNTHETIC_API_URL || 'https://api.synthetic.new/openai/v1';
 const SYNTHETIC_API_KEY = process.env.SYNTHETIC_API_KEY || '';
-const DEFAULT_MODEL = process.env.LLM_MODEL || 'llama3.2';
+const DEFAULT_MODEL = process.env.LLM_MODEL || 'hf:meta-llama/Llama-3.2-3B-Instruct';
 
 export async function chat(messages, model) {
   const res = await fetch(`${SYNTHETIC_API_URL}/chat/completions`, {
@@ -92,7 +92,7 @@ python -m skills.expert_llm.scripts.scaffold_llm --workdir <project-workdir> --l
 
 1. **Generate an `llm.py` (or `llm.js`)** in the app that reads `SYNTHETIC_API_URL` and `SYNTHETIC_API_KEY` from env vars. Never hardcode.
 2. **Add `requests` to requirements** if the app uses Python.
-3. **Default model**: `llama3.2` for general tasks. Use `qwen2.5-coder:14b` for code-heavy tasks.
+3. **Default model**: `hf:meta-llama/Llama-3.2-3B-Instruct` for general tasks. Use `hf:Qwen/Qwen2.5-Coder-14B-Instruct` for code-heavy tasks.
 4. **Streaming**: set `"stream": true` in the request body and consume standard SSE.
 5. **Dockerfile**: Do NOT bundle API keys. They come from env vars at runtime.
 6. **docker-compose.yml**: Do NOT add `SYNTHETIC_API_KEY` to compose — it is injected by the deployment pipeline.

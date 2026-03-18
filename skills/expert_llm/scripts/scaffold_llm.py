@@ -17,7 +17,7 @@ import requests
 
 SYNTHETIC_API_URL = os.getenv("SYNTHETIC_API_URL", "https://api.synthetic.new/openai/v1")
 SYNTHETIC_API_KEY = os.getenv("SYNTHETIC_API_KEY", "")
-DEFAULT_MODEL = os.getenv("LLM_MODEL", "llama3.2")
+DEFAULT_MODEL = os.getenv("LLM_MODEL", "hf:meta-llama/Llama-3.2-3B-Instruct")
 
 
 def chat(
@@ -44,7 +44,7 @@ NODE_TEMPLATE = '''\
 // llm.js — LLM client (Synthetic, OpenAI-compatible)
 const SYNTHETIC_API_URL = process.env.SYNTHETIC_API_URL || 'https://api.synthetic.new/openai/v1';
 const SYNTHETIC_API_KEY = process.env.SYNTHETIC_API_KEY || '';
-const DEFAULT_MODEL = process.env.LLM_MODEL || 'llama3.2';
+const DEFAULT_MODEL = process.env.LLM_MODEL || 'hf:meta-llama/Llama-3.2-3B-Instruct';
 
 /**
  * Send a chat request to the LLM.
