@@ -68,6 +68,17 @@ def _build_project_prompt(*, project, content: str, workdir: str, is_first_proje
                 f"{project.spec}\n"
                 "---\n"
             )
+
+        # Inject LLM config so agent can write code that uses it
+        from .. import config as app_config
+        if app_config.SYNTHETIC_API_KEY:
+            project_context += (
+                "\nLLM available for this app:\n"
+                f"  SYNTHETIC_API_URL={app_config.SYNTHETIC_API_URL}\n"
+                f"  SYNTHETIC_API_KEY=(injected at deploy — use os.getenv in code, never hardcode)\n"
+                "  See skills/expert_llm/SKILL.md for code templates.\n"
+            )
+
         project_context += "\nUser: "
 
     return project_context + content
