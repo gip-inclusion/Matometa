@@ -148,12 +148,23 @@ def _rewrite_proxy_html(content: str, slug: str, environment: str) -> str:
         if head_close != -1:
             injection = f'<base href="{_preview_url(slug, environment)}">'
             content = content[: head_close + 1] + injection + content[head_close + 1 :]
-    # Inject a script to rewrite JS-assigned form.action with absolute paths
-    # (e.g. form.action = '/orders/5/status' -> '/expert/slug/preview/env/orders/5/status')
+    # Inject a script to rewrite JS absolute paths for fetch() and form.action
+    # so /api/chat becomes /expert/slug/preview/env/api/chat
     if "</body>" in content:
         patch_script = (
             f'<script>(function(){{'
             f'var B="{base}";'
+            # Monkey-patch fetch to rewrite absolute paths
+            f'var _fetch=window.fetch;'
+            f'window.fetch=function(u,o){{'
+            f'if(typeof u==="string"&&u.startsWith("/")&&!u.startsWith(B))u=B+u;'
+            f'return _fetch.call(this,u,o)}};'
+            # Monkey-patch XMLHttpRequest.open for jQuery/axios
+            f'var _open=XMLHttpRequest.prototype.open;'
+            f'XMLHttpRequest.prototype.open=function(m,u){{'
+            f'if(typeof u==="string"&&u.startsWith("/")&&!u.startsWith(B))u=B+u;'
+            f'return _open.apply(this,arguments)}};'
+            # Monkey-patch form.action
             f'var _set=Object.getOwnPropertyDescriptor(HTMLFormElement.prototype,"action").set;'
             f'Object.defineProperty(HTMLFormElement.prototype,"action",{{'
             f'set:function(v){{if(typeof v==="string"&&v.startsWith("/")&&!v.startsWith(B))v=B+v;_set.call(this,v)}},'
