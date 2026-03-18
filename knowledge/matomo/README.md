@@ -26,7 +26,7 @@ Scraped from the Matomo instance on 2026-01-03. This instance includes premium p
 
 → See `core-modules.md` for full signatures.
 
-### Premium Plugins
+### Documented Plugins
 
 | Module | Methods | File | Description |
 |--------|---------|------|-------------|
@@ -36,6 +36,7 @@ Scraped from the Matomo instance on 2026-01-03. This instance includes premium p
 | HeatmapSessionRecording | 24 | `heatmaps.md` | Click maps & session replay |
 | AbTesting | 18 | `abtesting.md` | A/B experiments |
 | MediaAnalytics | 13 | `media.md` | Video/audio tracking |
+| TagManager | 38 | `tag-manager.md` | Tag management |
 
 ### Other Modules
 
@@ -47,10 +48,7 @@ Scraped from the Matomo instance on 2026-01-03. This instance includes premium p
 | VisitorInterest | 6 | Engagement metrics |
 | VisitTime | 3 | Time-based analytics |
 | SitesManager | 42 | Site configuration |
-| TagManager | 38 | Tag management |
 | UsersManager | 28 | User management |
-
-→ See `other-modules.md` for full signatures.
 
 ## Common Parameters
 
