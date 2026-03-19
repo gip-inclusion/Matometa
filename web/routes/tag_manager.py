@@ -129,5 +129,5 @@ def api_tag_manager_site(matomo_id: int):
         }
 
     except Exception:
-        logger.exception("Tag Manager API error for site %d", matomo_id)
+        logger.exception("Tag Manager API error for site %s", int(matomo_id))
         return JSONResponse({"error": "Failed to fetch tag manager data"}, status_code=502)
