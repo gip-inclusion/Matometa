@@ -175,3 +175,9 @@ def get_default_instance(source_type: str) -> str | None:
         return None
 
     return config[source_type].get("_default")
+
+
+def get_tag_manager_sites() -> list[dict]:
+    """Get tag manager site configurations from sources.yaml."""
+    config = load_config()
+    return config.get("tag_manager", {}).get("sites", [])
