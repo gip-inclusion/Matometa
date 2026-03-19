@@ -21,6 +21,25 @@ for _logger_name in ("botocore", "boto3", "urllib3", "s3transfer"):
 logger = logging.getLogger(__name__)
 
 
+def _download_research_db():
+    """Download notion_research.db from S3 if not present locally."""
+    db_path = config.NOTION_RESEARCH_DB
+    if db_path.exists():
+        return
+    s3_key = "data/notion_research.db"
+    try:
+        from . import s3
+
+        if s3._s3_client is None:
+            return
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        s3._s3_client.download_file(config.S3_BUCKET, s3_key, str(db_path))
+        size_mb = db_path.stat().st_size / 1024 / 1024
+        logger.info(f"Downloaded research corpus from S3 ({size_mb:.1f} MB)")
+    except Exception as e:
+        logger.warning(f"Could not download research corpus from S3: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown tasks."""
@@ -28,6 +47,10 @@ async def lifespan(app: FastAPI):
     from . import sync_to_s3
 
     sync_to_s3.start_sync_watcher()
+
+    # Download research corpus from S3 (refreshed locally, uploaded to S3)
+    if config.USE_S3:
+        await asyncio.to_thread(_download_research_db)
 
     # Warm the interactive apps cache (avoids N+1 S3 calls on first request)
     if config.USE_S3:
