@@ -109,7 +109,7 @@ class TestClassifyTool:
         assert result == "Read: code"
 
     def test_read_docs(self):
-        result = classify_tool("Read", {"file_path": "/app/AGENTS.md"})
+        result = classify_tool("Read", {"file_path": "/app/CLAUDE.md"})
         assert result == "Read: docs"
 
     def test_read_temp(self):

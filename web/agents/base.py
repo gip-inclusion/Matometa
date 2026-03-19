@@ -32,12 +32,8 @@ class AgentMessage:
 
 
 def build_system_prompt() -> str | None:
-    """Build the system prompt from AGENTS.md with today's date appended.
-
-    The date comes after the main content so the bulk of the prompt
-    stays cache-stable across days.
-    """
-    agents_md_path = config.BASE_DIR / "AGENTS.md"
+    """Build the system prompt from CLAUDE.md with today's date appended."""
+    agents_md_path = config.BASE_DIR / "CLAUDE.md"
     if not agents_md_path.exists():
         return None
     today = date.today().strftime("%A %d %B %Y")

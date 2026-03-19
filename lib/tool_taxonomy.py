@@ -21,7 +21,7 @@ Categories follow the pattern "Group: subtype". Groups are:
 - Read: skill definition - skill.md files
 - Read: skill code      - Python code in /skills/
 - Read: code            - Application code (.py, .js, .html)
-- Read: docs            - AGENTS.md, README, CLAUDE.md
+- Read: docs            - CLAUDE.md, README
 - Read: temp            - Temporary output files
 - Read: other           - Everything else
 

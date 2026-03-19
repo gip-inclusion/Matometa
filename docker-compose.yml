@@ -28,7 +28,7 @@ services:
       - /etc/machine-id:/etc/machine-id:ro
       # Mount knowledge files (read-only)
       - ./knowledge:/app/knowledge:ro
-      - ./AGENTS.md:/app/AGENTS.md:ro
+      - ./CLAUDE.md:/app/CLAUDE.md:ro
       - ./skills:/app/skills:ro
       - ./.claude:/app/.claude:ro
 

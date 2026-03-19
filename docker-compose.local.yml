@@ -76,7 +76,7 @@ services:
       - ./claude-credentials:/home/matometa/.claude
       - /etc/machine-id:/etc/machine-id:ro
       - ./knowledge:/app/knowledge:ro
-      - ./AGENTS.md:/app/AGENTS.md:ro
+      - ./CLAUDE.md:/app/CLAUDE.md:ro
       - ./skills:/app/skills:ro
       - ./.claude:/app/.claude:ro
       # Local data directory for agent-created files (fallback when S3 miss)
