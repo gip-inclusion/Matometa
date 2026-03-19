@@ -122,7 +122,7 @@ class CLIBackend(AgentBackend):
         for d in config.ADDITIONAL_DIRS:
             cmd.extend(["--add-dir", d])
 
-        # Add AGENTS.md as system prompt
+        # Add CLAUDE.md as system prompt
         system_prompt = build_system_prompt()
         if system_prompt:
             cmd.extend(["--system-prompt", system_prompt])

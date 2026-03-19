@@ -4,6 +4,10 @@
 .claude/*
 !.claude/skills
 !.claude/settings.json
+!.claude/rules
+!.claude/agents
+!.claude/ARCHITECTURE.md
+!.claude/MAINTENANCE.md
 __pycache__
 .matomo_cookie
 .venv
