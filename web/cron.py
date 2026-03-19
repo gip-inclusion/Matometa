@@ -35,6 +35,11 @@ from .database import get_db
 DEFAULT_TIMEOUT = 300  # 5 minutes
 MAX_OUTPUT_SIZE = 50_000
 
+# Global time budget for run_all (Scalingo one-off dynos are time-limited).
+# Leave headroom for discovery, DB writes, and S3 uploads.
+GLOBAL_BUDGET_SECONDS = int(os.environ.get("CRON_BUDGET_SECONDS", 3000))  # 50 min
+BUDGET_RESERVE_SECONDS = 60  # don't start a task if < 60s remain
+
 
 def _parse_frontmatter_text(content: str) -> dict:
     """Parse YAML front-matter from a string.
@@ -262,8 +267,13 @@ def _upload_s3_results(slug: str, workdir: Path):
         s3.upload_file(s3_key, path.read_bytes())
 
 
-def run_cron_task(slug: str, trigger: str = "scheduled") -> dict:
+def run_cron_task(slug: str, trigger: str = "scheduled", timeout_override: int | None = None) -> dict:
     """Run a single cron task by slug.
+
+    Args:
+        slug: Task identifier.
+        trigger: "scheduled" or "manual".
+        timeout_override: If set, caps the task timeout (e.g. from global budget).
 
     Returns dict with: slug, status, output, duration_ms, started_at, finished_at.
     """
@@ -280,6 +290,8 @@ def run_cron_task(slug: str, trigger: str = "scheduled") -> dict:
 
     is_s3 = task.get("source") == "s3"
     timeout = task["timeout"]
+    if timeout_override is not None:
+        timeout = min(timeout, timeout_override)
     workdir = None
 
     started_at = datetime.now()
@@ -288,6 +300,7 @@ def run_cron_task(slug: str, trigger: str = "scheduled") -> dict:
     env = {
         **os.environ,
         "PYTHONPATH": str(config.BASE_DIR),
+        "PYTHONUNBUFFERED": "1",
     }
 
     try:
@@ -299,32 +312,41 @@ def run_cron_task(slug: str, trigger: str = "scheduled") -> dict:
             cron_script = task["cron_path"]
             cwd = task["path"]
 
-        result = subprocess.run(
+        # Use Popen + communicate() so we can capture partial output on timeout.
+        # subprocess.run() on Linux loses pipe contents when TimeoutExpired fires.
+        proc = subprocess.Popen(
             [sys.executable, cron_script],
             cwd=cwd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout,
             env=env,
         )
-        elapsed_ms = int((time.monotonic() - start_time) * 1000)
-        finished_at = datetime.now()
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            stdout, stderr = proc.communicate()  # drain remaining pipe data
+            elapsed_ms = int((time.monotonic() - start_time) * 1000)
+            finished_at = datetime.now()
+            status = "timeout"
+            output = f"Script timed out after {timeout}s\n"
+            if stdout:
+                output += "\n--- stdout (partial) ---\n" + stdout
+            if stderr:
+                output += "\n--- stderr (partial) ---\n" + stderr
+            output = output[:MAX_OUTPUT_SIZE]
+        else:
+            elapsed_ms = int((time.monotonic() - start_time) * 1000)
+            finished_at = datetime.now()
+            output = stdout
+            if stderr:
+                output += "\n--- stderr ---\n" + stderr
+            output = output[:MAX_OUTPUT_SIZE]
+            status = "success" if proc.returncode == 0 else "failure"
 
-        output = result.stdout
-        if result.stderr:
-            output += "\n--- stderr ---\n" + result.stderr
-        output = output[:MAX_OUTPUT_SIZE]
-
-        status = "success" if result.returncode == 0 else "failure"
-
-        if is_s3 and status == "success" and workdir:
-            _upload_s3_results(slug, workdir)
-
-    except subprocess.TimeoutExpired:
-        elapsed_ms = int((time.monotonic() - start_time) * 1000)
-        finished_at = datetime.now()
-        status = "timeout"
-        output = f"Script timed out after {timeout}s"
+            if is_s3 and status == "success" and workdir:
+                _upload_s3_results(slug, workdir)
 
     except Exception as e:
         elapsed_ms = int((time.monotonic() - start_time) * 1000)
@@ -429,9 +451,19 @@ def get_app_runs(slug: str, limit: int = 20) -> list[dict]:
 
 
 def run_all(dry_run: bool = False) -> list[dict]:
-    """Discover and run all enabled cron tasks that are due today."""
+    """Discover and run all enabled cron tasks that are due today.
+
+    Enforces a global time budget (CRON_BUDGET_SECONDS env var, default 50 min)
+    so the runner doesn't exceed Scalingo one-off dyno limits. Tasks are skipped
+    if their timeout wouldn't fit in the remaining budget; otherwise the per-task
+    timeout is clamped to what's left.
+    """
     tasks = discover_cron_tasks()
     results = []
+    run_start = time.monotonic()
+
+    def remaining() -> float:
+        return GLOBAL_BUDGET_SECONDS - (time.monotonic() - run_start)
 
     for task in tasks:
         if not task["enabled"]:
@@ -449,8 +481,26 @@ def run_all(dry_run: bool = False) -> list[dict]:
             print(f"  WOULD RUN {task['slug']}{sched} (timeout: {task['timeout']}s)")
             continue
 
+        budget_left = remaining()
+        if budget_left < BUDGET_RESERVE_SECONDS:
+            print(f"  SKIP {task['slug']} (global budget exhausted, {budget_left:.0f}s left)")
+            _record_run(
+                {
+                    "slug": task["slug"],
+                    "status": "skipped",
+                    "output": f"Skipped: global budget exhausted ({budget_left:.0f}s remaining)",
+                    "duration_ms": 0,
+                    "started_at": datetime.now().isoformat(),
+                    "finished_at": datetime.now().isoformat(),
+                },
+                "scheduled",
+            )
+            continue
+
+        effective_timeout = min(task["timeout"], int(budget_left - BUDGET_RESERVE_SECONDS))
+
         print(f"  Running {task['slug']}...", end=" ", flush=True)
-        result = run_cron_task(task["slug"], trigger="scheduled")
+        result = run_cron_task(task["slug"], trigger="scheduled", timeout_override=effective_timeout)
         print(f"{result['status']} ({result['duration_ms']}ms)")
         results.append(result)
 
@@ -484,7 +534,7 @@ def main():
             print(result["output"])
         return
 
-    print("Running all cron tasks...")
+    print(f"Running all cron tasks (budget: {GLOBAL_BUDGET_SECONDS}s)...")
     results = run_all(dry_run=args.dry_run)
     if not args.dry_run:
         ok = sum(1 for r in results if r["status"] == "success")
