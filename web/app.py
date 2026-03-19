@@ -138,7 +138,19 @@ def serve_interactive(request: Request, filename: str = ""):
 # Register Routers
 # =============================================================================
 
-from .routes import auth, conversations, cron, html, knowledge, logs, query, rapports, reports, research  # noqa: E402
+from .routes import (  # noqa: E402
+    auth,
+    conversations,
+    cron,
+    html,
+    knowledge,
+    logs,
+    query,
+    rapports,
+    reports,
+    research,
+    tag_manager,
+)
 
 app.include_router(query.router)
 app.include_router(auth.router)
@@ -150,6 +162,7 @@ app.include_router(conversations.router)
 # Template-serving routers last (they have catch-all-ish paths)
 app.include_router(rapports.router)
 app.include_router(cron.router)
+app.include_router(tag_manager.router)
 app.include_router(html.router)
 
 

@@ -56,6 +56,41 @@ matomo:
     url: https://matomo.inclusion.beta.gouv.fr
     token: ${env.MATOMO_API_KEY}
 
+tag_manager:
+  sites:
+    - name: Communauté
+      matomo_id: 206
+      container_id: GTln5jDH
+    - name: Dora
+      matomo_id: 211
+      container_id: 1y35glgB
+    - name: Emplois
+      matomo_id: 117
+      container_id: TlN6Ou1K
+    - name: Marché
+      matomo_id: 136
+      container_id: RBvmJtrU
+    - name: Mon Recap
+      matomo_id: 217
+      container_id: tBXCnpOZ
+    - name: Pilotage
+      matomo_id: 146
+      container_id: czDcW7tH
+    - name: Plateforme
+      matomo_id: 212
+      container_id: SAGWfnKo
+    - name: RDV-Insertion
+      matomo_id: 214
+      container_id: DxfPtj4z
+    - name: Dora preprod
+      matomo_id: 210
+      container_id: xg8aydM9
+      staging: true
+    - name: Emplois preprod
+      matomo_id: 220
+      container_id: ZZ7LPpec
+      staging: true
+
 livestorm:
   api_key: ${env.LIVESTORM_API_KEY}
 

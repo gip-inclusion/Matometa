@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title_suffix %} - Tag Manager{% endblock %}
+{% block body_class %}no-sidebar{% endblock %}
+
+{% block content %}
+<section class="section-content" id="section-tag-manager">
+  <div class="section-header">
+    <div class="container-fluid px-4">
+      <div class="d-flex align-items-center gap-3">
+        <a href="/" class="btn btn-link p-0 me-2">
+          <i class="ri-arrow-left-line ri-xl"></i>
+        </a>
+        <div class="me-auto">
+          <p class="text-muted mb-1 small">Audit des containers Matomo Tag Manager</p>
+          <h1 class="mb-0">
+            <i class="ri-price-tag-3-line ri-2x text-primary me-2" style="vertical-align: middle;"></i>
+            Tag Manager
+          </h1>
+        </div>
+        <span class="text-muted small" id="tmStatus"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-body p-0">
+    <div class="tm-layout" data-selected-site="{{ selected_site|tojson }}" data-selected-trigger="{{ selected_trigger|tojson }}" data-matomo-url="{{ matomo_url }}">
+      <!-- Pane 1: Sites -->
+      <div class="tm-pane tm-sites-pane">
+        <div class="tm-pane-header">Sites</div>
+        <div class="tm-pane-body" id="tmSitesList">
+          {% for site in sites %}
+          <button class="tm-list-item" data-matomo-id="{{ site.matomo_id }}" data-container-id="{{ site.container_id }}" onclick="selectSite(this)">
+            <div class="d-flex align-items-center gap-2">
+              <span class="tm-item-name">{{ site.name }}</span>
+              {% if site.get('staging') %}
+              <span class="tm-staging-badge">staging</span>
+              {% endif %}
+            </div>
+            <div class="tm-item-count" id="count-{{ site.matomo_id }}">
+              <span class="tm-count-pill"><i class="ri-loader-4-line ri-spin" style="font-size: 0.6rem;"></i></span>
+            </div>
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Pane 2: Triggers -->
+      <div class="tm-pane tm-triggers-pane">
+        <div class="tm-pane-header">
+          <button class="tm-mobile-back" onclick="mobileBack('sites')"><i class="ri-arrow-left-s-line"></i>Sites</button>
+          <span id="tmTriggersHeader">Triggers</span>
+        </div>
+        <div class="tm-pane-body" id="tmTriggersList">
+          <div class="tm-empty">
+            <i class="ri-cursor-line ri-2x text-muted"></i>
+            <p class="text-muted mt-2">Choisir un site</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pane 3: Tag details -->
+      <div class="tm-pane tm-details-pane">
+        <div class="tm-pane-header">
+          <button class="tm-mobile-back" onclick="mobileBack('triggers')"><i class="ri-arrow-left-s-line"></i>Triggers</button>
+          <span id="tmDetailsHeader">Tags</span>
+        </div>
+        <div class="tm-pane-body" id="tmDetailsContent">
+          <div class="tm-empty">
+            <i class="ri-file-list-3-line ri-2x text-muted"></i>
+            <p class="text-muted mt-2">Choisir un trigger</p>
+          </div>
+        </div>
+      </div>
+      <div class="tm-footer" id="tmFooter"></div>
+    </div>
+  </div>
+</section>
+<!-- Templates -->
+<template id="tpl-trigger-item">
+  <button class="tm-list-item">
+    <div class="tm-trigger-main">
+      <span class="tm-item-name"></span>
+      <span class="badge bg-light text-dark tm-trigger-type"></span>
+    </div>
+    <div class="tm-trigger-meta">
+      <span class="text-muted small tm-trigger-cond"></span>
+      <span class="tm-trigger-pills"></span>
+    </div>
+  </button>
+</template>
+
+<template id="tpl-trigger-card">
+  <div class="tm-card tm-trigger-card">
+    <div class="tm-card-header">
+      <span><i class="ri-flashlight-line me-1"></i>Trigger</span>
+    </div>
+    <div class="tm-card-body">
+      <strong class="tm-name"></strong>
+      <span class="badge bg-light text-dark tm-type"></span>
+      <div class="tm-body"></div>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-condition">
+  <div class="tm-condition">
+    <code class="tm-actual"></code>
+    <span class="text-muted tm-comparison"></span>
+    <code class="tm-expected"></code>
+  </div>
+</template>
+
+<template id="tpl-no-conditions">
+  <div class="text-warning mt-2"><i class="ri-alert-line me-1"></i>Pas de condition (se declenche partout)</div>
+</template>
+
+<template id="tpl-tag-card">
+  <div class="tm-card">
+    <div class="tm-card-header">
+      <span class="tm-name"></span>
+      <div class="d-flex gap-1 align-items-center tm-actions"></div>
+    </div>
+    <div class="tm-card-body">
+      <div class="tm-tag-badges"></div>
+      <div class="tm-tag-content"></div>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-arrow">
+  <div class="tm-arrow-separator"><i class="ri-arrow-down-line"></i></div>
+</template>
+
+<template id="tpl-matomo-link">
+  <a target="_blank" class="tm-external-link" title="Ouvrir dans Matomo"><i class="ri-external-link-line"></i></a>
+</template>
+
+<template id="tpl-empty-site">
+  <div class="tm-empty"><i class="ri-cursor-line ri-2x text-muted"></i><p class="text-muted mt-2">Choisir un site</p></div>
+</template>
+<template id="tpl-empty-trigger">
+  <div class="tm-empty"><i class="ri-file-list-3-line ri-2x text-muted"></i><p class="text-muted mt-2">Choisir un trigger</p></div>
+</template>
+<template id="tpl-empty-no-triggers">
+  <div class="tm-empty"><i class="ri-ghost-line ri-2x text-muted"></i><p class="text-muted mt-2">Aucun trigger</p></div>
+</template>
+<template id="tpl-empty-no-tags">
+  <div class="tm-empty"><i class="ri-ghost-line ri-2x text-muted"></i><p class="text-muted mt-2">Aucun tag pour ce trigger</p></div>
+</template>
+<template id="tpl-loading">
+  <div class="tm-loading"><div class="spinner-border spinner-border-sm text-primary"></div></div>
+</template>
+<template id="tpl-error">
+  <div class="tm-empty"><i class="ri-error-warning-line ri-2x text-danger"></i><p class="text-danger mt-2 tm-error-msg"></p></div>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/tag_manager.js"></script>
+{% endblock %}

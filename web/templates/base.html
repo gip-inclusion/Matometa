@@ -21,7 +21,7 @@
   {% block head %}{% endblock %}
 </head>
 
-<body id="top" class="has-sidebar">
+<body id="top" class="{% block body_class %}has-sidebar{% endblock %}">
   <nav role="navigation" aria-label="Accès rapide" tabindex="0" class="c-skiplinks">
     <ul>
       <li><a href="#nav-primary">Aller au menu principal</a></li>
