@@ -16,7 +16,6 @@ class CLIOllamaBackend(CLIBackend):
         env["ANTHROPIC_BASE_URL"] = config.OLLAMA_BASE_URL
         env["ANTHROPIC_AUTH_TOKEN"] = "ollama"
         env["ANTHROPIC_API_KEY"] = ""
-        env["AUTOMETA_CONVERSATION_ID"] = conversation_id
         return env
 
     def _extra_cmd_args(self) -> list[str]:

@@ -216,31 +216,6 @@ class TestExecuteQuery:
         assert "Unknown source" in result.error
 
 
-class TestConversationIdFromEnv:
-    """Tests for auto-reading conversation_id from AUTOMETA_CONVERSATION_ID."""
-
-    @patch("lib.query.get_metabase")
-    def test_reads_conversation_id_from_env(self, mock_get_metabase):
-        from lib._metabase import QueryResult as MetabaseQueryResult
-        from lib.query import CallerType, execute_metabase_query
-
-        mock_result = MetabaseQueryResult(columns=["x"], rows=[[1]], row_count=1)
-        mock_api = MagicMock()
-        mock_api.execute_sql.return_value = mock_result
-        mock_api.caller = "agent"
-        mock_get_metabase.return_value = mock_api
-
-        with patch.dict("os.environ", {"AUTOMETA_CONVERSATION_ID": "env-conv-123"}):
-            result = execute_metabase_query(
-                instance="stats",
-                caller=CallerType.AGENT,
-                sql="SELECT 1",
-                database_id=2,
-            )
-
-        assert result.success is True
-
-
 # --- Integration tests ---
 
 

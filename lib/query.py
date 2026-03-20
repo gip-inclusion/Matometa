@@ -24,7 +24,6 @@ Usage:
     visits = api.get_visits(site_id=117, period="month", date="2025-12-01")
 """
 
-import os
 import time
 from dataclasses import dataclass
 from enum import Enum
@@ -57,7 +56,6 @@ class QueryResult:
 def execute_metabase_query(
     instance: str,
     caller: CallerType,
-    conversation_id: Optional[str] = None,
     sql: Optional[str] = None,
     database_id: Optional[int] = None,
     card_id: Optional[int] = None,
@@ -68,14 +66,7 @@ def execute_metabase_query(
 
     Either sql+database_id or card_id must be provided.
     Returns QueryResult (never raises).
-
-    conversation_id is read from AUTOMETA_CONVERSATION_ID env var if not
-    provided.  It is propagated by the web backends so that agent scripts
-    can correlate their work with a conversation.
     """
-    if conversation_id is None:
-        conversation_id = os.environ.get("AUTOMETA_CONVERSATION_ID")
-
     start_time = time.time()
 
     try:
@@ -112,7 +103,6 @@ def execute_metabase_query(
 def execute_matomo_query(
     instance: str,
     caller: CallerType,
-    conversation_id: Optional[str] = None,
     method: str = "",
     params: Optional[dict] = None,
     timeout: int = 180,
@@ -120,13 +110,7 @@ def execute_matomo_query(
     """
     Execute a Matomo API query with logging.
     Returns QueryResult (never raises).
-
-    conversation_id is read from AUTOMETA_CONVERSATION_ID env var if not
-    provided.
     """
-    if conversation_id is None:
-        conversation_id = os.environ.get("AUTOMETA_CONVERSATION_ID")
-
     start_time = time.time()
     params = params or {}
 
@@ -150,7 +134,6 @@ def execute_query(
     source: str,
     instance: str,
     caller: CallerType,
-    conversation_id: Optional[str] = None,
     # Metabase params
     sql: Optional[str] = None,
     database_id: Optional[int] = None,
@@ -168,7 +151,6 @@ def execute_query(
         source: "metabase" or "matomo"
         instance: Instance name (e.g., "stats", "datalake", "inclusion")
         caller: CallerType.AGENT or CallerType.APP
-        conversation_id: Conversation context (auto-read from AUTOMETA_CONVERSATION_ID)
 
         # For Metabase:
         sql: SQL query string
@@ -188,7 +170,6 @@ def execute_query(
         return execute_metabase_query(
             instance=instance,
             caller=caller,
-            conversation_id=conversation_id,
             sql=sql,
             database_id=database_id,
             card_id=card_id,
@@ -198,7 +179,6 @@ def execute_query(
         return execute_matomo_query(
             instance=instance,
             caller=caller,
-            conversation_id=conversation_id,
             method=method or "",
             params=params,
             timeout=timeout,

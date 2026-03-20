@@ -15,7 +15,6 @@ class TestCLIBackendHooks:
 
         assert "ANTHROPIC_API_KEY" not in env
         assert env["HOME"] == "/x"
-        assert env["AUTOMETA_CONVERSATION_ID"] == "conv-1"
 
     def test_extra_cmd_args_empty(self):
         from web.agents.cli import CLIBackend
