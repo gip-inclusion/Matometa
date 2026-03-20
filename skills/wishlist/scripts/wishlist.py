@@ -98,7 +98,7 @@ def push_to_notion(title: str, category: str, description: str = None) -> str | 
             if resp.status == 200:
                 data = json.loads(resp.read().decode("utf-8"))
                 page_id = data.get("id")
-                print(f"  → Synced to Notion")
+                print("  → Synced to Notion")
                 return page_id
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8")[:100]
@@ -122,7 +122,7 @@ def add_wish(category: str, title: str, description: str = None, conversation_id
     conn.execute(
         """INSERT INTO wishlist (timestamp, category, title, description, conversation_id, notion_page_id)
            VALUES (?, ?, ?, ?, ?, ?)""",
-        (datetime.now().isoformat(), category, title, description, conversation_id, notion_page_id)
+        (datetime.now().isoformat(), category, title, description, conversation_id, notion_page_id),
     )
     conn.commit()
 
@@ -175,10 +175,7 @@ def list_wishes(category: str = None, status: str = "open", limit: int = 20):
 def update_status(wish_id: int, status: str):
     """Update wish status (open, done, wontfix)."""
     conn = sqlite3.connect(DB_PATH)
-    conn.execute(
-        "UPDATE wishlist SET status = ? WHERE id = ?",
-        (status, wish_id)
-    )
+    conn.execute("UPDATE wishlist SET status = ? WHERE id = ?", (status, wish_id))
     conn.commit()
     conn.close()
     print(f"Updated wish #{wish_id} to status: {status}")
@@ -192,9 +189,7 @@ def sync_to_notion():
 
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        "SELECT * FROM wishlist WHERE notion_page_id IS NULL ORDER BY timestamp"
-    ).fetchall()
+    rows = conn.execute("SELECT * FROM wishlist WHERE notion_page_id IS NULL ORDER BY timestamp").fetchall()
 
     if not rows:
         print("All wishes already synced to Notion.")
@@ -205,10 +200,7 @@ def sync_to_notion():
     for row in rows:
         page_id = push_to_notion(row["title"], row["category"], row["description"])
         if page_id:
-            conn.execute(
-                "UPDATE wishlist SET notion_page_id = ? WHERE id = ?",
-                (page_id, row["id"])
-            )
+            conn.execute("UPDATE wishlist SET notion_page_id = ? WHERE id = ?", (page_id, row["id"]))
             conn.commit()
             synced += 1
             print(f"  #{row['id']}: {row['title']}")
