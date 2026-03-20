@@ -24,7 +24,6 @@ class CLIBackend(AgentBackend):
     def _build_env(self, conversation_id: str) -> dict:
         """Build subprocess environment. Override in subclasses."""
         env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
-        env["MATOMETA_CONVERSATION_ID"] = conversation_id
         return env
 
     def _extra_cmd_args(self) -> list[str]:

@@ -1,6 +1,6 @@
 """Detect failure markers in assistant messages.
 
-Identifies messages where Matometa likely made an error, correction,
+Identifies messages where Autometa likely made an error, correction,
 or omission — based on keyword matching in the assistant's own text.
 """
 

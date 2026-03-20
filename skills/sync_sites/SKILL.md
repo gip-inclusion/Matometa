@@ -118,7 +118,7 @@ When documenting events, search for these patterns in codebases:
 Run every Monday morning:
 ```bash
 # Cron entry
-0 8 * * 1 cd /path/to/Matometa && python -m skills.sync_sites.scripts.sync_sites
+0 8 * * 1 cd /path/to/Autometa && python -m skills.sync_sites.scripts.sync_sites
 ```
 
 Or via launchd on macOS.

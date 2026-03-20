@@ -1,8 +1,8 @@
 services:
-  matometa:
+  autometa:
     build: .
     restart: always
-    hostname: matometa
+    hostname: autometa
     init: true  # Use tini to reap zombie processes from Claude CLI tool calls
     # Container hardening
     security_opt:
@@ -23,7 +23,7 @@ services:
       # Persist SQLite database
       - ./data:/app/data
       # Persist Claude credentials between deploys
-      - ./claude-credentials:/home/matometa/.claude
+      - ./claude-credentials:/home/autometa/.claude
       # Stable machine identity for OAuth fingerprinting
       - /etc/machine-id:/etc/machine-id:ro
       # Mount knowledge files (read-only)

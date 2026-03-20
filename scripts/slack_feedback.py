@@ -29,7 +29,7 @@ EXCLUDED_EMAILS = {"admin@localhost", ""}
 
 SLACK_MESSAGE = (
     ":wave: Bonjour !\n\n"
-    "Vous avez utilisé *Matometa* cette semaine — merci !\n"
+    "Vous avez utilisé *Autometa* cette semaine — merci !\n"
     "Pourriez-vous prendre 2 minutes pour nous faire un retour ?\n\n"
     ":point_right: <{tally_url}|Donner mon feedback>\n\n"
     "Vos retours nous aident à améliorer l'outil. Merci :pray:"

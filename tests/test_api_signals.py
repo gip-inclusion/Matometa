@@ -28,7 +28,7 @@ class TestEmitApiSignal:
         sys.stdout = old_stdout
         output = captured.getvalue()
 
-        assert "[MATOMETA:API:" in output
+        assert "[AUTOMETA:API:" in output
         assert '"source": "matomo"' in output
         assert '"instance": "inclusion"' in output
         assert '"method": "VisitsSummary.get"' in output
@@ -49,7 +49,7 @@ class TestEmitApiSignal:
         sys.stdout = old_stdout
         output = captured.getvalue()
 
-        assert "[MATOMETA:API:" in output
+        assert "[AUTOMETA:API:" in output
         assert '"source": "metabase"' in output
         assert '"sql":' in output
 
@@ -95,7 +95,7 @@ class TestParseApiSignals:
     """Tests for parse_api_signals function."""
 
     def test_parses_single_signal(self):
-        content = '[MATOMETA:API:{"source":"matomo","instance":"inclusion","url":"https://..."}]'
+        content = '[AUTOMETA:API:{"source":"matomo","instance":"inclusion","url":"https://..."}]'
         signals = parse_api_signals(content)
 
         assert len(signals) == 1
@@ -104,9 +104,9 @@ class TestParseApiSignals:
 
     def test_parses_multiple_signals(self):
         content = """
-        [MATOMETA:API:{"source":"matomo","instance":"inclusion","url":"https://matomo..."}]
+        [AUTOMETA:API:{"source":"matomo","instance":"inclusion","url":"https://matomo..."}]
         Some output here
-        [MATOMETA:API:{"source":"metabase","instance":"stats","url":"https://metabase..."}]
+        [AUTOMETA:API:{"source":"metabase","instance":"stats","url":"https://metabase..."}]
         More output
         """
         signals = parse_api_signals(content)
@@ -118,7 +118,7 @@ class TestParseApiSignals:
     def test_parses_signal_mixed_with_output(self):
         content = """
         Starting analysis...
-        [MATOMETA:API:{"source":"matomo","method":"VisitsSummary.get","url":"https://..."}]
+        [AUTOMETA:API:{"source":"matomo","method":"VisitsSummary.get","url":"https://..."}]
         Visits: 1,234
         Unique visitors: 567
         Done.
@@ -135,7 +135,7 @@ class TestParseApiSignals:
         assert signals == []
 
     def test_ignores_malformed_json(self):
-        content = '[MATOMETA:API:{"invalid json}] [MATOMETA:API:{"source":"matomo","url":"x"}]'
+        content = '[AUTOMETA:API:{"invalid json}] [AUTOMETA:API:{"source":"matomo","url":"x"}]'
         signals = parse_api_signals(content)
 
         # Should parse the valid one, skip the invalid
@@ -146,7 +146,7 @@ class TestParseApiSignals:
         # The signal should be found even when there's other JSON in the output
         content = """
         Result: {"data": [1, 2, 3]}
-        [MATOMETA:API:{"source":"matomo","url":"https://..."}]
+        [AUTOMETA:API:{"source":"matomo","url":"https://..."}]
         More data: {"count": 100}
         """
         signals = parse_api_signals(content)
@@ -159,22 +159,22 @@ class TestStripApiSignals:
     """Tests for strip_api_signals function."""
 
     def test_strips_single_signal(self):
-        content = '[MATOMETA:API:{"source":"matomo","url":"x"}] Hello'
+        content = '[AUTOMETA:API:{"source":"matomo","url":"x"}] Hello'
         result = strip_api_signals(content)
 
-        assert "[MATOMETA:API:" not in result
+        assert "[AUTOMETA:API:" not in result
         assert "Hello" in result
 
     def test_strips_multiple_signals(self):
         content = """
-        [MATOMETA:API:{"source":"matomo","url":"x"}]
+        [AUTOMETA:API:{"source":"matomo","url":"x"}]
         Output line 1
-        [MATOMETA:API:{"source":"metabase","url":"y"}]
+        [AUTOMETA:API:{"source":"metabase","url":"y"}]
         Output line 2
         """
         result = strip_api_signals(content)
 
-        assert "[MATOMETA:API:" not in result
+        assert "[AUTOMETA:API:" not in result
         assert "Output line 1" in result
         assert "Output line 2" in result
 
@@ -189,21 +189,21 @@ class TestSignalPattern:
     """Tests for the regex pattern itself."""
 
     def test_matches_minimal_signal(self):
-        text = "[MATOMETA:API:{}]"
+        text = "[AUTOMETA:API:{}]"
         match = SIGNAL_PATTERN.search(text)
         assert match is not None
 
     def test_matches_with_content(self):
-        text = '[MATOMETA:API:{"key":"value"}]'
+        text = '[AUTOMETA:API:{"key":"value"}]'
         match = SIGNAL_PATTERN.search(text)
         assert match is not None
         assert match.group(1) == '{"key":"value"}'
 
     def test_does_not_match_partial(self):
         # Should not match incomplete patterns
-        assert SIGNAL_PATTERN.search("[MATOMETA:API:") is None
-        assert SIGNAL_PATTERN.search("MATOMETA:API:{}") is None
-        assert SIGNAL_PATTERN.search("[MATOMETA:{}]") is None
+        assert SIGNAL_PATTERN.search("[AUTOMETA:API:") is None
+        assert SIGNAL_PATTERN.search("AUTOMETA:API:{}") is None
+        assert SIGNAL_PATTERN.search("[AUTOMETA:{}]") is None
 
 
 class TestRoundTrip:

@@ -1,4 +1,4 @@
-# Matometa - Analytics assistant web app
+# Autometa - Analytics assistant web app
 
 FROM python:3.11-slim
 
@@ -21,7 +21,7 @@ RUN freshclam --no-dns || echo "Warning: Could not update ClamAV definitions dur
 RUN npm install -g @anthropic-ai/claude-code
 
 # Create non-root user (UID 1004 to match host for volume permissions)
-RUN useradd -m -s /bin/bash -u 1004 matometa
+RUN useradd -m -s /bin/bash -u 1004 autometa
 
 # Set up app directory
 WORKDIR /app
@@ -45,14 +45,14 @@ RUN uv export --frozen --group embeddings --no-hashes | \
     uv pip install --no-cache -r -
 
 # Copy application code
-COPY --chown=matometa:matometa . .
+COPY --chown=autometa:autometa . .
 
 # Create data directories for SQLite, uploads, and modified files
 RUN mkdir -p /app/data /app/data/uploads /app/data/modified \
-    && chown matometa:matometa /app/data /app/data/uploads /app/data/modified
+    && chown autometa:autometa /app/data /app/data/uploads /app/data/modified
 
 # Switch to non-root user
-USER matometa
+USER autometa
 
 # Environment variables
 ENV AGENT_BACKEND=sdk \

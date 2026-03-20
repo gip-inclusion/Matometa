@@ -1,11 +1,11 @@
-"""Configuration for the Matometa web application."""
+"""Configuration for the Autometa web application."""
 
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Base directory (Matometa project root)
+# Base directory (Autometa project root)
 BASE_DIR = Path(__file__).parent.parent.resolve()
 
 load_dotenv(BASE_DIR / ".env")
@@ -59,7 +59,7 @@ HOST = os.getenv("WEB_HOST", "127.0.0.1")
 PORT = int(os.getenv("WEB_PORT", "5000"))
 DEBUG = os.getenv("WEB_DEBUG", "false").lower() == "true"
 
-# Base URL for generating absolute links (e.g. BASE_URL=https://matometa.ljt.cc/)
+# Base URL for generating absolute links
 # Only needed when sharing links outside the app; prefer relative URLs otherwise.
 BASE_URL = os.getenv("BASE_URL", "").rstrip("/")
 

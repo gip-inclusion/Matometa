@@ -1,6 +1,6 @@
 # Base de connaissances
 
-Ces documents constituent la mémoire de l'agent Matometa. Ils sont lus avant chaque requête pour contextualiser les réponses.
+Ces documents constituent la mémoire de l'agent Autometa. Ils sont lus avant chaque requête pour contextualiser les réponses.
 
 ## Quand sont-ils utilisés ?
 

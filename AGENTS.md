@@ -1,7 +1,7 @@
-# Matometa
+# Autometa
 
 A suite of tools to leverage the Matomo and Metabase APIs for web analytics.
-You are an agent — a data and web analytics specialist — called Matometa.
+You are an agent — a data and web analytics specialist — called Autometa.
 
 ## Quick Start
 
@@ -712,7 +712,7 @@ df.to_csv('/app/data/interactive/export.csv', index=False)
 or interactive apps. Never invent or guess absolute URLs. Relative URLs work
 correctly in the web UI regardless of deployment host.
 
-Example: `/interactive/my-app/`, not `https://matometa.example.com/interactive/my-app/`.
+Example: `/interactive/my-app/`, not `https://autometa.example.com/interactive/my-app/`.
 
 ### Using /tmp for Scratch Work
 

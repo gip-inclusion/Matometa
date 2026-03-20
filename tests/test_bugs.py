@@ -170,7 +170,7 @@ class TestApiSignalCardIdZero:
             )
 
         output = captured.getvalue()
-        signal = json.loads(output.split("MATOMETA:API:")[1].rstrip("]\n"))
+        signal = json.loads(output.split("AUTOMETA:API:")[1].rstrip("]\n"))
         assert "card_id" in signal
         assert signal["card_id"] == 0
 

@@ -1,5 +1,5 @@
 """
-Pytest configuration for Matometa tests.
+Pytest configuration for Autometa tests.
 
 Configure test parameters here or via environment variables.
 """

@@ -73,7 +73,7 @@ Propriétés :
 - `Fonction` (title)
 - `Catégorie` (select) : permission, tool, knowledge, skill, workflow, other
 - `Statut` (status) : "En attente" par défaut
-- `Source` (rich_text) : "Matometa"
+- `Source` (rich_text) : "Autometa"
 - `Description` (rich_text, optionnel)
 
 ### 3. Corpus — Synchronisation de la recherche terrain

@@ -9,7 +9,7 @@ This module defines the signal protocol:
 - Signals are stored as metadata for the UI to display
 
 Signal format:
-    [MATOMETA:API:{"source":"matomo","instance":"inclusion","method":"VisitsSummary.get","url":"https://..."}]
+    [AUTOMETA:API:{"source":"matomo","instance":"inclusion","method":"VisitsSummary.get","url":"https://..."}]
 
 The bracketed format avoids conflicts with JSON output from the APIs.
 """
@@ -19,8 +19,8 @@ import re
 import sys
 from typing import Optional
 
-# Signal pattern for parsing
-SIGNAL_PATTERN = re.compile(r"\[MATOMETA:API:({.*?})\]")
+# Signal pattern for parsing — accepts both legacy MATOMETA and current AUTOMETA prefix
+SIGNAL_PATTERN = re.compile(r"\[(?:AUTOMETA|MATOMETA):API:({.*?})\]")
 
 
 def emit_api_signal(
@@ -56,7 +56,7 @@ def emit_api_signal(
         signal["card_id"] = card_id
 
     # Print to stdout (will be captured in tool_result)
-    print(f"[MATOMETA:API:{json.dumps(signal)}]", file=sys.stdout, flush=True)
+    print(f"[AUTOMETA:API:{json.dumps(signal)}]", file=sys.stdout, flush=True)
 
 
 def parse_api_signals(content: str) -> list[dict]:

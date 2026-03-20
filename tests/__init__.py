@@ -1,1 +1,1 @@
-"""Matometa tests."""
+"""Autometa tests."""

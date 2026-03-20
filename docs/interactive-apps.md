@@ -619,7 +619,7 @@ python -m web.cron --dry-run    # show what would run
 
 On the current VM, set up a system crontab entry:
 ```
-0 6 * * * cd /path/to/matometa && .venv/bin/python -m web.cron
+0 6 * * * cd /path/to/autometa && .venv/bin/python -m web.cron
 ```
 
 ### Constraints
@@ -676,7 +676,7 @@ and CREATE TABLE all work.
 
 ### The `matometa` Schema
 
-All Matometa tables live in a dedicated `matometa` schema on the datalake,
+All Autometa tables live in a dedicated `matometa` schema on the datalake,
 keeping them separate from the main datalake tables in `public`.
 
 The schema already exists. If you need to verify:

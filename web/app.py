@@ -1,4 +1,4 @@
-"""Matometa web application - FastAPI server with SSE streaming."""
+"""Autometa web application - FastAPI server with SSE streaming."""
 
 import asyncio
 import logging
@@ -162,7 +162,7 @@ def main():
     """Run the development server."""
     import uvicorn
 
-    print(f"Starting Matometa web server at http://{config.HOST}:{config.PORT}")
+    print(f"Starting Autometa web server at http://{config.HOST}:{config.PORT}")
     print(f"Agent backend: {config.AGENT_BACKEND}")
     print(f"Working directory: {config.BASE_DIR}")
 

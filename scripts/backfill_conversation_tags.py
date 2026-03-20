@@ -57,7 +57,7 @@ TAG_TAXONOMY = """
 - extraction: Extraction de données brutes
 - analyse: Analyse / rapport
 - appli: Application interactive
-- meta: Question sur Matometa lui-même
+- meta: Question sur Autometa lui-même
 """
 
 VALID_TAGS = {
@@ -150,7 +150,7 @@ Règles:
 - OBLIGATOIRE: exactement 1 tag type_demande
 - OPTIONNEL: 0 à 2 tags thème (acteurs, concepts, métriques)
 - Si la demande mentionne plusieurs produits, utilise "multi"
-- Si c'est une question sur l'outil Matometa, utilise "meta"
+- Si c'est une question sur l'outil Autometa, utilise "meta"
 
 Demande: {message[:1000]}
 

@@ -13,7 +13,6 @@ class TestCLIOllamaBackendEnv:
         assert env["ANTHROPIC_BASE_URL"] == "http://localhost:11434"
         assert env["ANTHROPIC_AUTH_TOKEN"] == "ollama"
         assert env["ANTHROPIC_API_KEY"] == ""
-        assert env["MATOMETA_CONVERSATION_ID"] == "conv-123"
 
     def test_build_env_respects_custom_ollama_url(self):
         from web.agents.cli_ollama import CLIOllamaBackend

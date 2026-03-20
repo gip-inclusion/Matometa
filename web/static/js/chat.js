@@ -1,5 +1,5 @@
 /**
- * Matometa Chat Interface
+ * Autometa Chat Interface
  * Init, uploads, auth, htmx event wiring.
  * Depends on: utils.js, actions.js, render.js, stream.js
  */

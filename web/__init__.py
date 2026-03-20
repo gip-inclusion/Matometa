@@ -1,1 +1,1 @@
-"""Matometa web application."""
+"""Autometa web application."""

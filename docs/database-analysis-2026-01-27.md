@@ -1,4 +1,4 @@
-# Analyse de la base de données Matometa — Janvier 2026
+# Analyse de la base de données Autometa — Janvier 2026
 
 **Date d'analyse :** 27 janvier 2026
 **Période couverte :** 7 janvier — 27 janvier 2026

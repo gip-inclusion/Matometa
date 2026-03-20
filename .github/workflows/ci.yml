@@ -91,4 +91,4 @@ jobs:
 
       # Verify the image builds (no push)
       - name: Build
-        run: docker build . --tag matometa:ci
+        run: docker build . --tag autometa:ci

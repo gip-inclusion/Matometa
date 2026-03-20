@@ -1,8 +1,8 @@
-# Matometa
+# Autometa
 
 Assistant IA pour l'analyse des données métier de la Plateforme de l'inclusion.
 
-Matometa combine les APIs **Matomo** (analytics web) et **Metabase** (données métier) pour répondre aux questions sur l'usage des services numériques de la Plateforme.
+Autometa combine les APIs **Matomo** (analytics web) et **Metabase** (données métier) pour répondre aux questions sur l'usage des services numériques de la Plateforme.
 
 ## Fonctionnalités
 

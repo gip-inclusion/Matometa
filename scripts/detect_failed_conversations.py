@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Detect conversations where Matometa likely failed (errors, corrections, omissions).
+"""Detect conversations where Autometa likely failed (errors, corrections, omissions).
 
 Scans assistant messages for failure markers. Useful for manual/batch review.
 Real-time detection is handled by web/pm.py on each assistant response.

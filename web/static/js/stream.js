@@ -511,7 +511,7 @@ function showLoading() {
   const loading = document.createElement('div');
   loading.className = 'loading-indicator';
   loading.id = 'loadingIndicator';
-  loading.innerHTML = '<div class="spinner"></div> Matometa réfléchit…';
+  loading.innerHTML = '<div class="spinner"></div> Autometa réfléchit…';
 
   chatOutput.appendChild(loading);
 
