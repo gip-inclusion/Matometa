@@ -1,12 +1,4 @@
-"""
-Matomo API client.
-
-Usage:
-    from lib.query import MatomoAPI
-
-    api = MatomoAPI(url="matomo.example.com", token="...")
-    summary = api.get_visits(site_id=117, period="month", date="2025-12-01")
-"""
+"""Matomo API client."""
 
 import logging
 import urllib.parse
@@ -195,44 +187,11 @@ class MatomoAPI:
             raise MatomoError(f"Request failed: {error_msg}")
 
     def request(self, method: str, timeout: int = 180, **params) -> Any:
-        """
-        Make a raw API request to any Matomo method.
-
-        Args:
-            method: Matomo API method (e.g., "Events.getName", "VisitsSummary.get")
-            timeout: Request timeout in seconds (default 180)
-            **params: Any parameters to pass to the API (idSite, period, date, etc.)
-
-        Returns:
-            API response (typically list or dict)
-        """
+        """Make a raw API request to any Matomo method."""
         return self._request(method, params, timeout)
 
     def post(self, method: str, timeout: int = 30, **params) -> Any:
-        """
-        Generic POST for any Tag Manager write operation.
-
-        Args:
-            method: Matomo API method (e.g., "TagManager.addContainerTrigger")
-            timeout: Request timeout in seconds (default 30, lower than GET)
-            **params: Parameters to pass (nested dicts/lists auto-flattened)
-
-        Returns:
-            API response (typically {"value": id} for creates)
-
-        Example:
-            >>> api.post("TagManager.addContainerTrigger",
-            ...     idSite=210,
-            ...     idContainer="xg8aydM9",
-            ...     idContainerVersion=420,
-            ...     type="AllElementsClick",
-            ...     name="My Trigger",
-            ...     conditions=[
-            ...         {"comparison": "contains", "actual": "ClickClasses", "expected": "btn"}
-            ...     ]
-            ... )
-            {'value': 13994}
-        """
+        """Generic POST for any Tag Manager write operation."""
         return self._request(method, params, timeout, http_method="POST")
 
     def get_api_url(self, method: str, params: dict) -> str:
@@ -260,18 +219,7 @@ class MatomoAPI:
         date: str,
         segment: Optional[str] = None,
     ) -> dict:
-        """
-        Get visit summary for a site.
-
-        Args:
-            site_id: Matomo site ID
-            period: day, week, month, or year
-            date: today, yesterday, YYYY-MM-DD, or lastN
-            segment: Optional segment filter
-
-        Returns:
-            Dict with nb_uniq_visitors, nb_visits, nb_actions, etc.
-        """
+        """Get visit summary for a site."""
         params = {"idSite": site_id, "period": period, "date": date}
         if segment:
             params["segment"] = segment
@@ -580,29 +528,7 @@ class MatomoAPI:
         return self._request("VisitFrequency.get", params)
 
     def _flatten_params(self, params: dict, prefix: str = "") -> dict:
-        """
-        Flatten nested dicts/lists to PHP array notation.
-
-        PHP array notation is required for POST requests to Matomo API.
-        Converts Python data structures to the format Matomo expects.
-
-        Args:
-            params: Parameters to flatten (can contain nested dicts/lists)
-            prefix: Internal - used for recursion to build key paths
-
-        Returns:
-            Flattened dict with PHP array notation keys
-
-        Examples:
-            >>> api._flatten_params({"customHtml": "<script></script>"})
-            {'customHtml': '<script></script>'}
-
-            >>> api._flatten_params({"parameters": {"customHtml": "..."}})
-            {'parameters[customHtml]': '...'}
-
-            >>> api._flatten_params({"conditions": [{"comparison": "equals"}]})
-            {'conditions[0][comparison]': 'equals'}
-        """
+        """Flatten nested dicts/lists to PHP array notation."""
         result = {}
         for key, value in params.items():
             new_key = f"{prefix}[{key}]" if prefix else key
@@ -626,39 +552,11 @@ class MatomoAPI:
     # --- Tag Manager: Container operations ---
 
     def get_container(self, site_id: int, container_id: str) -> dict:
-        """
-        Get container details including draft version and releases.
-
-        Args:
-            site_id: Matomo site ID
-            container_id: Container ID (e.g., "xg8aydM9")
-
-        Returns:
-            Container dict with draft and releases information
-
-        Example:
-            >>> container = api.get_container(site_id=210, container_id="xg8aydM9")
-            >>> draft_id = container["draft"]["idcontainerversion"]
-            >>> for rel in container["releases"]:
-            ...     print(f"{rel['environment']} → v{rel['idcontainerversion']}")
-        """
+        """Get container details including draft version and releases."""
         return self._request("TagManager.getContainer", {"idSite": site_id, "idContainer": container_id})
 
     def get_draft_version(self, site_id: int, container_id: str) -> int:
-        """
-        Get current draft version ID (convenience method).
-
-        Args:
-            site_id: Matomo site ID
-            container_id: Container ID
-
-        Returns:
-            Draft version ID (int)
-
-        Example:
-            >>> draft_id = api.get_draft_version(site_id=210, container_id="xg8aydM9")
-            >>> print(f"Draft version: {draft_id}")
-        """
+        """Get current draft version ID (convenience method)."""
         container = self.get_container(site_id, container_id)
         return container["draft"]["idcontainerversion"]
 
@@ -675,38 +573,7 @@ class MatomoAPI:
         description: str = "",
         **kwargs,
     ) -> int:
-        """
-        Add trigger to container version.
-
-        Args:
-            site_id: Matomo site ID
-            container_id: Container ID
-            version_id: Version ID (typically draft)
-            trigger_type: Type of trigger (validated against VALID_TRIGGER_TYPES)
-            name: Trigger name
-            conditions: List of condition dicts with comparison/actual/expected
-            description: Optional description
-            **kwargs: Additional parameters passed to API
-
-        Returns:
-            Trigger ID (int)
-
-        Raises:
-            ValueError: If trigger_type is invalid
-
-        Example:
-            >>> trigger_id = api.add_trigger(
-            ...     site_id=210,
-            ...     container_id="xg8aydM9",
-            ...     version_id=420,
-            ...     trigger_type="PageView",
-            ...     name="Service Page View",
-            ...     conditions=[
-            ...         {"comparison": "starts_with", "actual": "PageUrl",
-            ...          "expected": "/services/"}
-            ...     ]
-            ... )
-        """
+        """Add trigger to container version."""
         if trigger_type not in VALID_TRIGGER_TYPES:
             raise ValueError(
                 f"Invalid trigger_type '{trigger_type}'. Must be one of: {', '.join(sorted(VALID_TRIGGER_TYPES))}"
@@ -735,25 +602,7 @@ class MatomoAPI:
         trigger_id: int,
         **kwargs,
     ):
-        """
-        Update existing trigger.
-
-        Args:
-            site_id: Matomo site ID
-            container_id: Container ID
-            version_id: Version ID
-            trigger_id: Trigger ID to update
-            **kwargs: Fields to update (name, conditions, etc.)
-
-        Example:
-            >>> api.update_trigger(
-            ...     site_id=210,
-            ...     container_id="xg8aydM9",
-            ...     version_id=420,
-            ...     trigger_id=13994,
-            ...     name="Updated Trigger Name"
-            ... )
-        """
+        """Update existing trigger."""
         params = {
             "idSite": site_id,
             "idContainer": container_id,
@@ -770,27 +619,7 @@ class MatomoAPI:
         version_id: int,
         trigger_id: int,
     ):
-        """
-        Delete trigger from container version.
-
-        Args:
-            site_id: Matomo site ID
-            container_id: Container ID
-            version_id: Version ID
-            trigger_id: Trigger ID to delete
-
-        Note:
-            Deleting from draft doesn't remove from published versions.
-            Delete from both if needed.
-
-        Example:
-            >>> api.delete_trigger(
-            ...     site_id=210,
-            ...     container_id="xg8aydM9",
-            ...     version_id=420,
-            ...     trigger_id=13994
-            ... )
-        """
+        """Delete trigger from container version."""
         return self.post(
             "TagManager.deleteContainerTrigger",
             idSite=site_id,
@@ -816,41 +645,7 @@ class MatomoAPI:
         description: str = "",
         **kwargs,
     ) -> int:
-        """
-        Add tag to container version.
-
-        Args:
-            site_id: Matomo site ID
-            container_id: Container ID
-            version_id: Version ID (typically draft)
-            tag_type: Type of tag (validated against VALID_TAG_TYPES)
-            name: Tag name
-            parameters: Tag-specific parameters (e.g., customHtml, htmlPosition)
-            fire_trigger_ids: List of trigger IDs that fire this tag
-            fire_limit: How often tag fires (validated against VALID_FIRE_LIMITS)
-            status: Tag status (active or paused)
-            priority: Execution priority (999 = standard)
-            description: Optional description
-            **kwargs: Additional parameters (block_trigger_ids, etc.)
-
-        Returns:
-            Tag ID (int)
-
-        Raises:
-            ValueError: If tag_type, fire_limit, or htmlPosition (for CustomHtml) is invalid
-
-        Example:
-            >>> tag_id = api.add_tag(
-            ...     site_id=210,
-            ...     container_id="xg8aydM9",
-            ...     version_id=420,
-            ...     tag_type="CustomHtml",
-            ...     name="Tally Popup",
-            ...     parameters={"customHtml": "<script>...</script>", "htmlPosition": "bodyEnd"},
-            ...     fire_trigger_ids=[13994],
-            ...     fire_limit="once_24hours"
-            ... )
-        """
+        """Add tag to container version."""
         if tag_type not in VALID_TAG_TYPES:
             raise ValueError(f"Invalid tag_type '{tag_type}'. Must be one of: {', '.join(sorted(VALID_TAG_TYPES))}")
 
@@ -894,26 +689,7 @@ class MatomoAPI:
         tag_id: int,
         **kwargs,
     ):
-        """
-        Update existing tag.
-
-        Args:
-            site_id: Matomo site ID
-            container_id: Container ID
-            version_id: Version ID
-            tag_id: Tag ID to update
-            **kwargs: Fields to update (name, parameters, fire_trigger_ids, etc.)
-
-        Example:
-            >>> api.update_tag(
-            ...     site_id=210,
-            ...     container_id="xg8aydM9",
-            ...     version_id=420,
-            ...     tag_id=11149,
-            ...     name="Updated Tag Name",
-            ...     fire_limit="once_page"
-            ... )
-        """
+        """Update existing tag."""
         params = {
             "idSite": site_id,
             "idContainer": container_id,
@@ -930,21 +706,7 @@ class MatomoAPI:
         version_id: int,
         tag_id: int,
     ):
-        """
-        Delete tag from container version.
-
-        Args:
-            site_id: Matomo site ID
-            container_id: Container ID
-            version_id: Version ID
-            tag_id: Tag ID to delete
-
-        Note:
-            Deleting from draft doesn't remove from published versions.
-
-        Example:
-            >>> api.delete_tag(210, "xg8aydM9", 420, 11149)
-        """
+        """Delete tag from container version."""
         return self.post(
             "TagManager.deleteContainerTag",
             idSite=site_id,
@@ -960,18 +722,7 @@ class MatomoAPI:
         version_id: int,
         tag_id: int,
     ):
-        """
-        Pause tag (set status=paused).
-
-        Args:
-            site_id: Matomo site ID
-            container_id: Container ID
-            version_id: Version ID
-            tag_id: Tag ID to pause
-
-        Example:
-            >>> api.pause_tag(210, "xg8aydM9", 420, 11149)
-        """
+        """Pause tag (set status=paused)."""
         return self.post(
             "TagManager.pauseContainerTag",
             idSite=site_id,
@@ -987,18 +738,7 @@ class MatomoAPI:
         version_id: int,
         tag_id: int,
     ):
-        """
-        Resume tag (set status=active).
-
-        Args:
-            site_id: Matomo site ID
-            container_id: Container ID
-            version_id: Version ID
-            tag_id: Tag ID to resume
-
-        Example:
-            >>> api.resume_tag(210, "xg8aydM9", 420, 11149)
-        """
+        """Resume tag (set status=active)."""
         return self.post(
             "TagManager.resumeContainerTag",
             idSite=site_id,
@@ -1016,29 +756,7 @@ class MatomoAPI:
         version_id: int,
         environment: str,
     ):
-        """
-        Publish container version to environment.
-
-        Creates a new numbered version from the draft and deploys it.
-        Note: IDs of triggers/tags change in the published version.
-
-        Args:
-            site_id: Matomo site ID
-            container_id: Container ID
-            version_id: Version ID to publish (typically draft)
-            environment: Target environment (validated against VALID_ENVIRONMENTS)
-
-        Raises:
-            ValueError: If environment is invalid
-
-        Example:
-            >>> api.publish_version(
-            ...     site_id=210,
-            ...     container_id="xg8aydM9",
-            ...     version_id=420,
-            ...     environment="live"
-            ... )
-        """
+        """Publish container version to environment."""
         if environment not in VALID_ENVIRONMENTS:
             raise ValueError(
                 f"Invalid environment '{environment}'. Must be one of: {', '.join(sorted(VALID_ENVIRONMENTS))}"
@@ -1058,36 +776,14 @@ class MatomoAPI:
         container_id: str,
         version_id: Optional[int] = None,
     ):
-        """
-        Enable preview mode for testing draft without publishing.
-
-        Sets a cookie in the browser to load draft version.
-
-        Args:
-            site_id: Matomo site ID
-            container_id: Container ID
-            version_id: Optional version to preview (defaults to current draft)
-
-        Example:
-            >>> api.enable_preview(site_id=210, container_id="xg8aydM9")
-            >>> # Now visit the site in your browser to test
-        """
+        """Enable preview mode for testing draft without publishing."""
         params = {"idSite": site_id, "idContainer": container_id}
         if version_id is not None:
             params["idContainerVersion"] = version_id
         return self.post("TagManager.enablePreviewMode", **params)
 
     def disable_preview(self, site_id: int, container_id: str):
-        """
-        Disable preview mode.
-
-        Args:
-            site_id: Matomo site ID
-            container_id: Container ID
-
-        Example:
-            >>> api.disable_preview(site_id=210, container_id="xg8aydM9")
-        """
+        """Disable preview mode."""
         return self.post(
             "TagManager.disablePreviewMode",
             idSite=site_id,
@@ -1100,23 +796,7 @@ class MatomoAPI:
         container_id: str,
         version_id: int,
     ) -> dict:
-        """
-        Export container version (for debugging/analysis).
-
-        Returns full container data including all triggers, tags, variables.
-
-        Args:
-            site_id: Matomo site ID
-            container_id: Container ID
-            version_id: Version ID to export
-
-        Returns:
-            Dict with triggers, tags, variables lists
-
-        Example:
-            >>> data = api.export_version(210, "xg8aydM9", 972)
-            >>> print(f"Found {len(data['triggers'])} triggers")
-        """
+        """Export container version (for debugging/analysis)."""
         return self._request(
             "TagManager.exportContainerVersion",
             {"idSite": site_id, "idContainer": container_id, "idContainerVersion": version_id},
