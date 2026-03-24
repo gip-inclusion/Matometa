@@ -75,7 +75,7 @@ class TestRapportTxtExport:
 
     def test_txt_endpoint_utf8_encoding(self, app, client):
         """GET /rapports/<id>.txt handles UTF-8 content correctly."""
-        from web.storage import store
+        from web.database import store
 
         report = store.create_report(
             title="Rapport avec accents",

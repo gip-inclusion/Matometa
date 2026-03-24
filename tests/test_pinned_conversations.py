@@ -44,7 +44,7 @@ class TestPinAPI:
         assert resp.status_code == 403
 
     def test_admin_can_unpin(self, app, client, conversation):
-        from web.storage import store
+        from web.database import store
 
         store.pin_conversation(conversation.id, "Pinned")
 
@@ -55,7 +55,7 @@ class TestPinAPI:
         assert resp.status_code == 200
 
     def test_non_admin_cannot_unpin(self, app, client, conversation):
-        from web.storage import store
+        from web.database import store
 
         store.pin_conversation(conversation.id, "Pinned")
 
@@ -87,7 +87,7 @@ class TestPinDatabase:
     """Test the pin/unpin store methods."""
 
     def test_pin_and_list(self, app, conversation):
-        from web.storage import store
+        from web.database import store
 
         store.pin_conversation(conversation.id, "My label")
         pinned = store.list_pinned_conversations()
@@ -97,7 +97,7 @@ class TestPinDatabase:
         assert pinned[0].pinned_at is not None
 
     def test_unpin(self, app, conversation):
-        from web.storage import store
+        from web.database import store
 
         store.pin_conversation(conversation.id, "Label")
         store.unpin_conversation(conversation.id)
@@ -105,7 +105,7 @@ class TestPinDatabase:
         assert len(pinned) == 0
 
     def test_multiple_pins(self, app):
-        from web.storage import store
+        from web.database import store
 
         c1 = store.create_conversation(user_id="a@b.com")
         c2 = store.create_conversation(user_id="a@b.com")
@@ -117,7 +117,7 @@ class TestPinDatabase:
         assert pinned[1].pinned_label == "Second"
 
     def test_pinned_at_in_get_conversation(self, app, conversation):
-        from web.storage import store
+        from web.database import store
 
         store.pin_conversation(conversation.id, "Label")
         conv = store.get_conversation(conversation.id, include_messages=False)
@@ -125,7 +125,7 @@ class TestPinDatabase:
         assert conv.pinned_label == "Label"
 
     def test_unpinned_conversation_has_none(self, app, conversation):
-        from web.storage import store
+        from web.database import store
 
         conv = store.get_conversation(conversation.id, include_messages=False)
         assert conv.pinned_at is None
@@ -136,7 +136,7 @@ class TestPinInSidebar:
     """Test that pinned conversations appear in the sidebar."""
 
     def test_pinned_visible_on_home(self, app, client, conversation):
-        from web.storage import store
+        from web.database import store
 
         store.pin_conversation(conversation.id, "Bonnes pratiques")
 
@@ -176,7 +176,7 @@ class TestPinInSidebar:
         assert b'id="unpinConvBtn"' not in resp.content
 
     def test_admin_sees_unpin_on_pinned(self, app, client, conversation):
-        from web.storage import store
+        from web.database import store
 
         store.pin_conversation(conversation.id, "Test")
 

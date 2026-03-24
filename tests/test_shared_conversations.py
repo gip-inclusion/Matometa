@@ -217,7 +217,7 @@ class TestRelaunchConversation:
 
     def test_relaunch_api_denied_if_already_running(self, app, guest_client, stuck_conversation):
         """Cannot relaunch if conversation is already running."""
-        from web.storage import store
+        from web.database import store
 
         store.update_conversation(stuck_conversation.id, needs_response=True)
         response = guest_client.post(

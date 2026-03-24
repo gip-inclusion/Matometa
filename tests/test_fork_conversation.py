@@ -25,7 +25,7 @@ class TestForkConversationDatabase:
 
     def test_fork_creates_new_conversation(self, app, conversation_with_messages):
         """Forking creates a new conversation with a new ID."""
-        from web.storage import store
+        from web.database import store
 
         forked = store.fork_conversation(conversation_with_messages.id, "forker@example.com")
 
@@ -35,7 +35,7 @@ class TestForkConversationDatabase:
 
     def test_fork_copies_title(self, app, conversation_with_messages):
         """Forked conversation has the same title."""
-        from web.storage import store
+        from web.database import store
 
         forked = store.fork_conversation(conversation_with_messages.id, "forker@example.com")
 
@@ -43,7 +43,7 @@ class TestForkConversationDatabase:
 
     def test_fork_copies_all_messages(self, app, conversation_with_messages):
         """Forked conversation has copies of all messages."""
-        from web.storage import store
+        from web.database import store
 
         forked = store.fork_conversation(conversation_with_messages.id, "forker@example.com")
 
@@ -55,7 +55,7 @@ class TestForkConversationDatabase:
 
     def test_fork_messages_have_new_ids(self, app, conversation_with_messages):
         """Forked messages have different IDs (deep copy, not reference)."""
-        from web.storage import store
+        from web.database import store
 
         original = store.get_conversation(conversation_with_messages.id)
         forked = store.fork_conversation(conversation_with_messages.id, "forker@example.com")
@@ -67,7 +67,7 @@ class TestForkConversationDatabase:
 
     def test_fork_tracks_source(self, app, conversation_with_messages):
         """Forked conversation tracks its source via forked_from."""
-        from web.storage import store
+        from web.database import store
 
         forked = store.fork_conversation(conversation_with_messages.id, "forker@example.com")
 
@@ -75,7 +75,7 @@ class TestForkConversationDatabase:
 
     def test_fork_resets_session_id(self, app, conversation_with_messages):
         """Forked conversation has no session_id (fresh start for agent)."""
-        from web.storage import store
+        from web.database import store
 
         # Set session_id on original
         store.update_conversation(conversation_with_messages.id, session_id="original-session")
@@ -86,7 +86,7 @@ class TestForkConversationDatabase:
 
     def test_fork_nonexistent_returns_none(self, app):
         """Forking a non-existent conversation returns None."""
-        from web.storage import store
+        from web.database import store
 
         result = store.fork_conversation("nonexistent-uuid", "forker@example.com")
 
@@ -94,7 +94,7 @@ class TestForkConversationDatabase:
 
     def test_original_unchanged_after_fork(self, app, conversation_with_messages):
         """Original conversation is unchanged after fork."""
-        from web.storage import store
+        from web.database import store
 
         # Fork it
         store.fork_conversation(conversation_with_messages.id, "forker@example.com")
@@ -107,7 +107,7 @@ class TestForkConversationDatabase:
 
     def test_modifying_fork_does_not_affect_original(self, app, conversation_with_messages):
         """Adding messages to fork does not affect original (no entanglement)."""
-        from web.storage import store
+        from web.database import store
 
         forked = store.fork_conversation(conversation_with_messages.id, "forker@example.com")
 
@@ -185,7 +185,7 @@ class TestForkConversationAPI:
         data = response.json()
 
         # Verify the fork belongs to the guest
-        from web.storage import store
+        from web.database import store
 
         forked = store.get_conversation(data["id"])
         assert forked.user_id == "guest@example.com"
@@ -228,7 +228,7 @@ class TestForkConversationUI:
 
     def test_forked_from_shown_in_header(self, app, client, conversation_with_messages):
         """Forked conversation shows link to source."""
-        from web.storage import store
+        from web.database import store
 
         # Create a fork
         forked = store.fork_conversation(conversation_with_messages.id, "forker@example.com")

@@ -6,8 +6,8 @@ from web.database import (
     VALID_CONVERSATION_COLUMNS,
     VALID_REPORT_COLUMNS,
     _build_update_clause,
+    store,
 )
-from web.storage import store
 
 
 class TestBuildUpdateClause:

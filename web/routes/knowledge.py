@@ -8,6 +8,7 @@ import markdown
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from ..database import store
 from ..deps import get_current_user
 from ..github import GitHubClient, GitHubError
 from ..helpers import (
@@ -16,7 +17,6 @@ from ..helpers import (
     list_staged_files,
     validate_knowledge_path,
 )
-from ..storage import store
 
 logger = logging.getLogger(__name__)
 

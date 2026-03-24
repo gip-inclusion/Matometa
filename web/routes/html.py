@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import RedirectResponse
 
 from ..config import ADMIN_USERS, DISPLAY_TIMEZONE, FEATURE_KNOWLEDGE_CHAT
+from ..database import store
 from ..deps import get_current_user, templates
 from ..helpers import (
     _validate_conv_id,
@@ -18,7 +19,6 @@ from ..helpers import (
     list_staged_files,
     validate_knowledge_path,
 )
-from ..storage import store
 
 logger = logging.getLogger(__name__)
 

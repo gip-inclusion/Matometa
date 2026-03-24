@@ -56,7 +56,7 @@ Fin du rapport.
 
 @pytest.fixture
 def report(app):
-    from web.storage import store
+    from web.database import store
 
     return store.create_report(
         title="Analyse des événements",
@@ -69,7 +69,7 @@ def report(app):
 
 @pytest.fixture
 def report_with_db_query(app):
-    from web.storage import store
+    from web.database import store
 
     return store.create_report(
         title="Test Report",

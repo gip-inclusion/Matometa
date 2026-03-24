@@ -10,8 +10,8 @@ from markupsafe import Markup
 
 from .. import config
 from ..config import ADMIN_USERS
+from ..database import store
 from ..deps import get_current_user, templates
-from ..storage import store
 from .html import get_sidebar_data
 
 router = APIRouter()

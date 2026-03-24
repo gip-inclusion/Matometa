@@ -19,9 +19,6 @@ def app():
     from web import database
 
     importlib.reload(database)
-    from web import storage
-
-    importlib.reload(storage)
 
     from web.app import app as fastapi_app
 
@@ -104,8 +101,8 @@ def _simulate_pm(conv_id, messages, delay=0.1):
 
     def _run():
         time.sleep(delay)
+        from web.database import store
         from web.signals import signals
-        from web.storage import store
 
         for msg_type, content in messages:
             store.add_message(
@@ -206,8 +203,8 @@ class TestRaceCondition:
         ``after=<user_msg_id>`` so the SSE handler starts streaming from
         the user message onward — catching anything the PM wrote in between.
         """
+        from web.database import store
         from web.signals import signals
-        from web.storage import store
 
         conv = store.create_conversation(user_id="test@example.com")
         user_msg = store.add_message(conv.id, "user", "Hello")
@@ -238,8 +235,8 @@ class TestRaceCondition:
         SSE handler connects.  The handler must still flush unseen messages
         before sending done.
         """
+        from web.database import store
         from web.signals import signals
-        from web.storage import store
 
         conv = store.create_conversation(user_id="test@example.com")
         user_msg = store.add_message(conv.id, "user", "Hello")
@@ -268,7 +265,7 @@ class TestNeedsResponse:
 
     def test_needs_response_false_returns_done(self, app, client):
         """Conversation with needs_response=False returns immediate done."""
-        from web.storage import store
+        from web.database import store
 
         conv = store.create_conversation(user_id="test@example.com")
         store.add_message(conv.id, "user", "Hello")
@@ -285,7 +282,7 @@ class TestNeedsResponse:
 
     def test_needs_response_true_streams_messages(self, app, client):
         """Conversation with needs_response=True streams PM messages."""
-        from web.storage import store
+        from web.database import store
 
         conv = store.create_conversation(user_id="test@example.com")
         store.add_message(conv.id, "user", "Hello")
@@ -303,7 +300,7 @@ class TestNeedsResponse:
 
     def test_update_conversation_clears_needs_response(self, app):
         """update_conversation(needs_response=False) works correctly."""
-        from web.storage import store
+        from web.database import store
 
         conv = store.create_conversation(user_id="test@example.com")
         store.add_message(conv.id, "user", "Hello")
@@ -330,7 +327,7 @@ class TestAppendMode:
     def test_ollama_append_concatenates_without_newline(self, app):
         """Ollama streaming: append=True → "".join (no newlines)."""
         from web.agents.base import AgentMessage
-        from web.storage import store
+        from web.database import store
 
         conv = store.create_conversation(user_id="test@example.com")
         store.add_message(conv.id, "user", "Hello")
@@ -361,7 +358,7 @@ class TestAppendMode:
     def test_cli_joins_with_newlines(self, app):
         """CLI backend: no append flag → "\\n".join."""
         from web.agents.base import AgentMessage
-        from web.storage import store
+        from web.database import store
 
         conv = store.create_conversation(user_id="test@example.com")
         store.add_message(conv.id, "user", "Hello")
@@ -393,7 +390,7 @@ class TestAssistantTextReset:
 
     def test_tool_use_creates_separate_assistant_messages(self, app):
         from web.agents.base import AgentMessage
-        from web.storage import store
+        from web.database import store
 
         conv = store.create_conversation(user_id="test@example.com")
         store.add_message(conv.id, "user", "Hello")
@@ -451,8 +448,8 @@ class TestClientDisconnect:
 
     def test_agent_survives_client_disconnect(self, app, conversation):
         """Agent must keep running after client disconnects mid-stream."""
+        from web.database import store
         from web.routes.conversations import stream_conversation
-        from web.storage import store
 
         # Insert a message so the SSE handler has something to stream
         store.add_message(conversation.id, "assistant", "Working on it...")

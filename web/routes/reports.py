@@ -9,8 +9,8 @@ from fastapi.responses import JSONResponse
 
 from .. import notion
 from ..config import ADMIN_USERS
+from ..database import store
 from ..deps import get_current_user
-from ..storage import store
 
 logger = logging.getLogger(__name__)
 

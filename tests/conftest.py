@@ -40,10 +40,6 @@ def app():
 
     importlib.reload(database)
 
-    from web import storage
-
-    importlib.reload(storage)
-
     from web.app import app as fastapi_app
 
     yield fastapi_app

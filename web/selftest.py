@@ -73,15 +73,15 @@ def _check_admin_users() -> tuple[bool, str]:
 
 
 def _check_process_manager() -> tuple[bool, str]:
-    from .storage import store
+    from .database import store
 
     alive = store.is_pm_alive(max_age_seconds=30)
     return (alive, "heartbeat OK" if alive else "no recent heartbeat")
 
 
 def _check_conversation_roundtrip() -> tuple[bool, str]:
+    from .database import store
     from .db import get_db
-    from .storage import store
 
     conv = store.create_conversation(user_id="selftest@localhost")
     store.add_message(conv.id, "user", "selftest ping")
