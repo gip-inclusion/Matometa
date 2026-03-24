@@ -2,7 +2,6 @@
 
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock
 
 from skills.sync_sites.scripts.sync_sites import (
     SITES,
@@ -19,15 +18,11 @@ from skills.sync_sites.scripts.sync_sites import (
 
 
 class TestSiteConfig:
-    """Test site configuration."""
-
     def test_sites_defined(self):
-        """All expected sites are defined."""
         expected = {"emplois", "pilotage", "communaute", "dora", "plateforme", "rdv-insertion", "mon-recap", "marche"}
         assert set(SITES.keys()) == expected
 
     def test_emplois_config(self):
-        """Emplois has correct configuration."""
         emplois = SITES["emplois"]
         assert emplois.matomo_id == 117
         assert emplois.user_kind_dimension == 1
@@ -35,8 +30,6 @@ class TestSiteConfig:
 
 
 class TestFormatNumber:
-    """Test number formatting."""
-
     def test_format_number_with_value(self):
         assert format_number(1234) == "1,234"
         assert format_number(0) == "0"
@@ -46,11 +39,8 @@ class TestFormatNumber:
 
 
 class TestFetchFunctions:
-    """Test data fetching functions."""
-
-    def test_fetch_custom_dimensions(self):
-        """Fetch dimensions returns structured data."""
-        mock_api = MagicMock()
+    def test_fetch_custom_dimensions(self, mocker):
+        mock_api = mocker.MagicMock()
         mock_api.get_configured_dimensions.return_value = [
             {"idcustomdimension": 1, "name": "UserKind", "scope": "visit", "active": True},
             {"idcustomdimension": 2, "name": "Unused", "scope": "visit", "active": False},
@@ -63,9 +53,8 @@ class TestFetchFunctions:
         assert result[0]["name"] == "UserKind"
         assert result[0]["active"] is True
 
-    def test_fetch_saved_segments(self):
-        """Fetch segments returns structured data."""
-        mock_api = MagicMock()
+    def test_fetch_saved_segments(self, mocker):
+        mock_api = mocker.MagicMock()
         mock_api._request.return_value = [
             {"name": "Candidats", "definition": "dimension1==job_seeker", "auto_archive": 1},
         ]
@@ -76,9 +65,8 @@ class TestFetchFunctions:
         assert result[0]["name"] == "Candidats"
         assert result[0]["definition"] == "dimension1==job_seeker"
 
-    def test_fetch_event_categories(self):
-        """Fetch events returns structured data."""
-        mock_api = MagicMock()
+    def test_fetch_event_categories(self, mocker):
+        mock_api = mocker.MagicMock()
         mock_api.get_event_categories.return_value = [
             {"label": "candidature", "nb_events": 490000, "nb_visits": 50000},
             {"label": "employeurs", "nb_events": 110000, "nb_visits": 30000},

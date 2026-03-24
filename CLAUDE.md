@@ -12,6 +12,8 @@ make ci        # lint + security + test
 
 Architecture et flux de données : `.claude/ARCHITECTURE.md`.
 
+Conventions de code : `.claude/rules/code.md`. Tests (pytest, pytest-mock, parametrize, factories) : `.claude/rules/tests.md`.
+
 ## Contexte métier
 
 IAE (insertion par l'activité économique) — programme français d'emploi avec trois types d'acteurs :

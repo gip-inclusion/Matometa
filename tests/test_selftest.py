@@ -1,7 +1,5 @@
 """Tests for web/selftest.py — unit tests with mocked externals."""
 
-from unittest.mock import MagicMock, patch
-
 import pytest
 
 from web.selftest import Check, _fmt, _probe, _run_all_checks
@@ -54,61 +52,39 @@ class TestFmt:
 
 
 class TestRunAllChecks:
-    """Run the full check suite with everything mocked out."""
-
-    @patch("web.selftest.config")
-    @patch("web.selftest.subprocess.run")
-    @patch("web.selftest.requests.get")
-    @patch("web.selftest.requests.head")
-    @patch("web.selftest.os.getenv")
-    def test_all_checks_produce_check_instances(self, mock_getenv, mock_head, mock_get, mock_subprocess, mock_config):
+    def test_all_checks_produce_check_instances(self, mocker):
+        mock_getenv = mocker.patch("web.selftest.os.getenv")
+        mock_head = mocker.patch("web.selftest.requests.head")
+        mock_get = mocker.patch("web.selftest.requests.get")
+        mock_subprocess = mocker.patch("web.selftest.subprocess.run")
+        mock_config = mocker.patch("web.selftest.config")
         mock_config.ADMIN_USERS = ["admin@localhost"]
         mock_config.USE_S3 = False
         mock_config.CLAUDE_CLI = "claude"
         mock_getenv.return_value = None
 
-        mock_subprocess.return_value = MagicMock(returncode=0, stdout="1.0.0\n", stderr="")
+        mock_subprocess.return_value = mocker.MagicMock(returncode=0, stdout="1.0.0\n", stderr="")
 
-        mock_resp = MagicMock(status_code=200)
+        mock_resp = mocker.MagicMock(status_code=200)
         mock_resp.json.return_value = {"value": "5.0"}
         mock_get.return_value = mock_resp
-        mock_head.return_value = MagicMock(status_code=200)
+        mock_head.return_value = mocker.MagicMock(status_code=200)
 
-        mock_db_ctx = MagicMock()
-        mock_row = {"ok": 1}
-        mock_db_ctx.__enter__ = MagicMock(return_value=mock_db_ctx)
-        mock_db_ctx.__exit__ = MagicMock(return_value=False)
-        mock_db_ctx.execute.return_value = mock_db_ctx
-        mock_db_ctx.fetchone.return_value = mock_row
-        mock_db_ctx.fetchall.return_value = []
+        mocker.patch("web.selftest._check_postgresql", return_value=(True, ""))
+        mocker.patch("web.selftest._check_admin_users", return_value=(True, "1 configured"))
+        mocker.patch("web.selftest._check_process_manager", return_value=(True, "heartbeat OK"))
+        mocker.patch("web.selftest._check_conversation_roundtrip", return_value=(True, "OK"))
+        mocker.patch("web.selftest._check_claude_cli", return_value=(True, "1.0.0"))
+        mocker.patch("web.selftest._check_s3", return_value=(False, "not configured"))
+        mocker.patch("web.selftest._check_matomo", return_value=(True, "v5.0"))
+        mocker.patch("web.selftest._check_metabase_instance", return_value=(True, "healthy"))
+        mocker.patch("web.selftest._check_notion", return_value=(False, "not set"))
+        mocker.patch("web.selftest._check_grist", return_value=(False, "not set"))
+        mocker.patch("web.selftest._check_livestorm", return_value=(False, "not set"))
+        mocker.patch("web.selftest._check_slack", return_value=(False, "not set"))
+        mocker.patch("lib._sources.list_instances", return_value=["stats"])
 
-        mock_store = MagicMock()
-        mock_conv = MagicMock()
-        mock_conv.id = "test-conv-id"
-        mock_store.create_conversation.return_value = mock_conv
-        mock_store.get_messages.return_value = [MagicMock()]
-        mock_store.is_pm_alive.return_value = True
-
-        mock_matomo = MagicMock()
-        mock_matomo.url = "matomo.example.com"
-        mock_matomo.token = "fake"
-
-        with (
-            patch("web.selftest._check_postgresql", return_value=(True, "")),
-            patch("web.selftest._check_admin_users", return_value=(True, "1 configured")),
-            patch("web.selftest._check_process_manager", return_value=(True, "heartbeat OK")),
-            patch("web.selftest._check_conversation_roundtrip", return_value=(True, "OK")),
-            patch("web.selftest._check_claude_cli", return_value=(True, "1.0.0")),
-            patch("web.selftest._check_s3", return_value=(False, "not configured")),
-            patch("web.selftest._check_matomo", return_value=(True, "v5.0")),
-            patch("web.selftest._check_metabase_instance", return_value=(True, "healthy")),
-            patch("web.selftest._check_notion", return_value=(False, "not set")),
-            patch("web.selftest._check_grist", return_value=(False, "not set")),
-            patch("web.selftest._check_livestorm", return_value=(False, "not set")),
-            patch("web.selftest._check_slack", return_value=(False, "not set")),
-            patch("lib._sources.list_instances", return_value=["stats"]),
-        ):
-            checks = _run_all_checks()
+        checks = _run_all_checks()
 
         assert len(checks) >= 10
         assert all(isinstance(c, Check) for c in checks)
@@ -119,8 +95,6 @@ class TestRunAllChecks:
 
 
 class TestSelftestRoute:
-    """Test the /selftest HTTP endpoint."""
-
     @pytest.fixture
     def client(self):
         from fastapi import FastAPI
@@ -132,17 +106,15 @@ class TestSelftestRoute:
         app.include_router(router)
         return TestClient(app)
 
-    def test_returns_text(self, client):
-        with (
-            patch(
-                "web.selftest._run_all_checks",
-                return_value=[
-                    Check("A", True, "ok", 1),
-                    Check("B", False, "down", 2),
-                ],
-            ),
-        ):
-            resp = client.get("/selftest")
+    def test_returns_text(self, mocker, client):
+        mocker.patch(
+            "web.selftest._run_all_checks",
+            return_value=[
+                Check("A", True, "ok", 1),
+                Check("B", False, "down", 2),
+            ],
+        )
+        resp = client.get("/selftest")
 
         assert resp.status_code == 503
         assert "text/plain" in resp.headers["content-type"]
@@ -151,11 +123,11 @@ class TestSelftestRoute:
         assert "\u2705 A" in body
         assert "\u274c B" in body
 
-    def test_200_when_all_pass(self, client):
-        with patch(
+    def test_200_when_all_pass(self, mocker, client):
+        mocker.patch(
             "web.selftest._run_all_checks",
             return_value=[Check("X", True, "fine", 1)],
-        ):
-            resp = client.get("/selftest")
+        )
+        resp = client.get("/selftest")
         assert resp.status_code == 200
         assert "1/1 OK" in resp.text

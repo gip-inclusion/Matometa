@@ -1,320 +1,237 @@
-"""
-Regression tests for bugs found and fixed in lib/.
+"""Regression tests for bugs fixed in lib/."""
 
-Each test targets a specific defect that was found and fixed. If a test
-fails, it means the bug has been reintroduced.
-
-Run with: pytest tests/test_bugs.py -v
-"""
-
+import io
 import json
-from unittest.mock import MagicMock, patch
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Fixed: _substitute_env_vars now propagates strict= when recursing
-# ---------------------------------------------------------------------------
 
+@pytest.mark.parametrize(
+    "nested,match",
+    [
+        ({"outer": {"inner_key": "${env.TOTALLY_MISSING_VAR_XYZ}"}}, "TOTALLY_MISSING_VAR_XYZ"),
+        (["${env.TOTALLY_MISSING_VAR_ABC}"], "TOTALLY_MISSING_VAR_ABC"),
+        (
+            {"level1": {"level2": [{"level3": "${env.DEEP_MISSING_VAR}"}]}},
+            "DEEP_MISSING_VAR",
+        ),
+    ],
+)
+def test_substitute_env_vars_strict_raises(nested, match):
+    from lib._sources import _substitute_env_vars
+
+    with pytest.raises(ValueError, match=match):
+        _substitute_env_vars(nested, strict=True)
+
+
+def test_substitute_env_vars_non_strict_preserves_missing():
+    from lib._sources import _substitute_env_vars
 
-class TestEnvSubstitutionStrictRecursion:
-    def test_strict_mode_raises_on_nested_dict(self):
-        from lib._sources import _substitute_env_vars
+    nested = {"key": "${env.TOTALLY_MISSING_VAR}"}
+    result = _substitute_env_vars(nested, strict=False)
+    assert result["key"] == "${env.TOTALLY_MISSING_VAR}"
 
-        nested = {"outer": {"inner_key": "${env.TOTALLY_MISSING_VAR_XYZ}"}}
-        with pytest.raises(ValueError, match="TOTALLY_MISSING_VAR_XYZ"):
-            _substitute_env_vars(nested, strict=True)
 
-    def test_strict_mode_raises_on_nested_list(self):
-        from lib._sources import _substitute_env_vars
+def test_execute_metabase_query_sql_without_database_id(mocker):
+    from lib._metabase import QueryResult as MQR
+    from lib.query import CallerType, execute_metabase_query
 
-        nested = ["${env.TOTALLY_MISSING_VAR_ABC}"]
-        with pytest.raises(ValueError, match="TOTALLY_MISSING_VAR_ABC"):
-            _substitute_env_vars(nested, strict=True)
+    mock_api = mocker.MagicMock()
+    mock_api.execute_sql.return_value = MQR(columns=["x"], rows=[[1]], row_count=1)
+    mock_api.caller = "agent"
+    mocker.patch("lib.query.get_metabase", return_value=mock_api)
 
-    def test_strict_mode_raises_on_deeply_nested(self):
-        from lib._sources import _substitute_env_vars
+    result = execute_metabase_query(
+        instance="stats",
+        caller=CallerType.AGENT,
+        sql="SELECT 1",
+    )
 
-        deeply_nested = {"level1": {"level2": [{"level3": "${env.DEEP_MISSING_VAR}"}]}}
-        with pytest.raises(ValueError, match="DEEP_MISSING_VAR"):
-            _substitute_env_vars(deeply_nested, strict=True)
+    assert result.success is True
+    mock_api.execute_sql.assert_called_once()
 
-    def test_non_strict_mode_preserves_missing_vars(self):
-        from lib._sources import _substitute_env_vars
 
-        nested = {"key": "${env.TOTALLY_MISSING_VAR}"}
-        result = _substitute_env_vars(nested, strict=False)
-        assert result["key"] == "${env.TOTALLY_MISSING_VAR}"
+def test_matomo_error_on_api_error(mocker):
+    from lib._matomo import MatomoAPI, MatomoError
 
+    api = MatomoAPI(url="fake.example.com", token="fake", instance="test")
 
-# ---------------------------------------------------------------------------
-# Fixed: execute_metabase_query accepts sql without explicit database_id
-# ---------------------------------------------------------------------------
+    mock_resp = mocker.MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.headers = {"Content-Type": "application/json"}
+    mock_resp.text = json.dumps({"result": "error", "message": "Segment not valid"})
+    mock_resp.json.return_value = {"result": "error", "message": "Segment not valid"}
+    mock_resp.raise_for_status = mocker.MagicMock()
+    api._session.get = mocker.MagicMock(return_value=mock_resp)
 
+    with pytest.raises(MatomoError, match="Segment not valid"):
+        api._request("VisitsSummary.get", {"idSite": 1}, timeout=10)
 
-class TestMetabaseQueryAcceptsSqlAlone:
-    @patch("lib.query.get_metabase")
-    def test_sql_without_database_id_uses_api_default(self, mock_get_metabase):
-        from lib._metabase import QueryResult as MQR
-        from lib.query import CallerType, execute_metabase_query
 
-        mock_api = MagicMock()
-        mock_api.execute_sql.return_value = MQR(columns=["x"], rows=[[1]], row_count=1)
-        mock_api.caller = "agent"
-        mock_get_metabase.return_value = mock_api
+@pytest.mark.parametrize(
+    "failed_response,match",
+    [
+        (
+            {"status": "failed", "data": {"cols": [], "rows": []}},
+            "Query failed",
+        ),
+        (
+            {
+                "status": "failed",
+                "error": "Permission denied",
+                "data": {"cols": [], "rows": []},
+            },
+            "Permission denied",
+        ),
+    ],
+)
+def test_metabase_failed_status_raises(failed_response, match):
+    from lib._metabase import MetabaseAPI, MetabaseError
 
-        result = execute_metabase_query(
-            instance="stats",
-            caller=CallerType.AGENT,
-            sql="SELECT 1",
-        )
+    api = MetabaseAPI(url="https://fake.example.com", api_key="fake", database_id=2)
 
-        assert result.success is True
-        mock_api.execute_sql.assert_called_once()
+    with pytest.raises(MetabaseError, match=match):
+        api._parse_result(failed_response)
 
 
-# ---------------------------------------------------------------------------
-# Fixed: MatomoError is raised on API error response
-# ---------------------------------------------------------------------------
+def test_metabase_database_id_zero_preserved():
+    from lib._metabase import MetabaseAPI
 
+    api = MetabaseAPI(url="https://fake.example.com", api_key="fake", database_id=0)
+    assert api.database_id == 0
 
-class TestMatomoErrorRaised:
-    def test_api_error_raises_matomo_error(self):
-        from lib._matomo import MatomoAPI, MatomoError
 
-        api = MatomoAPI(url="fake.example.com", token="fake", instance="test")
+def test_metabase_database_id_none_defaults():
+    from lib._metabase import MetabaseAPI
 
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.headers = {"Content-Type": "application/json"}
-        mock_resp.text = json.dumps({"result": "error", "message": "Segment not valid"})
-        mock_resp.json.return_value = {"result": "error", "message": "Segment not valid"}
-        mock_resp.raise_for_status = MagicMock()
-        api._session.get = MagicMock(return_value=mock_resp)
+    api = MetabaseAPI(url="https://fake.example.com", api_key="fake", database_id=None)
+    assert api.database_id == 2
 
-        with pytest.raises(MatomoError, match="Segment not valid"):
-            api._request("VisitsSummary.get", {"idSite": 1}, timeout=10)
 
+def test_api_signal_card_id_zero(mocker):
+    from lib.api_signals import emit_api_signal
 
-# ---------------------------------------------------------------------------
-# Fixed: Metabase "status: failed" without "error" key now raises
-# ---------------------------------------------------------------------------
+    captured = io.StringIO()
+    mocker.patch("sys.stdout", captured)
+    emit_api_signal(
+        source="metabase",
+        instance="test",
+        url="https://example.com/question/0",
+        card_id=0,
+    )
 
+    output = captured.getvalue()
+    signal = json.loads(output.split("AUTOMETA:API:")[1].rstrip("]\n"))
+    assert "card_id" in signal
+    assert signal["card_id"] == 0
 
-class TestMetabaseFailedStatusRaises:
-    def test_status_failed_without_error_key(self):
-        from lib._metabase import MetabaseAPI, MetabaseError
 
-        api = MetabaseAPI(url="https://fake.example.com", api_key="fake", database_id=2)
+def test_matomo_html_timeout_raises_matomo_error(mocker):
+    from lib._matomo import MatomoAPI, MatomoError
 
-        failed_response = {
-            "status": "failed",
-            "data": {"cols": [], "rows": []},
-        }
+    api = MatomoAPI(url="fake.example.com", token="fake", instance="test")
 
-        with pytest.raises(MetabaseError, match="Query failed"):
-            api._parse_result(failed_response)
+    mock_resp = mocker.MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.headers = {"Content-Type": "text/html"}
+    mock_resp.text = "<!DOCTYPE html><html><body>Gateway Timeout</body></html>"
+    mock_resp.raise_for_status = mocker.MagicMock()
+    api._session.get = mocker.MagicMock(return_value=mock_resp)
 
-    def test_status_failed_with_error_key(self):
-        from lib._metabase import MetabaseAPI, MetabaseError
+    with pytest.raises(MatomoError, match="HTML instead of JSON"):
+        api._request("VisitsSummary.get", {"idSite": 1}, timeout=10)
 
-        api = MetabaseAPI(url="https://fake.example.com", api_key="fake", database_id=2)
 
-        failed_response = {
-            "status": "failed",
-            "error": "Permission denied",
-            "data": {"cols": [], "rows": []},
-        }
+def test_signal_registry_pm_alive_on_init():
+    from web.signals import SignalRegistry
 
-        with pytest.raises(MetabaseError, match="Permission denied"):
-            api._parse_result(failed_response)
+    reg = SignalRegistry()
+    assert reg.is_pm_alive()
 
 
-# ---------------------------------------------------------------------------
-# Fixed: database_id=0 is preserved (was treated as falsy)
-# ---------------------------------------------------------------------------
+def test_notify_message_does_not_create_signal():
+    from web.signals import SignalRegistry
 
+    reg = SignalRegistry()
+    reg.notify_message("no-listener")
+    assert "no-listener" not in reg._signals
 
-class TestMetabaseDatabaseIdZero:
-    def test_database_id_zero_is_preserved(self):
-        from lib._metabase import MetabaseAPI
 
-        api = MetabaseAPI(url="https://fake.example.com", api_key="fake", database_id=0)
-        assert api.database_id == 0
+def test_notify_finished_creates_signal():
+    from web.signals import SignalRegistry
 
-    def test_database_id_none_defaults_to_2(self):
-        from lib._metabase import MetabaseAPI
+    reg = SignalRegistry()
+    reg.notify_finished("no-listener")
+    assert "no-listener" in reg._signals
+    assert reg.is_finished("no-listener")
 
-        api = MetabaseAPI(url="https://fake.example.com", api_key="fake", database_id=None)
-        assert api.database_id == 2
 
+def test_signal_registry_counter_increments():
+    from web.signals import SignalRegistry
 
-# ---------------------------------------------------------------------------
-# Fixed: card_id=0 is included in API signals
-# ---------------------------------------------------------------------------
+    reg = SignalRegistry()
+    sig = reg._get_or_create("conv1")
+    assert sig.counter == 0
+    reg.notify_message("conv1")
+    assert sig.counter == 1
+    reg.notify_finished("conv1")
+    assert sig.counter == 2
 
 
-class TestApiSignalCardIdZero:
-    def test_card_id_zero_is_included_in_signal(self):
-        import io
+def test_wait_returns_true_if_counter_advanced_before_wait():
+    import asyncio
 
-        from lib.api_signals import emit_api_signal
+    from web.signals import SignalRegistry
 
-        captured = io.StringIO()
-        with patch("sys.stdout", captured):
-            emit_api_signal(
-                source="metabase",
-                instance="test",
-                url="https://example.com/question/0",
-                card_id=0,
-            )
+    reg = SignalRegistry()
+    reg._get_or_create("conv1")
+    reg.notify_message("conv1")
 
-        output = captured.getvalue()
-        signal = json.loads(output.split("AUTOMETA:API:")[1].rstrip("]\n"))
-        assert "card_id" in signal
-        assert signal["card_id"] == 0
+    async def _run():
+        return await reg.wait_for_message("conv1", timeout=0.01)
 
+    assert asyncio.run(_run()) is True
 
-# ---------------------------------------------------------------------------
-# Fixed: search_cards query_type no longer leaks URL params
-# ---------------------------------------------------------------------------
 
+def test_stale_finished_signals_evicted():
+    from web.signals import SignalRegistry
 
-# ---------------------------------------------------------------------------
-# Fixed: Matomo HTML timeout response raises MatomoError
-# ---------------------------------------------------------------------------
+    reg = SignalRegistry()
+    reg.notify_finished("old-conv")
+    reg._signals["old-conv"].created_at -= 700
+    reg._evict_stale(max_age=600)
+    assert "old-conv" not in reg._signals
 
 
-class TestMatomoHtmlTimeoutRaises:
-    def test_html_response_raises_matomo_error(self):
-        from lib._matomo import MatomoAPI, MatomoError
+def test_recent_finished_signals_kept():
+    from web.signals import SignalRegistry
 
-        api = MatomoAPI(url="fake.example.com", token="fake", instance="test")
+    reg = SignalRegistry()
+    reg.notify_finished("fresh-conv")
+    reg._evict_stale(max_age=600)
+    assert "fresh-conv" in reg._signals
 
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.headers = {"Content-Type": "text/html"}
-        mock_resp.text = "<!DOCTYPE html><html><body>Gateway Timeout</body></html>"
-        mock_resp.raise_for_status = MagicMock()
-        api._session.get = MagicMock(return_value=mock_resp)
 
-        with pytest.raises(MatomoError, match="HTML instead of JSON"):
-            api._request("VisitsSummary.get", {"idSite": 1}, timeout=10)
+def test_unfinished_signals_never_evicted():
+    from web.signals import SignalRegistry
 
+    reg = SignalRegistry()
+    reg._get_or_create("active-conv")
+    reg._signals["active-conv"].created_at -= 700
+    reg._evict_stale(max_age=600)
+    assert "active-conv" in reg._signals
 
-# ---------------------------------------------------------------------------
-# Fixed: SignalRegistry cold start — is_pm_alive() True on init
-# ---------------------------------------------------------------------------
 
+def test_search_cards_returns_data(mocker):
+    from lib._metabase import MetabaseAPI
 
-class TestSignalRegistryColdStart:
-    def test_pm_alive_on_init(self):
-        from web.signals import SignalRegistry
+    api = MetabaseAPI(url="https://fake.example.com", api_key="fake")
 
-        reg = SignalRegistry()
-        assert reg.is_pm_alive(), "PM should be considered alive immediately after init"
+    mock_resp = mocker.MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"data": []}
+    mock_resp.raise_for_status = mocker.MagicMock()
+    api._session.request = mocker.MagicMock(return_value=mock_resp)
 
-
-# ---------------------------------------------------------------------------
-# Fixed: notify_message does not leak signals for unlistened conversations
-# ---------------------------------------------------------------------------
-
-
-class TestSignalRegistryOrphanedLeak:
-    def test_notify_message_does_not_create_signal(self):
-        from web.signals import SignalRegistry
-
-        reg = SignalRegistry()
-        reg.notify_message("no-listener")
-        assert "no-listener" not in reg._signals
-
-    def test_notify_finished_does_create_signal(self):
-        from web.signals import SignalRegistry
-
-        reg = SignalRegistry()
-        reg.notify_finished("no-listener")
-        assert "no-listener" in reg._signals
-        assert reg.is_finished("no-listener")
-
-
-# ---------------------------------------------------------------------------
-# Fixed: monotonic counter prevents signal loss on clear/set race
-# ---------------------------------------------------------------------------
-
-
-class TestSignalRegistryCounter:
-    def test_counter_increments_on_notify(self):
-        from web.signals import SignalRegistry
-
-        reg = SignalRegistry()
-        sig = reg._get_or_create("conv1")
-        assert sig.counter == 0
-        reg.notify_message("conv1")
-        assert sig.counter == 1
-        reg.notify_finished("conv1")
-        assert sig.counter == 2
-
-    def test_wait_returns_true_if_counter_advanced_before_wait(self):
-        import asyncio
-
-        from web.signals import SignalRegistry
-
-        reg = SignalRegistry()
-        reg._get_or_create("conv1")  # register listener so notify_message doesn't no-op
-        # Simulate: PM fires signal, then SSE calls wait_for_message
-        reg.notify_message("conv1")
-
-        async def _run():
-            return await reg.wait_for_message("conv1", timeout=0.01)
-
-        assert asyncio.run(_run()) is True
-
-
-# ---------------------------------------------------------------------------
-# Fixed: TTL eviction removes finished signals that cleanup() missed
-# ---------------------------------------------------------------------------
-
-
-class TestSignalRegistryEviction:
-    def test_stale_finished_signals_are_evicted(self):
-        from web.signals import SignalRegistry
-
-        reg = SignalRegistry()
-        reg.notify_finished("old-conv")
-        # Backdate created_at to make it stale
-        reg._signals["old-conv"].created_at -= 700
-        reg._evict_stale(max_age=600)
-        assert "old-conv" not in reg._signals
-
-    def test_recent_finished_signals_are_kept(self):
-        from web.signals import SignalRegistry
-
-        reg = SignalRegistry()
-        reg.notify_finished("fresh-conv")
-        reg._evict_stale(max_age=600)
-        assert "fresh-conv" in reg._signals
-
-    def test_unfinished_signals_are_never_evicted(self):
-        from web.signals import SignalRegistry
-
-        reg = SignalRegistry()
-        reg._get_or_create("active-conv")
-        reg._signals["active-conv"].created_at -= 700
-        reg._evict_stale(max_age=600)
-        assert "active-conv" in reg._signals
-
-
-class TestMetabaseSearchQueryType:
-    def test_search_cards_returns_data(self):
-        from lib._metabase import MetabaseAPI
-
-        api = MetabaseAPI(url="https://fake.example.com", api_key="fake")
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"data": []}
-        mock_resp.raise_for_status = MagicMock()
-        api._session.request = MagicMock(return_value=mock_resp)
-
-        result = api.search_cards("revenue")
-        assert result == []
+    result = api.search_cards("revenue")
+    assert result == []

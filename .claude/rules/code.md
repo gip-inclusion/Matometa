@@ -1,4 +1,4 @@
-Ne jamais écrire de commentaires décrivant le code ou délimitant des sections. Le code doit être lisible seul. Exceptions : `# Why:` quand la raison n'est pas évidente, lien vers une issue, `# noqa` justifié.
+Ne jamais écrire de commentaires qui expliquent **ce que** fait le code, ni des marqueurs de sections. Le code doit être lisible seul. Exceptions : contexte métier ou contrainte externe non évidente, `# Why:` quand l’intention n’est pas déductible, lien vers une issue, `# noqa` justifié.
 
 Ne jamais générer de code commenté. Si du code n'est plus utile, le supprimer.
 

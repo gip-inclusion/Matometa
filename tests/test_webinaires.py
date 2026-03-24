@@ -1,7 +1,6 @@
 """Tests for lib.webinaires: schema, helpers, Grist sync, upsert logic."""
 
 import sqlite3
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -20,14 +19,9 @@ from lib.webinaires import (
     sync_grist,
 )
 
-# =============================================================================
-# Fixtures
-# =============================================================================
-
 
 @pytest.fixture
 def db():
-    """In-memory SQLite database with schema applied."""
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     ensure_schema(conn)
@@ -35,23 +29,17 @@ def db():
 
 
 @pytest.fixture
-def grist_client():
-    """GristClient with mocked HTTP session."""
-    with patch.dict(
+def grist_client(mocker):
+    mocker.patch.dict(
         "os.environ",
         {
             "GRIST_API_KEY": "fake-key",
             "GRIST_WEBINAIRES_DOC_ID": "fake-doc",
         },
-    ):
-        client = GristClient()
-        client._session = MagicMock()
-        return client
-
-
-# =============================================================================
-# Product inference
-# =============================================================================
+    )
+    client = GristClient()
+    client._session = mocker.MagicMock()
+    return client
 
 
 class TestInferProduct:
@@ -99,11 +87,6 @@ class TestInferProduct:
         assert infer_product("DORA pour les prescripteurs") == "dora"
 
 
-# =============================================================================
-# Timestamp helpers
-# =============================================================================
-
-
 class TestTsToIso:
     def test_valid_timestamp(self):
         result = _ts_to_iso(1700000000)
@@ -141,11 +124,6 @@ class TestGristDurationToMinutes:
         assert _grist_duration_to_minutes("") is None
 
 
-# =============================================================================
-# Organisation extraction (Livestorm custom fields)
-# =============================================================================
-
-
 class TestExtractOrganisation:
     def test_company_field(self):
         fields = [{"id": "company", "value": "ACME Corp"}]
@@ -180,11 +158,6 @@ class TestExtractOrganisation:
             {"id": "entreprise", "value": "Fallback"},
         ]
         assert _extract_organisation(fields) == "Fallback"
-
-
-# =============================================================================
-# Database schema
-# =============================================================================
 
 
 class TestSchema:
@@ -226,17 +199,11 @@ class TestSchema:
         assert count == 2
 
 
-# =============================================================================
-# Grist sync
-# =============================================================================
-
-
-def _mock_grist_response(records):
-    """Create a mock response for GristClient.get_records."""
-    resp = MagicMock()
+def _mock_grist_response(mocker, records):
+    resp = mocker.MagicMock()
     resp.status_code = 200
     resp.json.return_value = {"records": records}
-    resp.raise_for_status = MagicMock()
+    resp.raise_for_status = mocker.MagicMock()
     return resp
 
 
@@ -317,14 +284,7 @@ SAMPLE_INSCRIPTIONS = [
 ]
 
 
-# =============================================================================
-# Batch upsert
-# =============================================================================
-
-
 class TestBatchUpsert:
-    """Tests for _batch_upsert helper (multi-row INSERT)."""
-
     INSERT_PREFIX = f"INSERT INTO {T_WEBINAIRES} (id, source, source_id, title) VALUES "
     CONFLICT_SUFFIX = " ON CONFLICT(id) DO UPDATE SET title=excluded.title"
 
@@ -377,13 +337,13 @@ class TestBatchUpsert:
 
 
 class TestGristSync:
-    def test_sync_webinars(self, db, grist_client):
+    def test_sync_webinars(self, mocker, db, grist_client):
         """Webinaires are inserted with correct fields."""
 
         def mock_get(url, **kwargs):
             if "Webinaires" in url:
-                return _mock_grist_response(SAMPLE_WEBINAIRES)
-            return _mock_grist_response([])
+                return _mock_grist_response(mocker, SAMPLE_WEBINAIRES)
+            return _mock_grist_response(mocker, [])
 
         grist_client._session.get.side_effect = mock_get
         sync_grist(db, grist_client)
@@ -399,15 +359,15 @@ class TestGristSync:
         assert dora["duration_minutes"] == 60
         assert dora["capacity"] == 350
 
-    def test_sync_inscriptions(self, db, grist_client):
+    def test_sync_inscriptions(self, mocker, db, grist_client):
         """Inscriptions are inserted with correct fields."""
 
         def mock_get(url, **kwargs):
             if "Webinaires" in url:
-                return _mock_grist_response(SAMPLE_WEBINAIRES)
+                return _mock_grist_response(mocker, SAMPLE_WEBINAIRES)
             if "Inscriptions" in url:
-                return _mock_grist_response(SAMPLE_INSCRIPTIONS)
-            return _mock_grist_response([])
+                return _mock_grist_response(mocker, SAMPLE_INSCRIPTIONS)
+            return _mock_grist_response(mocker, [])
 
         grist_client._session.get.side_effect = mock_get
         sync_grist(db, grist_client)
@@ -424,15 +384,15 @@ class TestGristSync:
         assert julie["webinar_id"] == "grist:missions-locales-001"
         assert julie["session_id"] == ""
 
-    def test_email_lowercased(self, db, grist_client):
+    def test_email_lowercased(self, mocker, db, grist_client):
         """Emails are normalized to lowercase."""
 
         def mock_get(url, **kwargs):
             if "Webinaires" in url:
-                return _mock_grist_response(SAMPLE_WEBINAIRES)
+                return _mock_grist_response(mocker, SAMPLE_WEBINAIRES)
             if "Inscriptions" in url:
-                return _mock_grist_response(SAMPLE_INSCRIPTIONS)
-            return _mock_grist_response([])
+                return _mock_grist_response(mocker, SAMPLE_INSCRIPTIONS)
+            return _mock_grist_response(mocker, [])
 
         grist_client._session.get.side_effect = mock_get
         sync_grist(db, grist_client)
@@ -441,15 +401,15 @@ class TestGristSync:
         assert all(e == e.lower() for e in emails)
         assert "laure@example.fr" in emails
 
-    def test_idempotent(self, db, grist_client):
+    def test_idempotent(self, mocker, db, grist_client):
         """Running sync twice doesn't duplicate data."""
 
         def mock_get(url, **kwargs):
             if "Webinaires" in url:
-                return _mock_grist_response(SAMPLE_WEBINAIRES)
+                return _mock_grist_response(mocker, SAMPLE_WEBINAIRES)
             if "Inscriptions" in url:
-                return _mock_grist_response(SAMPLE_INSCRIPTIONS)
-            return _mock_grist_response([])
+                return _mock_grist_response(mocker, SAMPLE_INSCRIPTIONS)
+            return _mock_grist_response(mocker, [])
 
         grist_client._session.get.side_effect = mock_get
 
@@ -461,15 +421,15 @@ class TestGristSync:
         assert webinar_count == 2
         assert reg_count == 3
 
-    def test_updates_on_resync(self, db, grist_client):
+    def test_updates_on_resync(self, mocker, db, grist_client):
         """Re-syncing updates changed fields (e.g. a_participe)."""
 
         def mock_get_v1(url, **kwargs):
             if "Webinaires" in url:
-                return _mock_grist_response(SAMPLE_WEBINAIRES)
+                return _mock_grist_response(mocker, SAMPLE_WEBINAIRES)
             if "Inscriptions" in url:
-                return _mock_grist_response(SAMPLE_INSCRIPTIONS[:1])
-            return _mock_grist_response([])
+                return _mock_grist_response(mocker, SAMPLE_INSCRIPTIONS[:1])
+            return _mock_grist_response(mocker, [])
 
         grist_client._session.get.side_effect = mock_get_v1
         sync_grist(db, grist_client)
@@ -491,10 +451,10 @@ class TestGristSync:
 
         def mock_get_v2(url, **kwargs):
             if "Webinaires" in url:
-                return _mock_grist_response(SAMPLE_WEBINAIRES)
+                return _mock_grist_response(mocker, SAMPLE_WEBINAIRES)
             if "Inscriptions" in url:
-                return _mock_grist_response(updated)
-            return _mock_grist_response([])
+                return _mock_grist_response(mocker, updated)
+            return _mock_grist_response(mocker, [])
 
         grist_client._session.get.side_effect = mock_get_v2
         sync_grist(db, grist_client)
@@ -502,7 +462,7 @@ class TestGristSync:
         attended = db.execute(f"SELECT attended FROM {T_INSCRIPTIONS} WHERE email='nora@example.fr'").fetchone()[0]
         assert attended == 1
 
-    def test_skips_empty_email(self, db, grist_client):
+    def test_skips_empty_email(self, mocker, db, grist_client):
         """Records without email are skipped."""
         no_email = [
             {
@@ -518,10 +478,10 @@ class TestGristSync:
 
         def mock_get(url, **kwargs):
             if "Webinaires" in url:
-                return _mock_grist_response(SAMPLE_WEBINAIRES)
+                return _mock_grist_response(mocker, SAMPLE_WEBINAIRES)
             if "Inscriptions" in url:
-                return _mock_grist_response(no_email)
-            return _mock_grist_response([])
+                return _mock_grist_response(mocker, no_email)
+            return _mock_grist_response(mocker, [])
 
         grist_client._session.get.side_effect = mock_get
         sync_grist(db, grist_client)
@@ -529,7 +489,7 @@ class TestGristSync:
         count = db.execute(f"SELECT COUNT(*) FROM {T_INSCRIPTIONS}").fetchone()[0]
         assert count == 0
 
-    def test_skips_empty_event_id(self, db, grist_client):
+    def test_skips_empty_event_id(self, mocker, db, grist_client):
         """Webinaires without event_id are skipped."""
         no_event_id = [
             {
@@ -543,8 +503,8 @@ class TestGristSync:
 
         def mock_get(url, **kwargs):
             if "Webinaires" in url:
-                return _mock_grist_response(no_event_id)
-            return _mock_grist_response([])
+                return _mock_grist_response(mocker, no_event_id)
+            return _mock_grist_response(mocker, [])
 
         grist_client._session.get.side_effect = mock_get
         sync_grist(db, grist_client)
@@ -552,15 +512,15 @@ class TestGristSync:
         count = db.execute(f"SELECT COUNT(*) FROM {T_WEBINAIRES}").fetchone()[0]
         assert count == 0
 
-    def test_return_value(self, db, grist_client):
+    def test_return_value(self, mocker, db, grist_client):
         """sync_grist returns (webinar_count, registration_count)."""
 
         def mock_get(url, **kwargs):
             if "Webinaires" in url:
-                return _mock_grist_response(SAMPLE_WEBINAIRES)
+                return _mock_grist_response(mocker, SAMPLE_WEBINAIRES)
             if "Inscriptions" in url:
-                return _mock_grist_response(SAMPLE_INSCRIPTIONS)
-            return _mock_grist_response([])
+                return _mock_grist_response(mocker, SAMPLE_INSCRIPTIONS)
+            return _mock_grist_response(mocker, [])
 
         grist_client._session.get.side_effect = mock_get
         webinars, regs = sync_grist(db, grist_client)

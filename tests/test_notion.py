@@ -4,14 +4,7 @@ Tests markdown-to-blocks conversion, frontmatter extraction,
 the publish API endpoint, and the UI button behavior.
 """
 
-from unittest.mock import patch
-
 import pytest
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
 
 SAMPLE_REPORT = """\
 ---
@@ -76,7 +69,6 @@ def report(app):
 
 @pytest.fixture
 def report_with_db_query(app):
-    """Report where DB original_query differs from frontmatter."""
     from web.storage import store
 
     return store.create_report(
@@ -89,14 +81,7 @@ def report_with_db_query(app):
     )
 
 
-# ---------------------------------------------------------------------------
-# Markdown to blocks conversion
-# ---------------------------------------------------------------------------
-
-
 class TestMarkdownToBlocks:
-    """Test the markdown-to-Notion-blocks converter."""
-
     def test_strips_yaml_frontmatter(self):
         from web.notion import markdown_to_blocks
 
@@ -214,89 +199,77 @@ class TestMarkdownToBlocks:
         assert len(content) <= 2000
 
 
-# ---------------------------------------------------------------------------
-# Frontmatter extraction
-# ---------------------------------------------------------------------------
-
-
 class TestFrontmatterExtraction:
-    @patch("web.notion.is_configured", return_value=True)
-    def test_frontmatter_query_overrides_db_field(self, _mock_conf):
-        """Frontmatter original_query should take priority over DB value."""
+    def test_frontmatter_query_overrides_db_field(self, mocker):
         from web.notion import publish_report
 
-        with patch("web.notion._notion_request") as mock_req:
-            mock_req.return_value = {"id": "abc", "url": "https://notion.so/page"}
-            publish_report(
-                title="Test",
-                content=SAMPLE_REPORT,
-                original_query="Generate a report about something",
-            )
-            # Check what was sent to create the page (first call)
-            call_args = mock_req.call_args_list[0]
-            payload = call_args[0][2]  # positional: method, endpoint, payload
-            query_text = payload["properties"]["Requête initiale"]["rich_text"][0]["text"]["content"]
-            assert query_text == "Quels sont les événements les plus fréquents ?"
+        mocker.patch("web.notion.is_configured", return_value=True)
+        mock_req = mocker.patch("web.notion._notion_request")
+        mock_req.return_value = {"id": "abc", "url": "https://notion.so/page"}
+        publish_report(
+            title="Test",
+            content=SAMPLE_REPORT,
+            original_query="Generate a report about something",
+        )
+        call_args = mock_req.call_args_list[0]
+        payload = call_args[0][2]
+        query_text = payload["properties"]["Requête initiale"]["rich_text"][0]["text"]["content"]
+        assert query_text == "Quels sont les événements les plus fréquents ?"
 
-    @patch("web.notion.is_configured", return_value=True)
-    def test_frontmatter_date_overrides_argument(self, _mock_conf):
+    def test_frontmatter_date_overrides_argument(self, mocker):
         from web.notion import publish_report
 
-        with patch("web.notion._notion_request") as mock_req:
-            mock_req.return_value = {"id": "abc", "url": "https://notion.so/page"}
-            publish_report(
-                title="Test",
-                content=SAMPLE_REPORT,
-                date="1999-01-01",
-            )
-            call_args = mock_req.call_args_list[0]
-            payload = call_args[0][2]
-            assert payload["properties"]["Date de publication"]["date"]["start"] == "2026-01-15"
+        mocker.patch("web.notion.is_configured", return_value=True)
+        mock_req = mocker.patch("web.notion._notion_request")
+        mock_req.return_value = {"id": "abc", "url": "https://notion.so/page"}
+        publish_report(
+            title="Test",
+            content=SAMPLE_REPORT,
+            date="1999-01-01",
+        )
+        call_args = mock_req.call_args_list[0]
+        payload = call_args[0][2]
+        assert payload["properties"]["Date de publication"]["date"]["start"] == "2026-01-15"
 
-    @patch("web.notion.is_configured", return_value=True)
-    def test_db_field_used_when_no_frontmatter(self, _mock_conf):
+    def test_db_field_used_when_no_frontmatter(self, mocker):
         from web.notion import publish_report
 
+        mocker.patch("web.notion.is_configured", return_value=True)
+        mock_req = mocker.patch("web.notion._notion_request")
+        mock_req.return_value = {"id": "abc", "url": "https://notion.so/page"}
         content_no_fm = "# Just a heading\n\nSome text.\n"
-        with patch("web.notion._notion_request") as mock_req:
-            mock_req.return_value = {"id": "abc", "url": "https://notion.so/page"}
-            publish_report(
-                title="Test",
-                content=content_no_fm,
-                original_query="fallback query",
-                date="2026-06-01",
-            )
-            call_args = mock_req.call_args_list[0]
-            payload = call_args[0][2]
-            assert payload["properties"]["Requête initiale"]["rich_text"][0]["text"]["content"] == "fallback query"
-            assert payload["properties"]["Date de publication"]["date"]["start"] == "2026-06-01"
-
-
-# ---------------------------------------------------------------------------
-# API endpoint
-# ---------------------------------------------------------------------------
+        publish_report(
+            title="Test",
+            content=content_no_fm,
+            original_query="fallback query",
+            date="2026-06-01",
+        )
+        call_args = mock_req.call_args_list[0]
+        payload = call_args[0][2]
+        assert payload["properties"]["Requête initiale"]["rich_text"][0]["text"]["content"] == "fallback query"
+        assert payload["properties"]["Date de publication"]["date"]["start"] == "2026-06-01"
 
 
 class TestPublishNotionEndpoint:
-    @patch("web.notion.is_configured", return_value=False)
-    def test_returns_503_when_not_configured(self, mock_conf, app, client, report):
+    def test_returns_503_when_not_configured(self, mocker, app, client, report):
+        mocker.patch("web.notion.is_configured", return_value=False)
         resp = client.post(
             f"/api/reports/{report.id}/publish-notion",
             headers={"X-Forwarded-Email": "test@example.com"},
         )
         assert resp.status_code == 503
 
-    def test_returns_404_for_missing_report(self, app, client):
-        with patch("web.notion.is_configured", return_value=True):
-            resp = client.post(
-                "/api/reports/99999/publish-notion",
-                headers={"X-Forwarded-Email": "test@example.com"},
-            )
-            assert resp.status_code == 404
+    def test_returns_404_for_missing_report(self, mocker, app, client):
+        mocker.patch("web.notion.is_configured", return_value=True)
+        resp = client.post(
+            "/api/reports/99999/publish-notion",
+            headers={"X-Forwarded-Email": "test@example.com"},
+        )
+        assert resp.status_code == 404
 
-    @patch("web.notion.is_configured", return_value=True)
-    @patch("web.notion.publish_report")
-    def test_publishes_and_stores_url(self, mock_publish, mock_conf, app, client, report):
+    def test_publishes_and_stores_url(self, mocker, app, client, report):
+        mocker.patch("web.notion.is_configured", return_value=True)
+        mock_publish = mocker.patch("web.notion.publish_report")
         mock_publish.return_value = ("page-id-123", "https://notion.so/My-Page-123")
         resp = client.post(
             f"/api/reports/{report.id}/publish-notion",
@@ -316,20 +289,15 @@ class TestPublishNotionEndpoint:
         assert resp2.json()["url"] == "https://notion.so/My-Page-123"
         mock_publish.assert_not_called()
 
-    @patch("web.notion.is_configured", return_value=True)
-    @patch("web.notion.publish_report", side_effect=Exception("timeout"))
-    def test_returns_500_on_error(self, mock_publish, mock_conf, app, client, report):
+    def test_returns_500_on_error(self, mocker, app, client, report):
+        mocker.patch("web.notion.is_configured", return_value=True)
+        mocker.patch("web.notion.publish_report", side_effect=Exception("timeout"))
         resp = client.post(
             f"/api/reports/{report.id}/publish-notion",
             headers={"X-Forwarded-Email": "test@example.com"},
         )
         assert resp.status_code == 500
         assert resp.json()["error"] == "Failed to publish to Notion"
-
-
-# ---------------------------------------------------------------------------
-# UI button rendering
-# ---------------------------------------------------------------------------
 
 
 class TestNotionButton:
@@ -339,21 +307,17 @@ class TestNotionButton:
             headers={"X-Forwarded-Email": "test@example.com"},
         )
         assert resp.status_code == 200
-        # The HTML button area (not the JS) should have the export button
         assert b'id="notionBtn" data-report-id=' in resp.content
-        # Should NOT have an <a> link to Notion (only appears after publish)
         assert b'href="https://notion.so' not in resp.content
 
-    @patch("web.notion.is_configured", return_value=True)
-    @patch("web.notion.publish_report")
-    def test_shows_link_after_publish(self, mock_publish, mock_conf, app, client, report):
+    def test_shows_link_after_publish(self, mocker, app, client, report):
+        mocker.patch("web.notion.is_configured", return_value=True)
+        mock_publish = mocker.patch("web.notion.publish_report")
         mock_publish.return_value = ("page-id", "https://notion.so/Page-123")
-        # Publish first
         client.post(
             f"/api/reports/{report.id}/publish-notion",
             headers={"X-Forwarded-Email": "test@example.com"},
         )
-        # Reload detail page
         resp = client.get(
             f"/rapports/{report.id}",
             headers={"X-Forwarded-Email": "test@example.com"},
