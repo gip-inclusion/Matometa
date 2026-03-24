@@ -139,7 +139,9 @@ def serve_interactive(request: Request, filename: str = ""):
 # =============================================================================
 
 from .routes import auth, conversations, cron, html, knowledge, logs, query, rapports, reports, research  # noqa: E402
+from .selftest import router as selftest_router  # noqa: E402
 
+app.include_router(selftest_router)
 app.include_router(query.router)
 app.include_router(auth.router)
 app.include_router(logs.router)
