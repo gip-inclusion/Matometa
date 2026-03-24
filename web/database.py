@@ -188,9 +188,55 @@ class Conversation:
         }
 
 
-# =============================================================================
-# Store
-# =============================================================================
+def _row_to_list_report(row) -> "Report":
+    return Report(
+        id=row["id"],
+        title=row["title"],
+        website=row["website"],
+        category=row["category"],
+        tags=json.loads(row["tags"]) if row["tags"] else [],
+        original_query=row["original_query"],
+        source_conversation_id=row["source_conversation_id"] if "source_conversation_id" in row.keys() else None,
+        user_id=row["user_id"] if "user_id" in row.keys() else None,
+        archived=bool(row["archived"]) if "archived" in row.keys() else False,
+        version=row["version"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+        updated_at=datetime.fromisoformat(row["updated_at"]),
+        conversation_id=row["conversation_id"],
+        message_id=row["message_id"],
+    )
+
+
+def _row_to_list_conversation(row) -> "Conversation":
+    return Conversation(
+        id=row["id"],
+        user_id=row["user_id"],
+        title=row["title"],
+        session_id=row["session_id"],
+        conv_type=row["conv_type"] or "exploration",
+        file_path=row["file_path"],
+        status=row["status"] or "active",
+        needs_response=bool(row["needs_response"]) if row["needs_response"] else False,
+        messages=[],
+        report=Report(id=row["report_id"], title=row["report_title"] or "") if row["report_id"] else None,
+        created_at=datetime.fromisoformat(row["created_at"]),
+        updated_at=datetime.fromisoformat(row["updated_at"]),
+    )
+
+
+def _row_to_knowledge_conversation(row) -> "Conversation":
+    return Conversation(
+        id=row["id"],
+        user_id=row["user_id"],
+        title=row["title"],
+        session_id=row["session_id"],
+        conv_type=row["conv_type"],
+        file_path=row["file_path"],
+        status=row["status"],
+        messages=[],
+        created_at=datetime.fromisoformat(row["created_at"]),
+        updated_at=datetime.fromisoformat(row["updated_at"]),
+    )
 
 
 class ConversationStore:
@@ -198,10 +244,6 @@ class ConversationStore:
 
     def __init__(self):
         init_db()
-
-    # -------------------------------------------------------------------------
-    # Conversations
-    # -------------------------------------------------------------------------
 
     def create_conversation(
         self,
@@ -435,25 +477,7 @@ class ConversationStore:
 
             rows = conn.execute(query, params).fetchall()
 
-            return [
-                Conversation(
-                    id=row["id"],
-                    user_id=row["user_id"],
-                    title=row["title"],
-                    session_id=row["session_id"],
-                    conv_type=row["conv_type"] or "exploration",
-                    file_path=row["file_path"],
-                    status=row["status"] or "active",
-                    needs_response=bool(row["needs_response"]) if row["needs_response"] else False,
-                    messages=[],
-                    report=Report(id=row["report_id"], title=row["report_title"] or "") if row["report_id"] else None,
-                    created_at=datetime.fromisoformat(row["created_at"]),
-                    updated_at=datetime.fromisoformat(row["updated_at"]),
-                )
-                for row in rows
-            ]
-
-    # --- Generic pinning (pinned_items table) ---
+            return [_row_to_list_conversation(row) for row in rows]
 
     def pin_item(self, item_type: str, item_id: str, label: str) -> bool:
         """Pin an item (conversation, report, or app)."""
@@ -552,18 +576,7 @@ class ConversationStore:
             if not row:
                 return None
 
-            return Conversation(
-                id=row["id"],
-                user_id=row["user_id"],
-                title=row["title"],
-                session_id=row["session_id"],
-                conv_type=row["conv_type"],
-                file_path=row["file_path"],
-                status=row["status"],
-                messages=[],
-                created_at=datetime.fromisoformat(row["created_at"]),
-                updated_at=datetime.fromisoformat(row["updated_at"]),
-            )
+            return _row_to_knowledge_conversation(row)
 
     def list_active_knowledge_conversations(self) -> list[Conversation]:
         """List all active knowledge conversations."""
@@ -574,21 +587,7 @@ class ConversationStore:
                    ORDER BY updated_at DESC"""
             ).fetchall()
 
-            return [
-                Conversation(
-                    id=row["id"],
-                    user_id=row["user_id"],
-                    title=row["title"],
-                    session_id=row["session_id"],
-                    conv_type=row["conv_type"],
-                    file_path=row["file_path"],
-                    status=row["status"],
-                    messages=[],
-                    created_at=datetime.fromisoformat(row["created_at"]),
-                    updated_at=datetime.fromisoformat(row["updated_at"]),
-                )
-                for row in rows
-            ]
+            return [_row_to_knowledge_conversation(row) for row in rows]
 
     def get_running_conversation_ids(self) -> list[str]:
         """Return IDs of conversations where needs_response is True."""
@@ -725,10 +724,6 @@ class ConversationStore:
             cursor = conn.execute("DELETE FROM conversations WHERE id = %s", (conv_id,))
             return cursor.rowcount > 0
 
-    # -------------------------------------------------------------------------
-    # Messages
-    # -------------------------------------------------------------------------
-
     def add_message(
         self,
         conv_id: str,
@@ -810,10 +805,6 @@ class ConversationStore:
                 )
                 for m in rows
             ]
-
-    # -------------------------------------------------------------------------
-    # Reports
-    # -------------------------------------------------------------------------
 
     def create_report(
         self,
@@ -926,29 +917,7 @@ class ConversationStore:
 
             rows = conn.execute(query, params).fetchall()
 
-            return [
-                Report(
-                    id=row["id"],
-                    title=row["title"],
-                    # Don't load content for listing (expensive)
-                    website=row["website"],
-                    category=row["category"],
-                    tags=json.loads(row["tags"]) if row["tags"] else [],
-                    original_query=row["original_query"],
-                    source_conversation_id=row["source_conversation_id"]
-                    if "source_conversation_id" in row.keys()
-                    else None,
-                    user_id=row["user_id"] if "user_id" in row.keys() else None,
-                    archived=bool(row["archived"]) if "archived" in row.keys() else False,
-                    version=row["version"],
-                    created_at=datetime.fromisoformat(row["created_at"]),
-                    updated_at=datetime.fromisoformat(row["updated_at"]),
-                    # Legacy fields
-                    conversation_id=row["conversation_id"],
-                    message_id=row["message_id"],
-                )
-                for row in rows
-            ]
+            return [_row_to_list_report(row) for row in rows]
 
     def archive_report(self, report_id: int) -> bool:
         """Archive a report (soft delete)."""
@@ -987,10 +956,6 @@ class ConversationStore:
         with get_db() as conn:
             cursor = conn.execute("DELETE FROM reports WHERE id = %s", (report_id,))
             return cursor.rowcount > 0
-
-    # -------------------------------------------------------------------------
-    # Tags
-    # -------------------------------------------------------------------------
 
     def get_all_tags(self, tag_type: Optional[str] = None) -> list[Tag]:
         """Get all tags, optionally filtered by type."""
@@ -1264,20 +1229,7 @@ class ConversationStore:
 
             results = []
             for row in rows:
-                conv = Conversation(
-                    id=row["id"],
-                    user_id=row["user_id"],
-                    title=row["title"],
-                    session_id=row["session_id"],
-                    conv_type=row["conv_type"] or "exploration",
-                    file_path=row["file_path"],
-                    status=row["status"] or "active",
-                    needs_response=bool(row["needs_response"]) if row["needs_response"] else False,
-                    messages=[],
-                    report=Report(id=row["report_id"], title=row["report_title"] or "") if row["report_id"] else None,
-                    created_at=datetime.fromisoformat(row["created_at"]),
-                    updated_at=datetime.fromisoformat(row["updated_at"]),
-                )
+                conv = _row_to_list_conversation(row)
                 results.append((conv, tags_by_conv.get(row["id"], [])))
 
             return results
@@ -1341,31 +1293,10 @@ class ConversationStore:
 
             results = []
             for row in rows:
-                report = Report(
-                    id=row["id"],
-                    title=row["title"],
-                    website=row["website"],
-                    category=row["category"],
-                    tags=json.loads(row["tags"]) if row["tags"] else [],
-                    original_query=row["original_query"],
-                    source_conversation_id=row["source_conversation_id"]
-                    if "source_conversation_id" in row.keys()
-                    else None,
-                    user_id=row["user_id"] if "user_id" in row.keys() else None,
-                    archived=bool(row["archived"]) if "archived" in row.keys() else False,
-                    version=row["version"],
-                    created_at=datetime.fromisoformat(row["created_at"]),
-                    updated_at=datetime.fromisoformat(row["updated_at"]),
-                    conversation_id=row["conversation_id"],
-                    message_id=row["message_id"],
-                )
+                report = _row_to_list_report(row)
                 results.append((report, tags_by_report.get(row["id"], [])))
 
             return results
-
-    # -------------------------------------------------------------------------
-    # Uploaded Files
-    # -------------------------------------------------------------------------
 
     def add_uploaded_file(
         self,
@@ -1512,10 +1443,6 @@ class ConversationStore:
         with get_db() as conn:
             cursor = conn.execute("DELETE FROM uploaded_files WHERE id = %s", (file_id,))
             return cursor.rowcount > 0
-
-    # =========================================================================
-    # Process Manager commands
-    # =========================================================================
 
     def get_messages_since(self, conv_id: str, after_id: int) -> list[Message]:
         """Get messages with id > after_id for a conversation."""
