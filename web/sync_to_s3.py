@@ -5,6 +5,7 @@ Uses watchdog to detect file changes and uploads them to S3.
 """
 
 import logging
+import mimetypes
 import threading
 from pathlib import Path
 
@@ -94,22 +95,7 @@ def _upload_file(local_path: Path, s3_module):
         relative_path = local_path.relative_to(config.INTERACTIVE_DIR)
         content = local_path.read_bytes()
 
-        # Guess content type
-        content_type = None
-        suffix = local_path.suffix.lower()
-        content_types = {
-            ".html": "text/html",
-            ".css": "text/css",
-            ".js": "application/javascript",
-            ".json": "application/json",
-            ".png": "image/png",
-            ".jpg": "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".gif": "image/gif",
-            ".svg": "image/svg+xml",
-            ".csv": "text/csv",
-        }
-        content_type = content_types.get(suffix)
+        content_type, _ = mimetypes.guess_type(local_path.name)
 
         success = s3_module.upload_file(str(relative_path), content, content_type)
         if success:
