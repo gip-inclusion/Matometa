@@ -17,24 +17,28 @@ services:
     command: server /data
     environment:
       - MINIO_CONSOLE_ADDRESS=:9001
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin
+      - MINIO_ROOT_USER=autometa
+      - MINIO_ROOT_PASSWORD=autometa
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 1s
+      timeout: 3s
+      retries: 3
 
   minio-init:
     image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     restart: "no"
-    command:
-      - |
-        mc alias set tmp http://minio:9000 minioadmin minioadmin
-        mc admin update --yes local
-        mc mb --ignore-existing local/autometa
+    environment:
+      - MC_HOST_local=http://autometa:autometa@minio:9000
+    command: "mb --ignore-existing local/autometa"
     depends_on:
-      - minio
+      minio:
+        condition: service_healthy
 
   ollama:
     image: ollama/ollama:latest
