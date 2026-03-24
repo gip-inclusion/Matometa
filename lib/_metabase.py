@@ -1,5 +1,5 @@
 """
-Metabase API client with automatic audit logging.
+Metabase API client.
 
 Usage:
     from lib.query import MetabaseAPI
@@ -98,7 +98,7 @@ class MetabaseAPI:
 
     Uses requests.Session for connection pooling (reuses TCP+TLS across calls).
     Retries up to 2 times on 429/5xx errors with exponential backoff via
-    urllib3.util.retry.Retry. All queries are logged to the audit database.
+    urllib3.util.retry.Retry.
 
     Worst-case for a fully-failing request: ~3 min (3 attempts x ~60s read
     timeout + backoff). Pass a lower timeout if tighter bounds are needed.

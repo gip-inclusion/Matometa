@@ -42,7 +42,8 @@ async def query(request: Request):
         Request body (JSON):
             source: "metabase" or "matomo"
             instance: Instance name (e.g., "stats", "datalake", "inclusion")
-    # For Metabase:
+        
+            # For Metabase:
             sql: SQL query string (with database_id)
             database_id: Metabase database ID
             card_id: Metabase card/question ID (alternative to sql)
