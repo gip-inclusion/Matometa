@@ -1611,5 +1611,14 @@ class ConversationStore:
 # Backwards compatibility
 # =============================================================================
 
-# Alias for old code
-store = ConversationStore()
+
+class LazyConversationStore:
+    _store = None
+
+    def __getattr__(self, name):
+        if LazyConversationStore._store is None:
+            LazyConversationStore._store = ConversationStore()
+        return getattr(LazyConversationStore._store, name)
+
+
+store = LazyConversationStore()
