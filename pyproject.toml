@@ -6,7 +6,6 @@ dependencies = [
     # Web framework
     "fastapi>=0.129.2",
     "uvicorn[standard]>=0.40.0",
-    "sse-starlette>=3.1.2",
     "python-multipart>=0.0.21",
 
     # Claude API
@@ -19,26 +18,14 @@ dependencies = [
 
     # Utils
     "python-dotenv>=1.2.1",
-    "click>=8.3.1",
     "requests>=2.32.3",
     "pyyaml>=6.0.2",
-
-    # Validation
-    "pydantic>=2.12.5",
-    "pydantic-settings>=2.12.0",
 
     # Database
     "psycopg2-binary>=2.9.10",
 
     # S3-compatible object storage
     "boto3>=1.35.0",
-
-    # Data analysis
-    "numpy>=1.26.0",
-    "scipy>=1.11.0",
-    "pandas>=2.0.0",
-    "scikit-learn>=1.4.0",
-    "hmmlearn>=0.3.0",
 
     # File format support
     "openpyxl>=3.1.0",
