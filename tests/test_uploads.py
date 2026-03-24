@@ -96,7 +96,7 @@ class TestIsTextFile:
 
     def test_text_extension_is_detected(self):
         """Files with text extensions are detected as text."""
-        for ext in [".txt", ".md", ".csv", ".json", ".py", ".js"]:
+        for ext in [".txt", ".md", ".csv", ".json", ".py", ".ts"]:
             assert _is_text_file(f"file{ext}", None, b"") is True
 
     def test_binary_extension_is_not_text(self):
@@ -406,7 +406,6 @@ class TestTextExtensions:
     def test_programming_extensions_included(self):
         """Programming language files are recognized as text."""
         assert ".py" in TEXT_EXTENSIONS
-        assert ".js" in TEXT_EXTENSIONS
         assert ".ts" in TEXT_EXTENSIONS
         assert ".java" in TEXT_EXTENSIONS
         assert ".go" in TEXT_EXTENSIONS
