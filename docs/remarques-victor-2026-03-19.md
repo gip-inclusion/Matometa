@@ -41,7 +41,7 @@ Parti pris fondamental : tout tourne dans un seul worker. Le ProcessManager et l
 |---|---|
 | Web | FastAPI + Jinja2 + SSE |
 | Agent | Claude Code CLI (subprocess) ou claude-agent-sdk |
-| DB principale | SQLite (dev) / PostgreSQL (prod), dual-backend via `ConnectionWrapper` |
+| DB principale | PostgreSQL (`DATABASE_URL`, `psycopg2`), accès via `ConnectionWrapper` |
 | DB recherche | SQLite séparé (`notion_research.db`) avec embeddings |
 | Embeddings | Qwen3-Embedding-0.6B via DeepInfra, similarité via simsimd |
 | Stockage fichiers | S3 (MinIO local / Scalingo) avec fallback filesystem |
@@ -99,7 +99,7 @@ GET /api/research/search?q=...
 
 | BD | Usage | Backend |
 |---|---|---|
-| `data/matometa.db` / PostgreSQL | Conversations, messages, rapports, tags, uploads, cron_runs, pm_commands | SQLite (dev) / PG (prod) |
+| PostgreSQL (`DATABASE_URL`) | Conversations, messages, rapports, tags, uploads, cron_runs, pm_commands | PostgreSQL |
 | `data/notion_research.db` | Corpus recherche terrain, embeddings | SQLite only (read-only) |
 | `data/metabase_cards.db` | Inventaire des questions Metabase | SQLite only (synced) |
 
@@ -107,7 +107,7 @@ GET /api/research/search?q=...
 
 ## Ce qui fonctionne bien
 
-1. **Abstraction DB dual-backend** (`db.py`) — Le `ConnectionWrapper` permet de développer en SQLite et déployer sur PostgreSQL avec le même code. La conversion `?` → `%s`, le `insert_and_get_id` avec `RETURNING`, c'est propre et pragmatique.
+1. **`ConnectionWrapper`** (`db.py`) — Couche légère sur `psycopg2` (requêtes paramétrées `%s`, `insert_and_get_id` avec `RETURNING`), adaptée au schéma PostgreSQL.
 
 2. **Signal registry** (`signals.py`) — Élégant pour éviter le polling DB sur le SSE. Le mécanisme de counter monotone comme safety net est bien pensé. L'eviction des signaux stale toutes les 5s évite les fuites mémoire.
 

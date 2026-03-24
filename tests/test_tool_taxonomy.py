@@ -65,7 +65,7 @@ class TestClassifyTool:
         assert result == "Execute: script"
 
     def test_bash_sqlite(self):
-        result = classify_tool("Bash", {"command": "sqlite3 ./data/matometa.db 'SELECT 1'"})
+        result = classify_tool("Bash", {"command": "sqlite3 ./knowledge/metabase/cards.db 'SELECT 1'"})
         assert result == "Query: SQLite"
 
     # --- Bash: Shell operations ---

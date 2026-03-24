@@ -76,7 +76,7 @@ Invoquer via l'outil `Skill` :
 | `knowledge/matomo/README.md` | Référence API Matomo |
 | `knowledge/stats/` | Contexte Metabase stats (IAE) |
 | `knowledge/stats/nexus.md` | Nexus (application unifiée, database_id=17) |
-| `data/matometa.db` | Base SQLite (conversations, rapports) |
+| `DATABASE_URL` (PostgreSQL) | Conversations, rapports, files d’attente agent, etc. |
 | `data/interactive/` | Fichiers téléchargeables (servis à `/interactive/`) |
 
 ## Performance Matomo
@@ -118,7 +118,7 @@ Comparer deux mois | Comparer le trafic de décembre 2025 avec novembre 2025
 
 ## Rapports
 
-- Stockés en base (`data/matometa.db`), pas dans `./reports/` (archivé)
+- Stockés en base PostgreSQL (`DATABASE_URL`), pas dans `./reports/` (archivé)
 - Utiliser le skill `save_report`
 - Inclure un front-matter YAML : `date`, `website`, `original_query`, `query_category`, `indicator_type`
 - Réutiliser les catégories existantes quand possible
