@@ -29,7 +29,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Optional
 
-from ._audit import get_query_stats, log_query  # noqa: F401 — re-exported
 from ._matomo import MatomoAPI, MatomoError  # noqa: F401 — re-exported
 from ._metabase import MetabaseAPI, MetabaseError  # noqa: F401 — re-exported
 
