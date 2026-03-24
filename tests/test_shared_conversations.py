@@ -229,28 +229,3 @@ class TestRelaunchConversation:
             headers={"X-Forwarded-Email": "admin@localhost"},
         )
         assert response.status_code == 409
-
-
-class TestSharedConversationEditing:
-    """Test that guests cannot edit shared conversations."""
-
-    def test_guest_cannot_update_title(self, app, guest_client, conversation):
-        """Guest cannot update the title of a shared conversation.
-
-        Note: This test documents current behavior. The PATCH endpoint
-        doesn't have explicit ownership check, so this might pass.
-        Consider adding ownership check to PATCH if needed.
-        """
-        # This test documents the expected behavior
-        # The current implementation may or may not enforce this
-        pass
-
-    def test_guest_cannot_delete_conversation(self, app, guest_client, conversation):
-        """Guest cannot delete a shared conversation.
-
-        Note: This test documents current behavior. The DELETE endpoint
-        doesn't have explicit ownership check. Consider adding if needed.
-        """
-        # This test documents the expected behavior
-        # The current implementation may or may not enforce this
-        pass
