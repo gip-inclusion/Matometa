@@ -8,6 +8,8 @@ Requires DATABASE_URL to be set (PostgreSQL).
 import importlib
 import os
 
+os.environ.setdefault("AUTOMETA_SSE_MESSAGE_WAIT_TIMEOUT", "0.05")
+
 import pytest
 
 # Load .env file for integration tests

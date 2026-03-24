@@ -6,6 +6,7 @@ Business logic lives in web/database.py.
 
 import logging
 from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, Optional
 
 from psycopg2.extras import RealDictCursor
@@ -141,9 +142,36 @@ def get_connection() -> ConnectionWrapper:
     return ConnectionWrapper(conn)
 
 
+_test_conn_var: ContextVar[Optional[ConnectionWrapper]] = ContextVar("db_test_conn", default=None)
+
+
+@contextmanager
+def test_transaction():
+    """Hold one pooled connection for a test; all ``get_db()`` calls share it and do not commit.
+
+    Rolls back on exit so tests leave no durable DB state. Used by pytest fixtures.
+    """
+    conn = get_connection()
+    token = _test_conn_var.set(conn)
+    conn.rollback()
+    try:
+        yield
+    finally:
+        try:
+            conn.rollback()
+        finally:
+            _test_conn_var.reset(token)
+            pool = _get_pg_pool()
+            pool.putconn(conn._conn)
+
+
 @contextmanager
 def get_db():
     """Context manager for database connections."""
+    test_conn = _test_conn_var.get()
+    if test_conn is not None:
+        yield test_conn
+        return
     conn = get_connection()
     try:
         yield conn

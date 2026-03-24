@@ -603,7 +603,7 @@ async def stream_conversation(
                 return
 
             while (time.monotonic() - start) < max_seconds:
-                signaled = await signals.wait_for_message(conv_id, timeout=3.0)
+                signaled = await signals.wait_for_message(conv_id, timeout=config.SSE_MESSAGE_WAIT_TIMEOUT)
                 now = time.monotonic()
 
                 if signaled:

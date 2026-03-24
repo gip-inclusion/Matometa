@@ -46,34 +46,26 @@ init_db()
 store = ConversationStore()
 
 
-@pytest.fixture(autouse=True)
-def setup_test_db(tmp_path):
-    """Set up a fresh test database and uploads directory for each test."""
-    # Override config paths
+@pytest.fixture
+def setup_db(tmp_path, monkeypatch):
+    """Tmp upload dirs, stub ClamAV, one DB transaction rolled back per test."""
     import web.config as config
+    from web.db import test_transaction
 
-    config.DATA_DIR = tmp_path
-    config.UPLOADS_DIR = tmp_path / "uploads"
-    config.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-    config.MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB for tests
-    config.TEXT_FILE_INLINE_LIMIT = 1024  # 1 KB for tests
-    config.USE_S3 = False
+    monkeypatch.setattr(
+        "web.uploads._scan_with_clamav",
+        lambda _path: (False, None),
+    )
 
-    # Re-initialize database
-    init_db()
+    with test_transaction():
+        config.DATA_DIR = tmp_path
+        config.UPLOADS_DIR = tmp_path / "uploads"
+        config.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+        config.MAX_UPLOAD_SIZE = 10 * 1024 * 1024
+        config.TEXT_FILE_INLINE_LIMIT = 1024
+        config.USE_S3 = False
 
-    yield tmp_path
-
-    # Clean up database tables
-    from web.db import get_db
-
-    with get_db() as conn:
-        conn.execute_raw("""
-            TRUNCATE TABLE messages, conversation_tags, report_tags,
-                uploaded_files, cron_runs, pinned_items, pm_commands,
-                pm_heartbeat, reports, conversations, tags, schema_version
-                CASCADE;
-        """)
+        yield tmp_path
 
 
 class TestComputeSha256:
@@ -196,10 +188,11 @@ class TestGenerateStoredFilename:
         assert "Makefile" in result
 
 
+@pytest.mark.usefixtures("setup_db")
 class TestUploadFile:
     """Tests for the main upload function."""
 
-    def test_upload_text_file(self, setup_test_db):
+    def test_upload_text_file(self):
         """Text files are uploaded successfully."""
         content = b"Hello, World!"
         file_obj = io.BytesIO(content)
@@ -218,7 +211,7 @@ class TestUploadFile:
         assert result.sha256_hash == _compute_sha256(content)
         assert text_content == "Hello, World!"
 
-    def test_upload_binary_file(self, setup_test_db):
+    def test_upload_binary_file(self):
         """Binary files are uploaded without text content."""
         content = bytes(range(256)) * 100  # Binary content
         file_obj = io.BytesIO(content)
@@ -234,7 +227,7 @@ class TestUploadFile:
         assert result.is_text is False
         assert text_content is None
 
-    def test_upload_large_text_file_no_inline(self, setup_test_db):
+    def test_upload_large_text_file_no_inline(self):
         """Large text files don't return inline content."""
         # Make content larger than TEXT_FILE_INLINE_LIMIT (1KB in tests)
         content = b"x" * 2000
@@ -251,7 +244,7 @@ class TestUploadFile:
         assert result.is_text is True
         assert text_content is None  # Too large to inline
 
-    def test_file_too_large_rejected(self, setup_test_db):
+    def test_file_too_large_rejected(self):
         """Files exceeding size limit are rejected."""
         import web.config as config
 
@@ -268,7 +261,7 @@ class TestUploadFile:
                 user_id="test@example.com",
             )
 
-    def test_blocked_extension_rejected(self, setup_test_db):
+    def test_blocked_extension_rejected(self):
         """Files with blocked extensions are rejected."""
         content = b"MZ"  # PE header start
         file_obj = io.BytesIO(content)
@@ -281,7 +274,7 @@ class TestUploadFile:
                 user_id="test@example.com",
             )
 
-    def test_duplicate_detection(self, setup_test_db):
+    def test_duplicate_detection(self):
         """Duplicate files are detected by hash."""
         content = b"same content"
         file_obj1 = io.BytesIO(content)
@@ -308,7 +301,7 @@ class TestUploadFile:
         assert result1.id != result2.id
         assert result1.original_filename != result2.original_filename
 
-    def test_file_permissions_readonly(self, setup_test_db):
+    def test_file_permissions_readonly(self):
         """Uploaded files are set to read-only."""
         content = b"test"
         file_obj = io.BytesIO(content)
@@ -419,10 +412,11 @@ class TestTextExtensions:
         assert ".go" in TEXT_EXTENSIONS
 
 
+@pytest.mark.usefixtures("setup_db")
 class TestDatabaseIntegration:
     """Tests for database integration."""
 
-    def test_file_record_stored(self, setup_test_db):
+    def test_file_record_stored(self):
         """Uploaded files are stored in database."""
         content = b"test content"
         file_obj = io.BytesIO(content)
@@ -440,7 +434,7 @@ class TestDatabaseIntegration:
         assert retrieved.original_filename == "test.txt"
         assert retrieved.user_id == "test@example.com"
 
-    def test_files_by_hash(self, setup_test_db):
+    def test_files_by_hash(self):
         """Files can be found by hash."""
         content = b"unique content"
         file_obj = io.BytesIO(content)
@@ -457,7 +451,7 @@ class TestDatabaseIntegration:
         assert found is not None
         assert found.id == result.id
 
-    def test_conversation_files(self, setup_test_db):
+    def test_conversation_files(self):
         """Files can be listed by conversation."""
         # Create a conversation first
         conv = store.create_conversation(user_id="test@example.com")

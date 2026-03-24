@@ -76,6 +76,8 @@ ADMIN_USERS = [
 # Database: PostgreSQL via DATABASE_URL (required)
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+SSE_MESSAGE_WAIT_TIMEOUT = float(os.getenv("AUTOMETA_SSE_MESSAGE_WAIT_TIMEOUT", "3"))
+
 # Agent-produced scripts directory
 SCRIPTS_DIR = DATA_DIR / "scripts"
 
