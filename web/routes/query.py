@@ -37,27 +37,25 @@ def _cors_headers(origin: str | None) -> dict:
 @router.api_route("/query", methods=["POST", "OPTIONS"])
 async def query(request: Request):
     """
-    Execute a query against Metabase or Matomo.
+        Execute a query against Metabase or Matomo.
 
-    Request body (JSON):
-        source: "metabase" or "matomo"
-        instance: Instance name (e.g., "stats", "datalake", "inclusion")
-        conversation_id: Optional conversation ID for audit logging
+        Request body (JSON):
+            source: "metabase" or "matomo"
+            instance: Instance name (e.g., "stats", "datalake", "inclusion")
+    # For Metabase:
+            sql: SQL query string (with database_id)
+            database_id: Metabase database ID
+            card_id: Metabase card/question ID (alternative to sql)
 
-        # For Metabase:
-        sql: SQL query string (with database_id)
-        database_id: Metabase database ID
-        card_id: Metabase card/question ID (alternative to sql)
+            # For Matomo:
+            method: Matomo API method (e.g., "VisitsSummary.get")
+            params: Matomo API parameters dict
 
-        # For Matomo:
-        method: Matomo API method (e.g., "VisitsSummary.get")
-        params: Matomo API parameters dict
+            # Optional:
+            timeout: Request timeout in seconds (default 60)
 
-        # Optional:
-        timeout: Request timeout in seconds (default 60)
-
-    Returns:
-        JSON with success, data, error, execution_time_ms
+        Returns:
+            JSON with success, data, error, execution_time_ms
     """
     origin = request.headers.get("Origin")
     cors = _cors_headers(origin)
@@ -90,7 +88,6 @@ async def query(request: Request):
         source=source,
         instance=instance,
         caller=CallerType.APP,
-        conversation_id=data.get("conversation_id"),
         sql=data.get("sql"),
         database_id=data.get("database_id"),
         card_id=data.get("card_id"),
