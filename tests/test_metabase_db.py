@@ -11,7 +11,6 @@ from skills.metabase_query.scripts.cards_db import TOPICS, Card, CardsDB
 
 @pytest.fixture
 def temp_db():
-    """Create a temporary database for testing."""
     db = CardsDB(in_memory=True)
     db.init_schema()
     yield db
@@ -20,7 +19,6 @@ def temp_db():
 
 @pytest.fixture
 def populated_db(temp_db):
-    """Create database with sample cards."""
     db = temp_db
 
     # Add sample cards
@@ -127,18 +125,15 @@ class TestCardOperations:
         assert card.tables_referenced == ["test_table"]
 
     def test_get_nonexistent(self, temp_db):
-        """Get nonexistent card returns None."""
         card = temp_db.get(99999)
         assert card is None
 
     def test_all(self, populated_db):
-        """Get all cards."""
         cards = populated_db.all()
         assert len(cards) == 3
         assert all(isinstance(c, Card) for c in cards)
 
     def test_count(self, populated_db):
-        """Count cards."""
         assert populated_db.count() == 3
 
 
@@ -146,13 +141,11 @@ class TestQueries:
     """Test query methods."""
 
     def test_by_topic(self, populated_db):
-        """Filter by topic."""
         cards = populated_db.by_topic("file-active")
         assert len(cards) == 1
         assert cards[0].id == 1
 
     def test_by_topic_empty(self, populated_db):
-        """Filter by nonexistent topic returns empty."""
         cards = populated_db.by_topic("nonexistent")
         assert cards == []
 
@@ -164,13 +157,11 @@ class TestQueries:
         assert any(c.id == 1 for c in cards)
 
     def test_search_by_sql(self, populated_db):
-        """Search finds matches in SQL."""
         cards = populated_db.search("region")
         assert len(cards) >= 1
         assert any(c.id == 2 for c in cards)
 
     def test_by_table(self, populated_db):
-        """Filter by table reference."""
         cards = populated_db.by_table("candidats")
         assert len(cards) == 2
         ids = {c.id for c in cards}
@@ -181,14 +172,12 @@ class TestSummaries:
     """Test summary methods."""
 
     def test_topics_summary(self, populated_db):
-        """Get topic counts."""
         summary = populated_db.topics_summary()
         assert summary["file-active"] == 1
         assert summary["candidatures"] == 1
         assert summary["demographie"] == 1
 
     def test_tables_summary(self, populated_db):
-        """Get table reference counts."""
         summary = populated_db.tables_summary()
         assert summary["candidats"] == 2
         assert summary["candidatures"] == 1

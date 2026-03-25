@@ -149,14 +149,12 @@ class AVScanFailedError(UploadError):
 
 
 def _ensure_uploads_dir() -> Path:
-    """Ensure the uploads directory exists with proper permissions."""
     uploads_dir = config.UPLOADS_DIR
     uploads_dir.mkdir(parents=True, exist_ok=True)
     return uploads_dir
 
 
 def _compute_sha256(content: bytes) -> str:
-    """Compute SHA256 hash of file content."""
     return hashlib.sha256(content).hexdigest()
 
 
@@ -200,7 +198,6 @@ def _sanitize_filename(filename: str) -> str:
 
 
 def _generate_stored_filename(original_filename: str) -> str:
-    """Generate a unique stored filename while preserving extension."""
     ext = Path(original_filename).suffix.lower()
     unique_id = uuid.uuid4().hex[:12]
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -209,7 +206,6 @@ def _generate_stored_filename(original_filename: str) -> str:
 
 
 def _set_readonly_permissions(filepath: Path) -> None:
-    """Make a file read-only and non-executable."""
     try:
         # Remove all write and execute permissions, keep only read
         # 0o444 = r--r--r--
@@ -219,15 +215,6 @@ def _set_readonly_permissions(filepath: Path) -> None:
 
 
 def _scan_with_clamav(filepath: Path) -> Tuple[bool, bool]:
-    """
-    Scan a file with ClamAV if available.
-
-    Returns:
-        Tuple of (scanned: bool, clean: bool)
-        - (True, True) = scanned and clean
-        - (True, False) = scanned and infected
-        - (False, None) = not scanned (ClamAV not available)
-    """
     # Check if clamscan is available
     if not shutil.which("clamscan"):
         logger.debug("ClamAV not available, skipping scan")
@@ -259,7 +246,6 @@ def _scan_with_clamav(filepath: Path) -> Tuple[bool, bool]:
 
 
 def _upload_to_s3(relative_path: str, content: bytes, content_type: Optional[str] = None) -> bool:
-    """Upload file to S3 if configured."""
     if not config.USE_S3:
         return True  # No S3, local storage is fine
 
@@ -281,24 +267,6 @@ def upload_file(
     user_id: Optional[str] = None,
     check_duplicate: bool = True,
 ) -> Tuple[UploadedFile, Optional[str]]:
-    """
-    Upload a file securely.
-
-    Args:
-        file_obj: File-like object with read() method
-        filename: Original filename
-        conversation_id: Optional conversation to associate with
-        user_id: Email of uploading user
-        check_duplicate: Whether to check for existing file with same hash
-
-    Returns:
-        Tuple of (UploadedFile record, text_content if small text file else None)
-
-    Raises:
-        FileTooLargeError: If file exceeds MAX_UPLOAD_SIZE
-        BlockedFileTypeError: If file extension is blocked
-        AVScanFailedError: If AV scan detects a threat
-    """
     # Read file content
     content = file_obj.read()
     file_size = len(content)
@@ -435,20 +403,6 @@ def copy_file_for_modification(
     destination_dir: Optional[Path] = None,
     new_filename: Optional[str] = None,
 ) -> Optional[Path]:
-    """
-    Create a writable copy of an uploaded file for modification.
-
-    This is used when the user asks the agent to modify a file.
-    The original file remains read-only; a copy is made elsewhere.
-
-    Args:
-        uploaded_file: The file record to copy
-        destination_dir: Where to put the copy (defaults to /data/modified for persistence)
-        new_filename: Optional new name for the copy
-
-    Returns:
-        Path to the writable copy, or None if copy failed
-    """
     content = get_file_content(uploaded_file)
     if content is None:
         logger.error(f"Could not read file {uploaded_file.stored_filename} for copying")

@@ -1,26 +1,4 @@
-"""
-File format readers for Excel, Word, PDF, and ZIP files.
-
-Usage:
-    from lib.readers import read_excel, read_word, read_pdf, list_zip
-
-    # Read Excel file - returns markdown table(s)
-    content = read_excel("/path/to/file.xlsx")
-    content = read_excel("/path/to/file.xlsx", sheet="Sheet1")  # specific sheet
-
-    # Read Word document - returns markdown
-    content = read_word("/path/to/file.docx")
-
-    # Read PDF - returns text with page markers
-    content = read_pdf("/path/to/file.pdf")
-    content = read_pdf("/path/to/file.pdf", pages="1-5")  # specific pages
-
-    # List ZIP contents
-    contents = list_zip("/path/to/file.zip")
-
-CLI usage (for agent):
-    python -c "from lib.readers import read_excel; print(read_excel('file.xlsx'))"
-"""
+"""File format readers for Excel, Word, PDF, and ZIP files."""
 
 from pathlib import Path
 from typing import Optional, Union
@@ -31,17 +9,6 @@ def read_excel(
     sheet: Optional[str] = None,
     max_rows: int = 1000,
 ) -> str:
-    """
-    Read an Excel file and return contents as markdown tables.
-
-    Args:
-        path: Path to .xlsx or .xls file
-        sheet: Specific sheet name (default: all sheets)
-        max_rows: Maximum rows per sheet to prevent huge outputs
-
-    Returns:
-        Markdown formatted tables, one per sheet
-    """
     import pandas as pd
 
     path = Path(path)
@@ -79,15 +46,6 @@ def read_excel(
 
 
 def read_word(path: Union[str, Path]) -> str:
-    """
-    Read a Word document and return contents as markdown.
-
-    Args:
-        path: Path to .docx file
-
-    Returns:
-        Markdown formatted content
-    """
     import mammoth
 
     path = Path(path)
@@ -116,17 +74,6 @@ def read_pdf(
     pages: Optional[str] = None,
     max_pages: int = 50,
 ) -> str:
-    """
-    Read a PDF and return text content with page markers.
-
-    Args:
-        path: Path to .pdf file
-        pages: Page range like "1-5" or "1,3,5" (default: all)
-        max_pages: Maximum pages to extract
-
-    Returns:
-        Text content with page markers
-    """
     import pdfplumber
 
     path = Path(path)
@@ -175,16 +122,6 @@ def read_pdf(
 
 
 def list_zip(path: Union[str, Path], max_entries: int = 100) -> str:
-    """
-    List contents of a ZIP file.
-
-    Args:
-        path: Path to .zip file
-        max_entries: Maximum entries to list
-
-    Returns:
-        Formatted list of ZIP contents with sizes
-    """
     import zipfile
 
     path = Path(path)
@@ -219,16 +156,6 @@ def extract_from_zip(
     zip_path: Union[str, Path],
     file_path: str,
 ) -> str:
-    """
-    Extract and read a single file from a ZIP archive.
-
-    Args:
-        zip_path: Path to .zip file
-        file_path: Path within the ZIP to extract
-
-    Returns:
-        File contents (text if decodable, else error)
-    """
     import zipfile
 
     zip_path = Path(zip_path)
@@ -266,7 +193,6 @@ def extract_from_zip(
 
 
 def _parse_page_range(pages: str) -> list[int]:
-    """Parse page range string like '1-5' or '1,3,5' into list of 0-indexed page numbers."""
     result = []
     for part in pages.split(","):
         part = part.strip()
@@ -279,7 +205,6 @@ def _parse_page_range(pages: str) -> list[int]:
 
 
 def _table_to_markdown(table: list[list]) -> str:
-    """Convert a table (list of rows) to markdown format."""
     if not table or not table[0]:
         return "(empty table)"
 
@@ -297,7 +222,6 @@ def _table_to_markdown(table: list[list]) -> str:
 
 
 def _format_size(size: int) -> str:
-    """Format byte size as human readable."""
     for unit in ["B", "KB", "MB", "GB"]:
         if size < 1024:
             return f"{size:.1f} {unit}" if unit != "B" else f"{size} {unit}"

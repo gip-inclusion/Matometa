@@ -34,7 +34,6 @@ def interactive_dir(tmp_path, monkeypatch):
 
 @pytest.fixture
 def db_setup(monkeypatch):
-    """Ensure database tables exist and clean up after test."""
     init_db()
     yield
 
@@ -50,7 +49,6 @@ def db_setup(monkeypatch):
 
 
 def _create_app(interactive_dir, slug, cron_script=None, app_md=None):
-    """Helper to create a test interactive app."""
     app_dir = interactive_dir / slug
     app_dir.mkdir()
 
@@ -342,7 +340,6 @@ def s3_cron_env(tmp_path, monkeypatch):
 
 
 def _mock_s3_app(slug, cron_script="print('hello')", app_md=None):
-    """Build a dict representing an app stored in S3."""
     if app_md is None:
         app_md = f"---\ntitle: {slug}\n---\n"
     return {
@@ -511,7 +508,6 @@ class TestRunS3CronTask:
         assert result["status"] == "failure"
 
     def test_s3_script_uploads_output(self, mocker, s3_cron_env, db_setup):
-        """Files written by S3 cron script are uploaded back to S3."""
         script = textwrap.dedent("""\
             import json
             from pathlib import Path

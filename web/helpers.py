@@ -53,7 +53,6 @@ def validate_knowledge_path(file_param: str) -> Path | None:
 
 
 def _validate_conv_id(conv_id: str) -> bool:
-    """Validate that conv_id is a valid UUID."""
     try:
         uuid.UUID(conv_id)
         return True
@@ -62,14 +61,12 @@ def _validate_conv_id(conv_id: str) -> bool:
 
 
 def get_staging_dir(conv_id: str) -> Path:
-    """Get staging directory for a knowledge conversation."""
     if not _validate_conv_id(conv_id):
         raise ValueError("Invalid conversation ID")
     return KNOWLEDGE_DRAFTS_ROOT / conv_id
 
 
 def list_staged_files(conv_id: str) -> list[str]:
-    """List files in staging directory relative to knowledge root."""
     if not _validate_conv_id(conv_id):
         return []
     staging_dir = get_staging_dir(conv_id)
@@ -87,7 +84,6 @@ def list_staged_files(conv_id: str) -> list[str]:
 
 
 def list_knowledge_files() -> dict[str, list[dict]]:
-    """List all knowledge files grouped by subfolder."""
     sections = {}
 
     for f in sorted(KNOWLEDGE_ROOT.rglob("*.md")):
@@ -122,7 +118,6 @@ def list_knowledge_files() -> dict[str, list[dict]]:
 
 
 def list_knowledge_sections() -> dict[str, list[dict]]:
-    """List top-level knowledge folders and root files, grouped by category."""
     mb_icon = "ri-pie-chart-2-line"
     meta = {
         "README": {"label": "README", "icon": "ri-file-text-line", "group": "Généralités"},

@@ -9,7 +9,6 @@ sys.path.insert(0, str(project_root))
 
 from web.database import ConversationStore
 
-
 def save_report(
     title: str,
     content: str,
@@ -19,21 +18,6 @@ def save_report(
     source_conversation_id: str = None,
     tags: list[str] = None,
 ) -> dict:
-    """
-    Create a new report.
-
-    Args:
-        title: Report title
-        content: Report content (markdown)
-        website: Website name (emplois, dora, etc.)
-        category: Query category
-        original_query: Original user question
-        source_conversation_id: Optional ID of conversation that generated this report
-        tags: List of tag names (e.g. ["emplois", "candidats", "analyse"])
-
-    Returns:
-        {"report_id": int, "source_conversation_id": str or None}
-    """
     store = ConversationStore()
 
     # Create report with content stored directly
@@ -64,7 +48,6 @@ def save_report(
         "source_conversation_id": source_conversation_id,
     }
 
-
 def update_report(
     report_id: int,
     content: str,
@@ -72,19 +55,6 @@ def update_report(
     website: str = None,
     category: str = None,
 ) -> dict:
-    """
-    Update an existing report's content and metadata.
-
-    Args:
-        report_id: ID of the report to update
-        content: New report content
-        title: New title (optional)
-        website: New website (optional)
-        category: New category (optional)
-
-    Returns:
-        {"report_id": int, "version": int}
-    """
     store = ConversationStore()
 
     # Get the report to verify it exists
@@ -111,7 +81,6 @@ def update_report(
         "version": updated_report.version,
     }
 
-
 def append_report(
     conversation_id: str,
     title: str,
@@ -121,21 +90,6 @@ def append_report(
     original_query: str = None,
     tags: list[str] = None,
 ) -> dict:
-    """
-    Create a new report linked to an existing conversation.
-
-    Args:
-        conversation_id: ID of the source conversation
-        title: Report title
-        content: Report content
-        website: Website name
-        category: Query category
-        original_query: Original user question
-        tags: List of tag names
-
-    Returns:
-        {"report_id": int, "source_conversation_id": str}
-    """
     # Just delegate to save_report with source_conversation_id
     return save_report(
         title=title,
@@ -147,19 +101,7 @@ def append_report(
         tags=tags,
     )
 
-
 def list_reports(website: str = None, category: str = None, limit: int = 20) -> list:
-    """
-    List existing reports.
-
-    Args:
-        website: Filter by website
-        category: Filter by category
-        limit: Max reports to return
-
-    Returns:
-        List of report dicts with id, title, website, category, version
-    """
     store = ConversationStore()
     reports = store.list_reports(website=website, category=category, limit=limit)
 
@@ -174,7 +116,6 @@ def list_reports(website: str = None, category: str = None, limit: int = 20) -> 
         }
         for r in reports
     ]
-
 
 if __name__ == "__main__":
     import argparse

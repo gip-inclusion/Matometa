@@ -86,7 +86,6 @@ class TestCancelUnstick:
     """Tests for the cancel endpoint force-clearing stuck conversations."""
 
     def test_cancel_unsticks_zombie_conversation(self, client):
-        """Cancel clears needs_response when no pending run command exists."""
         conv = store.create_conversation(user_id="test@test.com")
         store.update_conversation(conv.id, needs_response=True)
 
@@ -98,7 +97,6 @@ class TestCancelUnstick:
         assert not updated.needs_response
 
     def test_cancel_keeps_needs_response_when_pending(self, client):
-        """Cancel does NOT clear needs_response when a run command is pending."""
         conv = store.create_conversation(user_id="test@test.com")
         store.update_conversation(conv.id, needs_response=True)
         store.enqueue_pm_command(conv.id, "run", {"prompt": "test"})

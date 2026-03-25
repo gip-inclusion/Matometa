@@ -30,7 +30,6 @@ def generate_text(
     temperature: float = 0.2,
     timeout: Optional[float] = None,
 ) -> str:
-    """Generate a short text completion using the configured backend."""
     backend = _get_llm_backend()
 
     if backend in ("ollama", "cli-ollama"):

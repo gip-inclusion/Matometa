@@ -32,7 +32,6 @@ router = APIRouter(prefix="/api/conversations")
 
 
 def generate_conversation_title(user_message: str, conv_id: str) -> None:
-    """Generate a smart title for a conversation (async, in background)."""
 
     def _generate():
         try:
@@ -149,7 +148,6 @@ Réponds UNIQUEMENT avec les noms des tags séparés par des virgules, rien d'au
 Exemple: emplois, candidats, trafic, analyse"""
 
     def _parse_tags(response: str) -> list[str]:
-        """Extract valid tag names from response."""
         # Handle potential explanation text - take just the tag line
         if "\n" in response:
             for line in response.split("\n"):
@@ -165,7 +163,6 @@ Exemple: emplois, candidats, trafic, analyse"""
         return tag_names
 
     def _generate():
-        """Generate tags using the configured LLM backend."""
         try:
             model = config.OLLAMA_TAG_MODEL if config.LLM_BACKEND in ("ollama", "cli-ollama") else config.CLAUDE_MODEL
             response = llm.generate_text(prompt, model=model, max_tokens=100)
@@ -181,7 +178,6 @@ Exemple: emplois, candidats, trafic, analyse"""
 
 @router.post("")
 def create_conversation(user_email: str = Depends(get_current_user)):
-    """Create a new conversation."""
     conv = store.create_conversation(user_id=user_email)
     return {
         "id": conv.id,
@@ -195,7 +191,6 @@ def create_conversation(user_email: str = Depends(get_current_user)):
 
 @router.get("")
 def list_conversations(user_email: str = Depends(get_current_user), limit: int = 20):
-    """List recent conversations."""
     convs = store.list_conversations(limit=limit, user_id=user_email)
     return {
         "conversations": [
@@ -214,7 +209,6 @@ def list_conversations(user_email: str = Depends(get_current_user), limit: int =
 
 @router.get("/running")
 def get_running():
-    """Get list of currently running conversation IDs (needs_response=True)."""
     return {"running": store.get_running_conversation_ids()}
 
 
@@ -245,7 +239,6 @@ def get_conversation(conv_id: str, user_email: str = Depends(get_current_user)):
 
 @router.delete("/{conv_id}")
 def delete_conversation(conv_id: str, user_email: str = Depends(get_current_user)):
-    """Delete a conversation. User must be owner or admin."""
     conv = store.get_conversation(conv_id)
     if not conv:
         return JSONResponse({"error": "Conversation not found"}, status_code=404)
@@ -262,7 +255,6 @@ def delete_conversation(conv_id: str, user_email: str = Depends(get_current_user
 
 @router.post("/{conv_id}/pin")
 async def pin_conversation(conv_id: str, request: Request, user_email: str = Depends(get_current_user)):
-    """Pin a conversation to the sidebar. Admin only."""
     if user_email not in ADMIN_USERS:
         return JSONResponse({"error": "Permission denied"}, status_code=403)
 
@@ -281,7 +273,6 @@ async def pin_conversation(conv_id: str, request: Request, user_email: str = Dep
 
 @router.delete("/{conv_id}/pin")
 def unpin_conversation(conv_id: str, user_email: str = Depends(get_current_user)):
-    """Unpin a conversation from the sidebar. Admin only."""
     if user_email not in ADMIN_USERS:
         return JSONResponse({"error": "Permission denied"}, status_code=403)
 
@@ -292,7 +283,6 @@ def unpin_conversation(conv_id: str, user_email: str = Depends(get_current_user)
 
 @router.patch("/{conv_id}")
 async def update_conversation(conv_id: str, request: Request):
-    """Update conversation (title, etc.)."""
     data = await request.json()
     if not data:
         return JSONResponse({"error": "No data provided"}, status_code=400)
@@ -307,7 +297,6 @@ async def update_conversation(conv_id: str, request: Request):
 
 @router.post("/{conv_id}/generate-title")
 def generate_title(conv_id: str):
-    """Generate a title for a conversation using LLM."""
     conv = store.get_conversation(conv_id)
     if not conv:
         return JSONResponse({"error": "Conversation not found"}, status_code=404)
@@ -559,11 +548,9 @@ async def stream_conversation(
         return JSONResponse({"error": "No messages in conversation"}, status_code=400)
 
     def _sse_event(msg_type: str, data: dict) -> str:
-        """Format a complete SSE event as a single string (avoids split-chunk buffering)."""
         return f"event: {msg_type}\ndata: {json.dumps(data)}\n\n"
 
     def _format_msg(msg) -> str:
-        """Format a DB message as an SSE event string."""
         sse_data = {"type": msg.type, "content": msg.content}
         if msg.type in ("tool_use", "tool_result"):
             try:
@@ -573,7 +560,6 @@ async def stream_conversation(
         return _sse_event(msg.type, sse_data)
 
     async def _drain_unseen(last_msg_id: int) -> list[str]:
-        """Fetch remaining messages and return formatted SSE chunks ending with 'done'."""
         chunks = []
         final = await asyncio.to_thread(store.get_messages_since, conv_id, last_msg_id)
         for msg in final:
@@ -679,14 +665,12 @@ def cancel_conversation(conv_id: str):
 
 @router.get("/{conv_id}/tags")
 def get_conversation_tags(conv_id: str):
-    """Get tags for a conversation."""
     tags = store.get_conversation_tags(conv_id)
     return {"tags": [{"name": t.name, "type": t.type, "label": t.label} for t in tags]}
 
 
 @router.put("/{conv_id}/tags")
 async def set_conversation_tags(conv_id: str, request: Request):
-    """Set tags for a conversation (replaces existing)."""
     data = await request.json()
     if not data or "tags" not in data:
         return JSONResponse({"error": "Missing 'tags' field"}, status_code=400)
@@ -698,11 +682,6 @@ async def set_conversation_tags(conv_id: str, request: Request):
     store.set_conversation_tags(conv_id, tag_names)
     tags = store.get_conversation_tags(conv_id)
     return {"tags": [{"name": t.name, "type": t.type, "label": t.label} for t in tags]}
-
-
-# =============================================================================
-# File Upload Endpoints
-# =============================================================================
 
 
 @router.post("/{conv_id}/files")
@@ -759,7 +738,6 @@ async def upload_file_endpoint(conv_id: str, file: UploadFile, user_email: str =
 
 @router.get("/{conv_id}/files")
 def list_files(conv_id: str):
-    """List all files uploaded to a conversation."""
     conv = store.get_conversation(conv_id, include_messages=False)
     if not conv:
         return JSONResponse({"error": "Conversation not found"}, status_code=404)
@@ -770,7 +748,6 @@ def list_files(conv_id: str):
 
 @router.get("/{conv_id}/files/{file_id}")
 def get_file(conv_id: str, file_id: int):
-    """Get metadata for a specific uploaded file."""
     uploaded_file = store.get_uploaded_file(file_id)
     if not uploaded_file:
         return JSONResponse({"error": "File not found"}, status_code=404)
@@ -783,7 +760,6 @@ def get_file(conv_id: str, file_id: int):
 
 @router.get("/{conv_id}/files/{file_id}/content")
 def get_file_content_endpoint(conv_id: str, file_id: int):
-    """Download the content of an uploaded file."""
     uploaded_file = store.get_uploaded_file(file_id)
     if not uploaded_file:
         return JSONResponse({"error": "File not found"}, status_code=404)

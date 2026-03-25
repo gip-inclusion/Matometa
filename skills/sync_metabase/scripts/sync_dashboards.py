@@ -1,17 +1,5 @@
 #!/usr/bin/env python3
-"""
-Sync Metabase dashboards to SQLite database.
-
-Usage:
-    python -m skills.sync_metabase.scripts.sync_dashboards
-
-This script:
-1. Fetches dashboards from Metabase (based on cards' dashboard_ids)
-2. Extracts descriptions from virtual text cards
-3. Maps to pilotage.inclusion.beta.gouv.fr URLs
-4. Assigns topics based on content
-5. Writes to SQLite database
-"""
+"""Sync Metabase dashboards to SQLite database."""
 
 import sys
 from pathlib import Path
@@ -21,7 +9,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from skills.metabase_query.scripts.metabase import MetabaseAPI, MetabaseError
 from skills.metabase_query.scripts.cards_db import CardsDB, TOPICS
-
 
 # Mapping from pilotage URLs to Metabase dashboard IDs and topics
 # Based on https://pilotage.inclusion.beta.gouv.fr/tableaux-de-bord/
@@ -136,9 +123,7 @@ KNOWN_DASHBOARDS = {
     471: ("esat", "/tableaux-de-bord/zoom-esat-2025/"),
 }
 
-
 def extract_dashboard_text(dashboard_data: dict) -> str:
-    """Extract text from virtual text cards in a dashboard."""
     texts = []
     dashcards = dashboard_data.get('dashcards', [])
 
@@ -152,9 +137,7 @@ def extract_dashboard_text(dashboard_data: dict) -> str:
 
     return "\n\n".join(texts)
 
-
 def infer_topic_from_name(name: str) -> str:
-    """Infer topic from dashboard name."""
     name_lower = name.lower()
 
     if "esat" in name_lower:
@@ -183,7 +166,6 @@ def infer_topic_from_name(name: str) -> str:
         return "generalites-iae"
 
     return "autre"
-
 
 def main():
     print("=" * 70)
@@ -269,7 +251,6 @@ def main():
         print(f"  {topic}: {count}")
 
     db.close()
-
 
 if __name__ == "__main__":
     main()

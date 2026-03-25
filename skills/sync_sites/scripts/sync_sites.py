@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""
-Sync site knowledge files with fresh Matomo data.
-
-Usage:
-    python -m skills.sync_sites.scripts.sync_sites
-    python -m skills.sync_sites.scripts.sync_sites --baselines-only
-    python -m skills.sync_sites.scripts.sync_sites --site emplois
-    python -m skills.sync_sites.scripts.sync_sites --dry-run
-"""
+"""Sync site knowledge files with fresh Matomo data."""
 
 import argparse
 import re
@@ -19,12 +11,7 @@ from typing import Optional
 
 from lib.query import MatomoAPI, MatomoError
 
-# =============================================================================
-# Matomo Data Fetching (extended)
-# =============================================================================
-
 def fetch_custom_dimensions(api: MatomoAPI, site_id: int) -> list[dict]:
-    """Fetch configured custom dimensions for a site."""
     try:
         dims = api.get_configured_dimensions(site_id)
         return [
@@ -39,9 +26,7 @@ def fetch_custom_dimensions(api: MatomoAPI, site_id: int) -> list[dict]:
     except MatomoError:
         return []
 
-
 def fetch_saved_segments(api: MatomoAPI, site_id: int) -> list[dict]:
-    """Fetch saved segments for a site."""
     try:
         segments = api._request("SegmentEditor.getAll", {"idSite": site_id})
         if not isinstance(segments, list):
@@ -57,9 +42,7 @@ def fetch_saved_segments(api: MatomoAPI, site_id: int) -> list[dict]:
     except MatomoError:
         return []
 
-
 def fetch_event_categories(api: MatomoAPI, site_id: int, period: str, date: str) -> list[dict]:
-    """Fetch event categories with counts."""
     try:
         events = api.get_event_categories(site_id, period, date, limit=50)
         return [
@@ -73,9 +56,7 @@ def fetch_event_categories(api: MatomoAPI, site_id: int, period: str, date: str)
     except MatomoError:
         return []
 
-
 def fetch_event_names(api: MatomoAPI, site_id: int, period: str, date: str) -> list[dict]:
-    """Fetch all event names with counts (direct, no drilling needed)."""
     try:
         events = api.get_event_names(site_id, period, date, limit=200)
         return [
@@ -89,11 +70,6 @@ def fetch_event_names(api: MatomoAPI, site_id: int, period: str, date: str) -> l
     except MatomoError:
         return []
 
-
-# =============================================================================
-# Site Configuration
-# =============================================================================
-
 @dataclass
 class SiteConfig:
     """Configuration for a tracked site."""
@@ -104,7 +80,6 @@ class SiteConfig:
     url: Optional[str] = None
     # Custom dimensions (if any)
     user_kind_dimension: Optional[int] = None  # dimension ID for user type
-
 
 SITES = {
     "emplois": SiteConfig(
@@ -165,13 +140,7 @@ SITES = {
     ),
 }
 
-
-# =============================================================================
-# Data Fetching
-# =============================================================================
-
 def get_months_for_year(year: int) -> list[str]:
-    """Get list of month dates for a year (YYYY-MM-01 format)."""
     today = date.today()
     months = []
     for month in range(1, 13):
@@ -180,7 +149,6 @@ def get_months_for_year(year: int) -> list[str]:
         if d <= today:
             months.append(d.strftime("%Y-%m-%d"))
     return months
-
 
 def fetch_baselines(api: MatomoAPI, site: SiteConfig, year: int = 2025) -> dict:
     """
@@ -288,20 +256,12 @@ def fetch_baselines(api: MatomoAPI, site: SiteConfig, year: int = 2025) -> dict:
         "engagement": engagement,
     }
 
-
-# =============================================================================
-# Markdown Generation
-# =============================================================================
-
 def format_number(n) -> str:
-    """Format number with thousand separators, or '-' if None."""
     if n is None:
         return "-"
     return f"{n:,}".replace(",", ",")
 
-
 def generate_baselines_section(data: dict, year: int) -> str:
-    """Generate the Traffic Baselines markdown section."""
     lines = [
         f"## Traffic Baselines ({year})",
         "",
@@ -396,9 +356,7 @@ def generate_baselines_section(data: dict, year: int) -> str:
 
     return "\n".join(lines)
 
-
 def generate_dimensions_section(dimensions: list[dict]) -> str:
-    """Generate the Custom Dimensions markdown section."""
     lines = [
         "## Custom Dimensions",
         "",
@@ -427,9 +385,7 @@ def generate_dimensions_section(dimensions: list[dict]) -> str:
 
     return "\n".join(lines)
 
-
 def generate_segments_section(segments: list[dict]) -> str:
-    """Generate the Saved Segments markdown section."""
     lines = [
         "## Saved Segments",
         "",
@@ -453,9 +409,7 @@ def generate_segments_section(segments: list[dict]) -> str:
 
     return "\n".join(lines)
 
-
 def generate_events_section(event_names: list[dict], ref_month: str) -> str:
-    """Generate the Event Names markdown section."""
     lines = [
         "## Event Names",
         "",
@@ -483,16 +437,13 @@ def generate_events_section(event_names: list[dict], ref_month: str) -> str:
 
     return "\n".join(lines)
 
-
 def count_section_lines(content: str, section_title: str) -> int:
-    """Count non-empty lines in a section."""
     pattern = rf"## {re.escape(section_title)}(.*?)(?=\n## |\Z)"
     match = re.search(pattern, content, re.DOTALL)
     if not match:
         return 0
     section_content = match.group(1)
     return len([line for line in section_content.strip().split("\n") if line.strip()])
-
 
 def update_doc_section(
     doc_path: Path,
@@ -534,7 +485,6 @@ def update_doc_section(
     else:
         print(f"   Section '{section_title}' not found")
     return False
-
 
 def update_doc_baselines(doc_path: Path, baselines_section: str, dry_run: bool = False) -> bool:
     """
@@ -578,11 +528,6 @@ def update_doc_baselines(doc_path: Path, baselines_section: str, dry_run: bool =
     else:
         print(f"   No changes to {doc_path}")
         return False
-
-
-# =============================================================================
-# Main
-# =============================================================================
 
 def main():
     parser = argparse.ArgumentParser(description="Sync knowledge base with Matomo data")
@@ -705,7 +650,6 @@ def main():
     print("=" * 70)
     print(f"COMPLETE: {updated_count} sites updated")
     print("=" * 70)
-
 
 if __name__ == "__main__":
     main()

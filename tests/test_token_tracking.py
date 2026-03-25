@@ -80,7 +80,6 @@ class TestDatabaseUsageColumns:
 
     @pytest.fixture(autouse=True)
     def db_setup(self):
-        """Ensure database tables exist and clean up after test."""
         from web.database import init_db
 
         init_db()

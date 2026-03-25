@@ -19,7 +19,6 @@ router = APIRouter(prefix="/api/reports")
 
 @router.get("/tags")
 def list_tags(type: str | None = Query(default=None, alias="type")):
-    """Get all available tags, optionally filtered by type."""
     if type:
         tags = store.get_all_tags(tag_type=type)
     else:
@@ -34,7 +33,6 @@ def list_reports(
     category: str | None = Query(default=None),
     limit: int = Query(default=50),
 ):
-    """List available reports from database."""
     reports = store.list_reports(website=website, category=category, limit=limit)
     return {
         "reports": [
@@ -58,7 +56,6 @@ def list_reports(
 
 @router.get("/{report_id}")
 def get_report(report_id: int):
-    """Get a specific report."""
     report = store.get_report(report_id)
     if not report:
         return JSONResponse({"error": "Report not found"}, status_code=404)
@@ -84,7 +81,6 @@ def get_report(report_id: int):
 
 @router.delete("/{report_id}")
 def delete_report(report_id: int):
-    """Delete a report (admin only - use archive for normal use)."""
     if store.delete_report(report_id):
         return Response(status_code=200)
     return JSONResponse({"error": "Report not found"}, status_code=404)
@@ -92,7 +88,6 @@ def delete_report(report_id: int):
 
 @router.post("/{report_id}/archive")
 def archive_report(report_id: int):
-    """Archive a report (soft delete)."""
     if store.archive_report(report_id):
         return Response(status_code=200)
     return JSONResponse({"error": "Report not found"}, status_code=404)
@@ -100,7 +95,6 @@ def archive_report(report_id: int):
 
 @router.post("")
 async def create_report(request: Request, user_email: str = Depends(get_current_user)):
-    """Create a new report."""
     data = await request.json()
     if not data or "title" not in data or "content" not in data:
         return JSONResponse({"error": "Missing title or content"}, status_code=400)
@@ -181,7 +175,6 @@ def publish_to_notion(report_id: int):
 
 @router.post("/{report_id}/pin")
 async def pin_report(report_id: int, request: Request, user_email: str = Depends(get_current_user)):
-    """Pin a report. Admin only."""
     if user_email not in ADMIN_USERS:
         return JSONResponse({"error": "Permission denied"}, status_code=403)
 
@@ -198,7 +191,6 @@ async def pin_report(report_id: int, request: Request, user_email: str = Depends
 
 @router.delete("/{report_id}/pin")
 def unpin_report(report_id: int, user_email: str = Depends(get_current_user)):
-    """Unpin a report. Admin only."""
     if user_email not in ADMIN_USERS:
         return JSONResponse({"error": "Permission denied"}, status_code=403)
 
@@ -208,14 +200,12 @@ def unpin_report(report_id: int, user_email: str = Depends(get_current_user)):
 
 @router.get("/{report_id}/tags")
 def get_report_tags(report_id: int):
-    """Get tags for a report."""
     tags = store.get_report_tags(report_id)
     return {"tags": [{"name": t.name, "type": t.type, "label": t.label} for t in tags]}
 
 
 @router.put("/{report_id}/tags")
 async def set_report_tags(report_id: int, request: Request):
-    """Set tags for a report (replaces existing)."""
     data = await request.json()
     if not data or "tags" not in data:
         return JSONResponse({"error": "Missing 'tags' field"}, status_code=400)

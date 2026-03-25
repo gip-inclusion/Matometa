@@ -1,22 +1,4 @@
-"""Cron runner for data refresh scripts.
-
-Three-tier discovery:
-- System tasks: checked into repo under cron/*/cron.py (CRON.md for metadata)
-- App tasks (local): per-deployment in data/interactive/*/cron.py (APP.md)
-- App tasks (S3): when USE_S3 is True, apps stored in S3 are also discovered
-
-Metadata fields (in CRON.md or APP.md front-matter):
-- cron: true/false (default: true)
-- timeout: seconds (default: 300)
-- schedule: daily/weekly (default: daily)
-- title: display name
-
-Usage:
-    python -m web.cron              # run all enabled cron tasks due today
-    python -m web.cron --app slug   # run one specific task (ignores schedule)
-    python -m web.cron --list       # list discovered cron tasks
-    python -m web.cron --dry-run    # show what would run
-"""
+"""Cron runner for data refresh scripts."""
 
 import argparse
 import os
@@ -85,7 +67,6 @@ def _get_schedule(meta: dict) -> str:
 
 
 def _is_due(schedule: str) -> bool:
-    """Check if a task with the given schedule should run today."""
     if schedule == "daily":
         return True
     if schedule == "weekly":
@@ -140,13 +121,7 @@ def set_cron_enabled(app_slug: str, enabled: bool) -> bool:
 
 
 def _discover_from_dir(base_dir: Path, md_name: str, tier: str) -> list[dict]:
-    """Discover cron tasks from a directory.
-
-    Args:
-        base_dir: Parent directory to scan (e.g. cron/ or data/interactive/)
-        md_name: Metadata filename to look for (CRON.md or APP.md)
-        tier: "system" or "app"
-    """
+    """Discover cron tasks from a directory."""
     tasks = []
     if not base_dir.exists():
         return tasks
@@ -218,7 +193,6 @@ def discover_cron_tasks() -> list[dict]:
 
 
 def find_task(slug: str) -> dict | None:
-    """Find a task by slug across both tiers."""
     for task in discover_cron_tasks():
         if task["slug"] == slug:
             return task
@@ -226,7 +200,6 @@ def find_task(slug: str) -> dict | None:
 
 
 def _prepare_s3_workdir(slug: str) -> Path:
-    """Download all files for an S3 app into a temporary directory."""
     workdir = Path(tempfile.mkdtemp(prefix=f"cron-{slug}-"))
     for entry in s3.list_files(f"{slug}/"):
         rel_path = entry["path"]
@@ -248,7 +221,6 @@ def _prepare_s3_workdir(slug: str) -> Path:
 
 
 def _upload_s3_results(slug: str, workdir: Path):
-    """Upload new/modified files from workdir back to S3."""
     workdir_resolved = workdir.resolve()
     for path in workdir.rglob("*"):
         if not path.is_file():
@@ -350,7 +322,6 @@ def run_cron_task(slug: str, trigger: str = "scheduled") -> dict:
 
 
 def _record_run(result: dict, trigger: str):
-    """Store a cron run result in the database."""
     try:
         with get_db() as conn:
             conn.execute(
@@ -371,7 +342,6 @@ def _record_run(result: dict, trigger: str):
 
 
 def get_last_runs(limit_per_app: int = 1) -> dict[str, list[dict]]:
-    """Get the last N runs for each app slug."""
     runs: dict[str, list[dict]] = {}
     try:
         with get_db() as conn:
@@ -400,7 +370,6 @@ def get_last_runs(limit_per_app: int = 1) -> dict[str, list[dict]]:
 
 
 def get_app_runs(slug: str, limit: int = 20) -> list[dict]:
-    """Get recent runs for a specific app."""
     try:
         with get_db() as conn:
             rows = conn.execute(

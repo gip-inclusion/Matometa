@@ -87,11 +87,6 @@ def init_db():
         _migrate_to_v22(conn)
 
 
-# =============================================================================
-# Migrations
-# =============================================================================
-
-
 def _migrate_to_v11(conn: ConnectionWrapper):
     """Migrate to v11: rename token columns to usage_ prefix, add cache/backend columns."""
     columns = _get_table_columns(conn, "conversations")
@@ -231,11 +226,6 @@ def _migrate_to_v19(conn: ConnectionWrapper):
             last_seen TEXT NOT NULL
         )
     """)
-
-
-# =============================================================================
-# Full schema creation
-# =============================================================================
 
 
 def _create_schema(conn: ConnectionWrapper):
@@ -443,10 +433,6 @@ def _migrate_to_v20(conn: ConnectionWrapper):
         "CREATE INDEX IF NOT EXISTS idx_conversations_needs_response ON conversations(needs_response) WHERE needs_response = 1"
     )
 
-
-# =============================================================================
-# Tag taxonomy
-# =============================================================================
 
 TAGS = [
     # Produits (9)

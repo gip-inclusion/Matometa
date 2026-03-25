@@ -176,7 +176,6 @@ class SDKBackend(AgentBackend):
 
     @staticmethod
     def _translate_message(sdk_msg) -> list[AgentMessage]:
-        """Convert an SDK message to zero or more AgentMessages."""
         msgs: list[AgentMessage] = []
 
         if isinstance(sdk_msg, AssistantMessage):

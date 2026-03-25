@@ -10,7 +10,6 @@ __all__ = [
 
 
 def get_agent() -> AgentBackend:
-    """Get the configured agent backend."""
     from .. import config
 
     backend = config.AGENT_BACKEND

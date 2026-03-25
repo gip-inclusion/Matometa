@@ -1,13 +1,4 @@
-"""
-Metabase API client.
-
-Usage:
-    from lib.query import MetabaseAPI
-
-    api = MetabaseAPI(url="https://metabase.example.com", api_key="...", database_id=2)
-    result = api.execute_sql("SELECT 1")
-    print(result.to_markdown())
-"""
+"""Metabase API client."""
 
 import base64
 import json
@@ -26,16 +17,6 @@ logger = logging.getLogger(__name__)
 
 
 def build_sql_url(base_url: str, database_id: int, sql: str) -> str:
-    """Build a shareable Metabase URL for a SQL query.
-
-    Args:
-        base_url: Metabase instance URL (e.g., "https://stats.inclusion.gouv.fr")
-        database_id: Database ID to query
-        sql: SQL query text
-
-    Returns:
-        URL with base64-encoded query that opens in Metabase
-    """
     query_obj = {
         "dataset_query": {
             "type": "native",
@@ -60,7 +41,6 @@ class QueryResult:
     row_count: int
 
     def to_markdown(self, max_rows: int = 20) -> str:
-        """Format result as a markdown table."""
         if self.row_count == 0:
             return "Aucun resultat trouve."
 
@@ -82,13 +62,10 @@ class QueryResult:
         return "\n".join(lines)
 
     def to_dicts(self) -> list[dict]:
-        """Convert rows to list of dictionaries."""
         return [dict(zip(self.columns, row)) for row in self.rows]
 
 
 class MetabaseError(Exception):
-    """Error from Metabase API."""
-
     pass
 
 
@@ -132,7 +109,6 @@ class MetabaseAPI:
         self._session.mount("http://", HTTPAdapter(max_retries=retry))
 
     def close(self) -> None:
-        """Close the underlying HTTP session."""
         self._session.close()
 
     def __enter__(self):
@@ -149,7 +125,6 @@ class MetabaseAPI:
         timeout: int = 60,
         query_type: Optional[str] = None,
     ) -> Any:
-        """Make an API request."""
         url = f"{self.url}{endpoint}"
 
         try:
@@ -166,7 +141,6 @@ class MetabaseAPI:
             raise MetabaseError(error_msg)
 
     def _parse_result(self, data: dict) -> QueryResult:
-        """Parse Metabase query result into QueryResult."""
         # Check for query errors (Metabase returns 202 with error in body)
         if data.get("error"):
             raise MetabaseError(data.get("error"))
@@ -187,16 +161,6 @@ class MetabaseAPI:
     # --- Core methods ---
 
     def execute_sql(self, sql: str, timeout: int = 60) -> QueryResult:
-        """
-        Execute a native SQL query.
-
-        Args:
-            sql: SQL query to execute
-            timeout: Request timeout in seconds
-
-        Returns:
-            QueryResult with columns and rows
-        """
         data = {
             "database": self.database_id,
             "type": "native",
@@ -216,16 +180,6 @@ class MetabaseAPI:
         return result
 
     def execute_card(self, card_id: int, timeout: int = 60) -> QueryResult:
-        """
-        Execute a saved Metabase card/question.
-
-        Args:
-            card_id: The card ID to execute
-            timeout: Request timeout in seconds
-
-        Returns:
-            QueryResult with columns and rows
-        """
         result_data = self._request("POST", f"/api/card/{card_id}/query", {}, timeout=timeout, query_type="card")
         result = self._parse_result(result_data)
 
@@ -240,19 +194,16 @@ class MetabaseAPI:
         return result
 
     def get_card(self, card_id: int) -> dict:
-        """Get card metadata."""
         return self._request("GET", f"/api/card/{card_id}")
 
     # --- Discovery methods ---
 
     def list_cards(self, collection_id: int) -> list[dict]:
-        """List cards in a collection."""
         result = self._request("GET", f"/api/collection/{collection_id}/items")
         items = result.get("data", [])
         return [item for item in items if item.get("model") == "card"]
 
     def search_cards(self, query: str, limit: int = 50) -> list[dict]:
-        """Search for cards by name/description."""
         params = urllib.parse.urlencode(
             {
                 "q": query,
@@ -288,11 +239,9 @@ class MetabaseAPI:
     # --- Dashboard methods ---
 
     def get_dashboard(self, dashboard_id: int) -> dict:
-        """Get dashboard metadata including cards."""
         return self._request("GET", f"/api/dashboard/{dashboard_id}")
 
     def list_dashboards(self, collection_id: int) -> list[dict]:
-        """List dashboards in a collection."""
         result = self._request("GET", f"/api/collection/{collection_id}/items")
         items = result.get("data", [])
         return [item for item in items if item.get("model") == "dashboard"]
@@ -300,5 +249,4 @@ class MetabaseAPI:
     # --- User info ---
 
     def get_current_user(self) -> dict:
-        """Get current authenticated user info."""
         return self._request("GET", "/api/user/current")

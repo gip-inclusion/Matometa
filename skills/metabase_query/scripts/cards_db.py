@@ -1,14 +1,4 @@
-"""
-SQLite database for Metabase cards inventory.
-
-Usage:
-    from skills.metabase_query.scripts.cards_db import load_cards_db
-
-    db = load_cards_db()
-    cards = db.search("file active")  # Full-text search
-    cards = db.by_topic("candidatures")  # Filter by topic
-    card = db.get(4413)  # Get by ID
-"""
+"""SQLite database for Metabase cards inventory."""
 
 import json
 import sqlite3
@@ -16,7 +6,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-
 
 # Database location
 DB_PATH = Path(__file__).parent.parent.parent.parent / "knowledge" / "metabase" / "cards.db"
@@ -68,7 +57,6 @@ TABLE_TO_TOPIC = {
     "effectif": "etp-effectifs",
 }
 
-
 @dataclass
 class Card:
     """A Metabase card/question."""
@@ -86,7 +74,6 @@ class Card:
 
     @classmethod
     def from_row(cls, row: tuple) -> "Card":
-        """Create Card from database row."""
         return cls(
             id=row[0],
             name=row[1],
@@ -99,7 +86,6 @@ class Card:
             created_at=row[8],
             updated_at=row[9],
         )
-
 
 @dataclass
 class Dashboard:
@@ -114,7 +100,6 @@ class Dashboard:
 
     @classmethod
     def from_row(cls, row: tuple) -> "Dashboard":
-        """Create Dashboard from database row."""
         return cls(
             id=row[0],
             name=row[1],
@@ -124,24 +109,16 @@ class Dashboard:
             collection_id=row[5],
         )
 
-
 class CardsDB:
     """SQLite database for Metabase cards."""
 
     def __init__(self, db_path: Optional[Path] = DB_PATH, in_memory: bool = False):
-        """Initialize database connection.
-
-        Args:
-            db_path: Path to database file. Ignored if in_memory=True.
-            in_memory: If True, use in-memory database (for sync operations).
-        """
         self.db_path = db_path
         self.in_memory = in_memory
         self._conn: Optional[sqlite3.Connection] = None
 
     @property
     def conn(self) -> sqlite3.Connection:
-        """Get database connection (lazy initialization)."""
         if self._conn is None:
             if self.in_memory:
                 self._conn = sqlite3.connect(":memory:")
@@ -155,7 +132,6 @@ class CardsDB:
         return self._conn
 
     def close(self):
-        """Close database connection."""
         if self._conn:
             self._conn.close()
             self._conn = None
@@ -169,7 +145,6 @@ class CardsDB:
     # --- Schema management ---
 
     def init_schema(self):
-        """Create database schema (called by sync script)."""
         if not self.in_memory and self.db_path:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -232,7 +207,6 @@ class CardsDB:
         self.conn.commit()
 
     def save_to_file(self, path: Path):
-        """Save in-memory database to a file."""
         path.parent.mkdir(parents=True, exist_ok=True)
         file_conn = sqlite3.connect(path)
         self.conn.backup(file_conn)
@@ -241,35 +215,23 @@ class CardsDB:
     # --- Card queries ---
 
     def get(self, card_id: int) -> Optional[Card]:
-        """Get a card by ID."""
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM cards WHERE id = ?", (card_id,))
         row = cursor.fetchone()
         return Card.from_row(row) if row else None
 
     def all(self) -> list[Card]:
-        """Get all cards."""
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM cards ORDER BY id")
         return [Card.from_row(row) for row in cursor.fetchall()]
 
     def by_topic(self, topic: str) -> list[Card]:
-        """Get cards by topic."""
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM cards WHERE topic = ? ORDER BY id", (topic,))
         return [Card.from_row(row) for row in cursor.fetchall()]
 
     def search(self, query: str, limit: int = 50) -> list[Card]:
-        """
-        Full-text search across name, description, and SQL.
-
-        Args:
-            query: Search terms
-            limit: Max results
-
-        Returns:
-            List of matching cards, ranked by relevance
-        """
+        """Full-text search across name, description, and SQL."""
         cursor = self.conn.cursor()
         cursor.execute("""
             SELECT cards.*
@@ -282,7 +244,6 @@ class CardsDB:
         return [Card.from_row(row) for row in cursor.fetchall()]
 
     def by_table(self, table_name: str) -> list[Card]:
-        """Get cards that reference a specific table."""
         cursor = self.conn.cursor()
         # Use JSON contains pattern
         cursor.execute("""
@@ -293,13 +254,11 @@ class CardsDB:
         return [Card.from_row(row) for row in cursor.fetchall()]
 
     def by_dashboard(self, dashboard_id: int) -> list[Card]:
-        """Get cards belonging to a dashboard."""
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM cards WHERE dashboard_id = ? ORDER BY id", (dashboard_id,))
         return [Card.from_row(row) for row in cursor.fetchall()]
 
     def dashboards_summary(self) -> dict[int, int]:
-        """Get count of cards per dashboard."""
         cursor = self.conn.cursor()
         cursor.execute("""
             SELECT dashboard_id, COUNT(*) as count
@@ -311,7 +270,6 @@ class CardsDB:
         return {row[0]: row[1] for row in cursor.fetchall()}
 
     def topics_summary(self) -> dict[str, int]:
-        """Get count of cards per topic."""
         cursor = self.conn.cursor()
         cursor.execute("""
             SELECT topic, COUNT(*) as count
@@ -322,7 +280,6 @@ class CardsDB:
         return {row[0] or "autre": row[1] for row in cursor.fetchall()}
 
     def tables_summary(self) -> dict[str, int]:
-        """Get count of cards per table reference."""
         cards = self.all()
         counts: dict[str, int] = {}
         for card in cards:
@@ -331,7 +288,6 @@ class CardsDB:
         return dict(sorted(counts.items(), key=lambda x: -x[1]))
 
     def count(self) -> int:
-        """Get total card count."""
         cursor = self.conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM cards")
         return cursor.fetchone()[0]
@@ -349,7 +305,6 @@ class CardsDB:
         sql_query: Optional[str],
         tables_referenced: list[str],
     ):
-        """Insert or update a card."""
         now = datetime.now().isoformat()
         tables_json = json.dumps(tables_referenced)
 
@@ -375,11 +330,9 @@ class CardsDB:
         self.conn.commit()
 
     def commit(self):
-        """Commit pending changes."""
         self.conn.commit()
 
     def clear(self):
-        """Clear all cards (for full resync)."""
         cursor = self.conn.cursor()
         cursor.execute("DELETE FROM cards")
         cursor.execute("DELETE FROM cards_fts")
@@ -388,20 +341,17 @@ class CardsDB:
     # --- Dashboard operations ---
 
     def get_dashboard(self, dashboard_id: int) -> Optional[Dashboard]:
-        """Get a dashboard by ID."""
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM dashboards WHERE id = ?", (dashboard_id,))
         row = cursor.fetchone()
         return Dashboard.from_row(row) if row else None
 
     def all_dashboards(self) -> list[Dashboard]:
-        """Get all dashboards."""
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM dashboards ORDER BY id")
         return [Dashboard.from_row(row) for row in cursor.fetchall()]
 
     def dashboards_by_topic(self, topic: str) -> list[Dashboard]:
-        """Get dashboards by topic."""
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM dashboards WHERE topic = ? ORDER BY id", (topic,))
         return [Dashboard.from_row(row) for row in cursor.fetchall()]
@@ -415,7 +365,6 @@ class CardsDB:
         pilotage_url: Optional[str],
         collection_id: Optional[int],
     ):
-        """Insert or update a dashboard."""
         cursor = self.conn.cursor()
         cursor.execute("""
             INSERT INTO dashboards (id, name, description, topic, pilotage_url, collection_id)
@@ -429,17 +378,13 @@ class CardsDB:
         """, (dashboard_id, name, description, topic, pilotage_url, collection_id))
 
     def clear_dashboards(self):
-        """Clear all dashboards."""
         cursor = self.conn.cursor()
         cursor.execute("DELETE FROM dashboards")
         cursor.execute("DELETE FROM dashboard_cards")
         self.conn.commit()
 
-
 def load_cards_db() -> CardsDB:
-    """Load the cards database."""
     return CardsDB()
-
 
 if __name__ == "__main__":
     # Quick test

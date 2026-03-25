@@ -22,13 +22,7 @@ _config: dict | None = None
 
 
 def _substitute_env_vars(value: Any, strict: bool = False) -> Any:
-    """
-    Recursively substitute ${env.VAR} patterns with environment values.
-
-    Args:
-        value: Value to process
-        strict: If True, raise error for missing env vars. If False, keep original string.
-    """
+    """Recursively substitute ${env.VAR} patterns with environment values."""
     if isinstance(value, str):
         pattern = r"\$\{env\.([^}]+)\}"
 
@@ -53,7 +47,6 @@ def _substitute_env_vars(value: Any, strict: bool = False) -> Any:
 
 
 def load_config(force_reload: bool = False) -> dict:
-    """Load and parse sources.yaml, substituting environment variables."""
     global _config
 
     if _config is not None and not force_reload:
@@ -72,16 +65,6 @@ def load_config(force_reload: bool = False) -> dict:
 
 
 def get_source_config(source_type: str, instance: str | None = None) -> dict:
-    """
-    Get configuration for a specific source instance.
-
-    Args:
-        source_type: "metabase" or "matomo"
-        instance: Instance name, or None for default
-
-    Returns:
-        Configuration dict for the instance
-    """
     config = load_config()
 
     if source_type not in config:
@@ -105,16 +88,6 @@ def get_source_config(source_type: str, instance: str | None = None) -> dict:
 
 
 def get_metabase(instance: str | None = None, database_id: int | None = None):
-    """
-    Get a configured MetabaseAPI client.
-
-    Args:
-        instance: Instance name ("stats", "datalake"), or None for default
-        database_id: Override the default database ID for queries
-
-    Returns:
-        Configured MetabaseAPI instance
-    """
     from ._metabase import MetabaseAPI
 
     config = get_source_config("metabase", instance)
@@ -129,15 +102,6 @@ def get_metabase(instance: str | None = None, database_id: int | None = None):
 
 
 def get_matomo(instance: str | None = None):
-    """
-    Get a configured MatomoAPI client.
-
-    Args:
-        instance: Instance name, or None for default
-
-    Returns:
-        Configured MatomoAPI instance
-    """
     from ._matomo import MatomoAPI
 
     config = get_source_config("matomo", instance)
@@ -158,7 +122,6 @@ def get_matomo(instance: str | None = None):
 
 
 def list_instances(source_type: str) -> list[str]:
-    """List available instances for a source type."""
     config = load_config()
 
     if source_type not in config:
@@ -168,7 +131,6 @@ def list_instances(source_type: str) -> list[str]:
 
 
 def get_default_instance(source_type: str) -> str | None:
-    """Get the default instance name for a source type."""
     config = load_config()
 
     if source_type not in config:

@@ -31,16 +31,6 @@ def emit_api_signal(
     sql: Optional[str] = None,
     card_id: Optional[int] = None,
 ) -> None:
-    """Emit an API signal to stdout for observability.
-
-    Args:
-        source: "matomo" or "metabase"
-        instance: Instance name (e.g., "inclusion", "stats")
-        url: Inspection URL for the UI
-        method: Matomo API method (for matomo)
-        sql: SQL query snippet (for metabase, truncated)
-        card_id: Card ID (for metabase saved questions)
-    """
     signal = {
         "source": source,
         "instance": instance,
@@ -60,14 +50,6 @@ def emit_api_signal(
 
 
 def parse_api_signals(content: str) -> list[dict]:
-    """Parse API signals from tool output content.
-
-    Args:
-        content: The tool_result content (may contain signals mixed with other output)
-
-    Returns:
-        List of signal dicts, empty if none found
-    """
     signals = []
     for match in SIGNAL_PATTERN.finditer(content):
         try:
@@ -79,12 +61,4 @@ def parse_api_signals(content: str) -> list[dict]:
 
 
 def strip_api_signals(content: str) -> str:
-    """Remove API signals from content (for cleaner display).
-
-    Args:
-        content: The tool_result content
-
-    Returns:
-        Content with signal lines removed
-    """
     return SIGNAL_PATTERN.sub("", content).strip()

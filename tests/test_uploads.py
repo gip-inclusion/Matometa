@@ -72,19 +72,16 @@ class TestComputeSha256:
     """Tests for SHA256 hash computation."""
 
     def test_computes_correct_hash(self):
-        """SHA256 hash is computed correctly."""
         content = b"Hello, World!"
         expected = hashlib.sha256(content).hexdigest()
         assert _compute_sha256(content) == expected
 
     def test_empty_content(self):
-        """SHA256 of empty content is correct."""
         content = b""
         expected = hashlib.sha256(content).hexdigest()
         assert _compute_sha256(content) == expected
 
     def test_deterministic(self):
-        """Same content produces same hash."""
         content = b"test content"
         hash1 = _compute_sha256(content)
         hash2 = _compute_sha256(content)
@@ -95,28 +92,23 @@ class TestIsTextFile:
     """Tests for text file detection."""
 
     def test_text_extension_is_detected(self):
-        """Files with text extensions are detected as text."""
         for ext in [".txt", ".md", ".csv", ".json", ".py", ".ts"]:
             assert _is_text_file(f"file{ext}", None, b"") is True
 
     def test_binary_extension_is_not_text(self):
-        """Files with binary extensions are not detected as text."""
         assert _is_text_file("image.png", "image/png", b"\x89PNG") is False
         # PDF with binary content is detected as binary
         assert _is_text_file("doc.pdf", "application/pdf", b"\x00\x01\x02") is False
 
     def test_text_mime_type_is_detected(self):
-        """Files with text MIME types are detected as text."""
         assert _is_text_file("file", "text/plain", b"") is True
         assert _is_text_file("file", "application/json", b"") is True
 
     def test_content_based_detection(self):
-        """Text is detected by content analysis."""
         text_content = b"This is plain text content with mostly printable characters."
         assert _is_text_file("unknown", None, text_content) is True
 
     def test_binary_content_not_detected_as_text(self):
-        """Binary content is not detected as text."""
         binary_content = bytes(range(256))  # Contains non-printable bytes
         assert _is_text_file("unknown", None, binary_content) is False
 
@@ -183,7 +175,6 @@ class TestGenerateStoredFilename:
         assert name1 != name2
 
     def test_handles_no_extension(self):
-        """Files without extension are handled."""
         result = _generate_stored_filename("Makefile")
         assert "Makefile" in result
 
@@ -193,7 +184,6 @@ class TestUploadFile:
     """Tests for the main upload function."""
 
     def test_upload_text_file(self):
-        """Text files are uploaded successfully."""
         content = b"Hello, World!"
         file_obj = io.BytesIO(content)
 
@@ -212,7 +202,6 @@ class TestUploadFile:
         assert text_content == "Hello, World!"
 
     def test_upload_binary_file(self):
-        """Binary files are uploaded without text content."""
         content = bytes(range(256)) * 100  # Binary content
         file_obj = io.BytesIO(content)
 
@@ -228,7 +217,6 @@ class TestUploadFile:
         assert text_content is None
 
     def test_upload_large_text_file_no_inline(self):
-        """Large text files don't return inline content."""
         # Make content larger than TEXT_FILE_INLINE_LIMIT (1KB in tests)
         content = b"x" * 2000
         file_obj = io.BytesIO(content)
@@ -245,7 +233,6 @@ class TestUploadFile:
         assert text_content is None  # Too large to inline
 
     def test_file_too_large_rejected(self):
-        """Files exceeding size limit are rejected."""
         import web.config as config
 
         config.MAX_UPLOAD_SIZE = 100  # Very small for testing
@@ -262,7 +249,6 @@ class TestUploadFile:
             )
 
     def test_blocked_extension_rejected(self):
-        """Files with blocked extensions are rejected."""
         content = b"MZ"  # PE header start
         file_obj = io.BytesIO(content)
 
@@ -325,7 +311,6 @@ class TestFormatFileForContext:
     """Tests for formatting file info for conversation context."""
 
     def test_format_with_text_content(self):
-        """Text content is included when provided."""
         uploaded_file = UploadedFile(
             original_filename="notes.txt",
             storage_path="/data/uploads/notes.txt",
@@ -343,7 +328,6 @@ class TestFormatFileForContext:
         assert "```" in result  # Code block markers
 
     def test_format_without_text_content(self):
-        """Binary files show path information."""
         uploaded_file = UploadedFile(
             original_filename="image.png",
             storage_path="/data/uploads/image.png",
@@ -360,7 +344,6 @@ class TestFormatFileForContext:
         assert "Binary file" in result
 
     def test_format_large_text_file(self):
-        """Large text files mention using Read tool."""
         uploaded_file = UploadedFile(
             original_filename="large.txt",
             storage_path="/data/uploads/large.txt",
@@ -380,14 +363,12 @@ class TestBlockedExtensions:
     """Tests for blocked file extension list."""
 
     def test_executable_extensions_blocked(self):
-        """Common executable extensions are in the blocked list."""
         assert ".exe" in BLOCKED_EXTENSIONS
         assert ".dll" in BLOCKED_EXTENSIONS
         assert ".bat" in BLOCKED_EXTENSIONS
         assert ".com" in BLOCKED_EXTENSIONS
 
     def test_script_extensions_blocked(self):
-        """Script extensions are in the blocked list."""
         assert ".vbs" in BLOCKED_EXTENSIONS
         assert ".ps1" in BLOCKED_EXTENSIONS
         assert ".jar" in BLOCKED_EXTENSIONS
@@ -397,14 +378,12 @@ class TestTextExtensions:
     """Tests for text file extension list."""
 
     def test_common_text_extensions_included(self):
-        """Common text file extensions are recognized."""
         assert ".txt" in TEXT_EXTENSIONS
         assert ".md" in TEXT_EXTENSIONS
         assert ".json" in TEXT_EXTENSIONS
         assert ".csv" in TEXT_EXTENSIONS
 
     def test_programming_extensions_included(self):
-        """Programming language files are recognized as text."""
         assert ".py" in TEXT_EXTENSIONS
         assert ".ts" in TEXT_EXTENSIONS
         assert ".java" in TEXT_EXTENSIONS
@@ -434,7 +413,6 @@ class TestDatabaseIntegration:
         assert retrieved.user_id == "test@example.com"
 
     def test_files_by_hash(self):
-        """Files can be found by hash."""
         content = b"unique content"
         file_obj = io.BytesIO(content)
 
@@ -451,7 +429,6 @@ class TestDatabaseIntegration:
         assert found.id == result.id
 
     def test_conversation_files(self):
-        """Files can be listed by conversation."""
         # Create a conversation first
         conv = store.create_conversation(user_id="test@example.com")
 

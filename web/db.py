@@ -68,44 +68,37 @@ class ConnectionWrapper:
         self._cursor = None
 
     def execute(self, sql: str, params: tuple = ()) -> "ConnectionWrapper":
-        """Execute a query with %s placeholders."""
         self._cursor = self._conn.cursor(cursor_factory=RealDictCursor)
         self._cursor.execute(sql, params)
         return self
 
     def execute_raw(self, sql: str) -> "ConnectionWrapper":
-        """Execute raw SQL (multi-statement, no parameters, no dict cursor)."""
         self._cursor = self._conn.cursor()
         self._cursor.execute(sql)
         return self
 
     def executemany(self, sql: str, params_list: list) -> "ConnectionWrapper":
-        """Execute a query with multiple parameter sets."""
         self._cursor = self._conn.cursor()
         self._cursor.executemany(sql, params_list)
         return self
 
     def fetchone(self) -> Optional[Any]:
-        """Fetch one row as a dict (via RealDictCursor)."""
         if self._cursor is None:
             return None
         return self._cursor.fetchone()
 
     def fetchall(self) -> list:
-        """Fetch all rows as dicts (via RealDictCursor)."""
         if self._cursor is None:
             return []
         return self._cursor.fetchall()
 
     @property
     def rowcount(self) -> int:
-        """Get number of affected rows."""
         if self._cursor is None:
             return 0
         return self._cursor.rowcount
 
     def insert_and_get_id(self, sql: str, params: tuple = ()) -> Optional[int]:
-        """Execute an INSERT and return the new row's ID via RETURNING."""
         if "RETURNING" not in sql.upper():
             sql = sql.rstrip().rstrip(";") + " RETURNING id"
         self._cursor = self._conn.cursor(cursor_factory=RealDictCursor)
@@ -114,7 +107,6 @@ class ConnectionWrapper:
         return row["id"] if row else None
 
     def insert_ignore(self, table: str, columns: list[str], values: tuple) -> "ConnectionWrapper":
-        """Execute an INSERT ... ON CONFLICT DO NOTHING."""
         placeholders = ", ".join(["%s"] * len(values))
         cols = ", ".join(columns)
         sql = f"INSERT INTO {table} ({cols}) VALUES ({placeholders}) ON CONFLICT DO NOTHING"
@@ -123,20 +115,16 @@ class ConnectionWrapper:
         return self
 
     def commit(self):
-        """Commit the transaction."""
         self._conn.commit()
 
     def rollback(self):
-        """Rollback the transaction."""
         self._conn.rollback()
 
     def close(self):
-        """Close the connection."""
         self._conn.close()
 
 
 def get_connection() -> ConnectionWrapper:
-    """Get a database connection from the pool."""
     pool = _get_pg_pool()
     conn = pool.getconn()
     return ConnectionWrapper(conn)

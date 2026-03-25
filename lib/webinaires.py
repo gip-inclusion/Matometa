@@ -17,18 +17,10 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 
 log = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Table names (datalake public schema)
-# ---------------------------------------------------------------------------
-
 T_WEBINAIRES = "matometa_webinaires"
 T_SESSIONS = "matometa_webinaire_sessions"
 T_INSCRIPTIONS = "matometa_webinaire_inscriptions"
 T_SYNC_META = "matometa_webinaire_sync_meta"
-
-# ---------------------------------------------------------------------------
-# Product inference
-# ---------------------------------------------------------------------------
 
 _PRODUCT_PATTERNS = [
     (r"\bdora\b", "dora"),
@@ -42,7 +34,6 @@ _PRODUCT_PATTERNS = [
 
 
 def infer_product(title: str, organizer_email: str | None = None) -> str | None:
-    """Best-effort product tagging from title and organizer email."""
     text = (title or "").lower()
     for pattern, product in _PRODUCT_PATTERNS:
         if re.search(pattern, text):
@@ -50,14 +41,7 @@ def infer_product(title: str, organizer_email: str | None = None) -> str | None:
     return None
 
 
-# ---------------------------------------------------------------------------
-# Datalake writer (PostgreSQL via Metabase API)
-# ---------------------------------------------------------------------------
-
-
 class _ResultProxy:
-    """Minimal result wrapper matching sqlite3 cursor interface."""
-
     def __init__(self, data):
         self._rows = [tuple(r) for r in (data or {}).get("rows", [])]
 
@@ -125,15 +109,6 @@ def _escape_val(val):
 
 
 def _batch_upsert(conn, insert_prefix, conflict_suffix, rows, batch_size=100):
-    """Execute batched multi-row INSERT with ON CONFLICT.
-
-    Args:
-        conn: Database connection (SQLite or DatalakeWriter)
-        insert_prefix: e.g. "INSERT INTO table (col1, col2) VALUES "
-        conflict_suffix: e.g. " ON CONFLICT(id) DO UPDATE SET col2=excluded.col2"
-        rows: list of tuples, one per row
-        batch_size: max rows per INSERT statement
-    """
     if not rows:
         return
     for i in range(0, len(rows), batch_size):
@@ -144,11 +119,6 @@ def _batch_upsert(conn, insert_prefix, conflict_suffix, rows, batch_size=100):
             values_clauses.append(f"({escaped})")
         sql = insert_prefix + ", ".join(values_clauses) + conflict_suffix
         conn.execute(sql)
-
-
-# ---------------------------------------------------------------------------
-# Livestorm API client
-# ---------------------------------------------------------------------------
 
 
 class LivestormClient:
@@ -218,11 +188,6 @@ class LivestormClient:
         return list(self.paginate(f"/sessions/{session_id}/people"))
 
 
-# ---------------------------------------------------------------------------
-# Grist API client
-# ---------------------------------------------------------------------------
-
-
 class GristClient:
     """Grist REST API client."""
 
@@ -244,17 +209,12 @@ class GristClient:
         self.request_count = 0
 
     def get_records(self, table_id: str) -> list[dict]:
-        """Fetch all records from a table. Uses /records (not /data)."""
         url = f"{self.BASE_URL}/docs/{self.doc_id}/tables/{table_id}/records"
         resp = self._session.get(url, timeout=30)
         self.request_count += 1
         resp.raise_for_status()
         return resp.json().get("records", [])
 
-
-# ---------------------------------------------------------------------------
-# Test-only schema (SQLite, for unit tests)
-# ---------------------------------------------------------------------------
 
 SCHEMA_SQL = f"""
 CREATE TABLE IF NOT EXISTS {T_WEBINAIRES} (
@@ -328,19 +288,12 @@ CREATE INDEX IF NOT EXISTS idx_sessions_webinar ON {T_SESSIONS}(webinar_id);
 
 
 def ensure_schema(conn: sqlite3.Connection):
-    """Create tables in SQLite (for testing only)."""
     conn.executescript(SCHEMA_SQL)
     conn.executescript(INDEX_SQL)
     conn.commit()
 
 
-# ---------------------------------------------------------------------------
-# Timestamp helpers
-# ---------------------------------------------------------------------------
-
-
 def _ts_to_iso(ts) -> str | None:
-    """Convert a Unix timestamp (int or float) to ISO8601 string."""
     if ts is None or ts == 0:
         return None
     try:
@@ -353,13 +306,7 @@ def _now_iso() -> str:
     return datetime.now(tz=timezone.utc).isoformat()
 
 
-# ---------------------------------------------------------------------------
-# Livestorm sync
-# ---------------------------------------------------------------------------
-
-
 def _extract_custom_field(fields: list[dict], field_id: str) -> str | None:
-    """Extract a field value from Livestorm registration fields."""
     for f in fields:
         if f.get("id") == field_id:
             val = f.get("value")
@@ -595,7 +542,6 @@ def sync_livestorm(conn, client: LivestormClient):
 
 
 def _grist_duration_to_minutes(duree: str | None) -> int | None:
-    """Parse Grist duration choice ('30 min', '45 min', '60 min')."""
     if not duree:
         return None
     m = re.search(r"(\d+)", str(duree))

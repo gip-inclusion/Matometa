@@ -32,7 +32,6 @@ class GitHubClient:
         }
 
     def _request(self, method: str, url: str, **kwargs) -> requests.Response:
-        """Make a request and handle errors."""
         resp = requests.request(method, url, headers=self._headers(), **kwargs)
         if not resp.ok:
             try:
@@ -43,7 +42,6 @@ class GitHubClient:
         return resp
 
     def get_file_sha(self, path: str, branch: str = None) -> Optional[str]:
-        """Get current SHA of a file (needed for updates)."""
         branch = branch or self.base_branch
         resp = requests.get(
             f"{GITHUB_API}/repos/{self.repo}/contents/{path}",
@@ -55,7 +53,6 @@ class GitHubClient:
         return None
 
     def get_branch_sha(self, branch: str = None) -> str:
-        """Get SHA of branch HEAD."""
         branch = branch or self.base_branch
         resp = self._request(
             "GET",
@@ -64,7 +61,6 @@ class GitHubClient:
         return resp.json()["object"]["sha"]
 
     def create_branch(self, branch_name: str) -> None:
-        """Create a new branch from base branch."""
         sha = self.get_branch_sha()
         self._request(
             "POST",
@@ -82,7 +78,6 @@ class GitHubClient:
         message: str,
         branch: str,
     ) -> None:
-        """Create or update a file on a branch."""
         sha = self.get_file_sha(path, branch)
 
         payload = {
@@ -105,7 +100,6 @@ class GitHubClient:
         branch: str,
         body: str = "",
     ) -> str:
-        """Create a pull request, return PR URL."""
         resp = self._request(
             "POST",
             f"{GITHUB_API}/repos/{self.repo}/pulls",
@@ -124,17 +118,6 @@ class GitHubClient:
         summary: str,
         conversation_id: str,
     ) -> str:
-        """
-        Create a PR with multiple file changes.
-
-        Args:
-            files: Dict mapping file paths to their new content
-            summary: Commit message / PR title
-            conversation_id: For branch naming
-
-        Returns:
-            PR URL
-        """
         branch_name = f"knowledge-update-{conversation_id[:8]}"
 
         self.create_branch(branch_name)

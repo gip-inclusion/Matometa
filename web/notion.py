@@ -13,11 +13,7 @@ def is_configured() -> bool:
     return bool(NOTION_TOKEN and NOTION_REPORTS_DB)
 
 
-# --- Rich text parsing ---
-
-
 def _parse_inline(text: str) -> list[dict]:
-    """Parse inline markdown (bold, italic, code, links) into Notion rich_text."""
     results = []
     pattern = re.compile(
         r"\*\*(.+?)\*\*"  # bold
@@ -63,8 +59,6 @@ def _rich_text(content: str, bold=False, italic=False, code=False, link=None) ->
     return obj
 
 
-# --- Markdown to Notion blocks ---
-
 _LANG_MAP = {
     "django": "html",
     "bash": "bash",
@@ -82,7 +76,6 @@ _LANG_MAP = {
 
 
 def markdown_to_blocks(md: str) -> list[dict]:
-    """Convert markdown string to a list of Notion block objects."""
     # Strip YAML frontmatter
     md = re.sub(r"^---\n.*?\n---\n", "", md, flags=re.DOTALL)
 
@@ -220,9 +213,6 @@ def markdown_to_blocks(md: str) -> list[dict]:
         i += 1
 
     return blocks
-
-
-# --- Notion API ---
 
 
 def _notion_request(method: str, endpoint: str, payload: dict = None) -> dict:

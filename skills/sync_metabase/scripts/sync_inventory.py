@@ -1,22 +1,5 @@
 #!/usr/bin/env python3
-"""
-Sync Metabase cards inventory to Markdown files (and optionally SQLite).
-
-Usage:
-    python -m skills.sync_metabase.scripts.sync_inventory --instance stats
-    python -m skills.sync_metabase.scripts.sync_inventory --instance datalake
-    python -m skills.sync_metabase.scripts.sync_inventory --all
-    python -m skills.sync_metabase.scripts.sync_inventory --instance stats --skip-categorize
-    python -m skills.sync_metabase.scripts.sync_inventory --instance stats --sqlite
-
-This script:
-1. Reads instance config from config/sources.yaml
-2. Fetches cards from dashboards configured for that instance
-3. Extracts SQL queries (native or compiled from GUI queries)
-4. Optionally categorizes with Claude AI
-5. Generates Markdown files in the instance's knowledge_path
-6. Optionally generates SQLite database (--sqlite)
-"""
+"""Sync Metabase cards inventory to Markdown files (and optionally SQLite)."""
 
 import argparse
 import json
@@ -39,16 +22,13 @@ from skills.metabase_query.scripts.metabase import MetabaseError
 from skills.metabase_query.scripts.cards_db import CardsDB, TOPICS, TABLE_TO_TOPIC, DB_PATH
 from lib._sources import load_config, get_source_config, get_metabase, list_instances
 
-
 def infer_topic_from_tables(tables: list[str]) -> str | None:
-    """Infer topic from table names. Returns None if no match."""
     for table in tables:
         table_lower = table.lower()
         for pattern, topic in TABLE_TO_TOPIC.items():
             if pattern in table_lower:
                 return topic
     return None
-
 
 def progress_bar(current: int, total: int, prefix: str = "", suffix: str = "", length: int = 40):
     """Simple progress bar."""
@@ -61,9 +41,7 @@ def progress_bar(current: int, total: int, prefix: str = "", suffix: str = "", l
     if current == total:
         print()
 
-
 def extract_table_references(sql: str) -> list[str]:
-    """Extract table names from SQL query."""
     if not sql:
         return []
 
@@ -90,7 +68,6 @@ def extract_table_references(sql: str) -> list[str]:
                 tables.add(table)
 
     return sorted(tables)
-
 
 def categorize_cards_with_llm(cards: list[dict]) -> dict[int, tuple[str, str]]:
     """
@@ -171,9 +148,7 @@ IMPORTANT:
     progress_bar(total_batches, total_batches, prefix="   Categorizing", suffix=f"batch {total_batches}/{total_batches}")
     return results
 
-
 def generate_readme(db: CardsDB, last_sync: str):
-    """Generate README.md index file."""
     readme_path = DB_PATH.parent / "README.md"
 
     topics_summary = db.topics_summary()
@@ -278,9 +253,7 @@ def generate_readme(db: CardsDB, last_sync: str):
 
     return readme_path
 
-
 def format_sql_for_markdown(sql: str) -> str:
-    """Format SQL for better readability in markdown, handling escaping."""
     if not sql:
         return ""
 
@@ -300,9 +273,7 @@ def format_sql_for_markdown(sql: str) -> str:
 
     return formatted.strip()
 
-
 def generate_markdown(db: CardsDB, cards_dir: Path, dashboards_dir: Path, last_sync: str):
-    """Generate Markdown files for git tracking."""
     cards_dir.mkdir(parents=True, exist_ok=True)
     dashboards_dir.mkdir(parents=True, exist_ok=True)
 
@@ -460,7 +431,6 @@ def generate_markdown(db: CardsDB, cards_dir: Path, dashboards_dir: Path, last_s
 
     return cards_dir, dashboards_dir
 
-
 def sync_instance(instance_name: str, args):
     """Sync a single Metabase instance."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -577,7 +547,6 @@ def sync_instance(instance_name: str, args):
     print("-" * 70)
 
     def fetch_card_sql(card: dict) -> tuple[int, str, list[str]]:
-        """Fetch SQL for a single card. Returns (card_id, sql, tables)."""
         try:
             sql = api.get_card_sql(card["id"])
             tables = extract_table_references(sql)
@@ -699,7 +668,6 @@ def sync_instance(instance_name: str, args):
         print(f"Dashboards: {dashboards_dir}")
     print()
 
-
 def main():
     parser = argparse.ArgumentParser(description="Sync Metabase cards to markdown/SQLite")
     parser.add_argument("--instance", type=str, help="Metabase instance to sync (e.g., stats, datalake)")
@@ -724,7 +692,6 @@ def main():
 
     for instance_name in instances:
         sync_instance(instance_name, args)
-
 
 if __name__ == "__main__":
     main()

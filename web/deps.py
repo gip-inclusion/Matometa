@@ -8,23 +8,16 @@ from fastapi.templating import Jinja2Templates
 
 from . import config
 
-# --- Auth dependencies ---
-
 
 def get_current_user(request: Request) -> str:
-    """Extract authenticated user email from oauth2-proxy headers."""
     return request.headers.get("X-Forwarded-Email") or config.DEFAULT_USER
 
 
 def get_current_user_name(request: Request) -> str | None:
-    """Extract authenticated user name from oauth2-proxy headers."""
     return request.headers.get("X-Forwarded-User")
 
 
-# --- Jinja2 templates ---
-
 templates = Jinja2Templates(directory="web/templates")
-
 
 # Custom filters
 
@@ -37,7 +30,6 @@ templates.env.filters["regex_replace"] = _regex_replace_filter
 
 
 def _static_url(path: str) -> str:
-    """Return /static/path?v=mtime for cache busting."""
     try:
         mtime = int(os.path.getmtime(f"web/static/{path}"))
     except OSError:

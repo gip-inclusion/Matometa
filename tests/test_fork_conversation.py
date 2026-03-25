@@ -9,8 +9,7 @@ import pytest
 
 @pytest.fixture
 def conversation_with_messages(app):
-    """Create a test conversation with multiple messages."""
-    from web.storage import store
+    from web.database import store
 
     conv = store.create_conversation(user_id="owner@example.com")
     store.update_conversation(conv.id, title="Original conversation")

@@ -22,7 +22,6 @@ from .storage import store
 
 logger = logging.getLogger(__name__)
 
-
 MAX_CONCURRENT_AGENTS = int(os.environ.get("MAX_CONCURRENT_AGENTS", "2"))
 
 
@@ -82,7 +81,6 @@ class ProcessManager:
         self.running[conv_id] = task
 
     def _reap_finished(self):
-        """Remove completed tasks from running dict."""
         done = [cid for cid, t in self.running.items() if t.done()]
         for cid in done:
             self.running.pop(cid, None)
@@ -205,7 +203,6 @@ class ProcessManager:
         )
 
     async def _cancel_agent(self, conversation_id: str):
-        """Cancel a running agent task."""
         task = self.running.get(conversation_id)
         if task:
             await self.backend.cancel(conversation_id)
@@ -213,12 +210,10 @@ class ProcessManager:
             logger.info(f"Cancelled agent for {conversation_id}")
 
     def is_running(self, conversation_id: str) -> bool:
-        """Check if an agent is running for a conversation."""
         task = self.running.get(conversation_id)
         return task is not None and not task.done()
 
     def _check_failure_markers(self, conversation_id: str, text: str):
-        """Check assistant text for failure markers and send Slack notification."""
         marker = find_failure_marker(text)
         if not marker:
             return
@@ -237,7 +232,6 @@ class ProcessManager:
 
     @staticmethod
     def _send_failure_notification(conv_id: str, title: str, snippet: str):
-        """Send a Slack DM about a detected failure (runs in background thread)."""
         import requests as req
 
         notify_email = os.environ.get("EMAIL_ANNAELLE", "")

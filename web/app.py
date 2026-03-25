@@ -56,20 +56,10 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(lifespan=lifespan)
 
-
-# =============================================================================
-# Static files
-# =============================================================================
-
 app.mount("/static", StaticFiles(directory="web/static"), name="static")
 
 if config.COMMON_DIR.exists():
     app.mount("/common", StaticFiles(directory=str(config.COMMON_DIR)), name="common")
-
-
-# =============================================================================
-# Interactive files: /interactive/ (served from S3 or local data/interactive/)
-# =============================================================================
 
 
 @app.get("/interactive/{filename:path}")
@@ -134,10 +124,6 @@ def serve_interactive(request: Request, filename: str = ""):
     raise HTTPException(status_code=404)
 
 
-# =============================================================================
-# Register Routers
-# =============================================================================
-
 from .routes import auth, conversations, cron, html, knowledge, query, rapports, reports  # noqa: E402
 from .selftest import router as selftest_router  # noqa: E402
 
@@ -151,11 +137,6 @@ app.include_router(conversations.router)
 app.include_router(rapports.router)
 app.include_router(cron.router)
 app.include_router(html.router)
-
-
-# =============================================================================
-# Main
-# =============================================================================
 
 
 def main():

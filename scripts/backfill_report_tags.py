@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""
-Backfill script to add tags to existing reports.
-
-Usage:
-    python scripts/backfill_report_tags.py [--dry-run]
-
-Run with --dry-run to see what would be tagged without making changes.
-"""
+"""Backfill script to add tags to existing reports."""
 
 import os
 import sys
@@ -87,7 +80,6 @@ def backfill_tags(dry_run: bool = False):
 
 
 def list_untagged():
-    """List reports that don't have tag mappings."""
     init_db()
 
     reports = store.list_reports(include_archived=True, limit=200)

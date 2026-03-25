@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""Detect conversations where Autometa likely failed (errors, corrections, omissions).
-
-Scans assistant messages for failure markers. Useful for manual/batch review.
-Real-time detection is handled by web/pm.py on each assistant response.
-
-Usage:
-    python scripts/detect_failed_conversations.py              # send DM
-    python scripts/detect_failed_conversations.py --dry-run    # list without sending
-    python scripts/detect_failed_conversations.py --days 14    # scan last 14 days
-"""
+"""Detect conversations where Autometa likely failed (errors, corrections, omissions)."""
 
 import argparse
 import os
@@ -38,7 +29,6 @@ def slack_lookup_user(token: str, email: str) -> str | None:
 
 
 def slack_send_dm(token: str, user_id: str, text: str) -> bool:
-    """Send a DM to a Slack user."""
     resp = requests.post(
         "https://slack.com/api/chat.postMessage",
         headers={"Authorization": f"Bearer {token}"},
@@ -52,7 +42,6 @@ NOTIFY_EMAIL = os.getenv("EMAIL_ANNAELLE", "")
 
 
 def get_failed_conversations(days: int) -> list[dict]:
-    """Find conversations with assistant messages containing failure markers."""
     init_db()
 
     cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
@@ -95,7 +84,6 @@ def get_failed_conversations(days: int) -> list[dict]:
 
 
 def build_slack_message(conversations: list[dict]) -> str:
-    """Build a grouped Slack message with conversation links."""
     base_url = config.BASE_URL
 
     lines = [":mag: *Conversations à vérifier*\n"]

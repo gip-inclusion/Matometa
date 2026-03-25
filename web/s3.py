@@ -16,7 +16,6 @@ from . import config
 
 logger = logging.getLogger(__name__)
 
-
 # Initialize S3 client if configured
 _s3_client = None
 
@@ -39,14 +38,12 @@ else:
 
 
 def _get_s3_key(path: str) -> str:
-    """Convert a relative path to an S3 key with prefix."""
     # Normalize path separators and remove leading slash
     path = path.replace("\\", "/").lstrip("/")
     return f"{config.S3_PREFIX}{path}"
 
 
 def _get_local_path(path: str) -> Path:
-    """Convert a relative path to a local filesystem path."""
     path = path.replace("\\", "/").lstrip("/")
     resolved = (config.INTERACTIVE_DIR / path).resolve()
     if not str(resolved).startswith(str(config.INTERACTIVE_DIR.resolve())):
@@ -55,17 +52,6 @@ def _get_local_path(path: str) -> Path:
 
 
 def upload_file(path: str, content: bytes, content_type: Optional[str] = None) -> bool:
-    """
-    Upload a file to storage.
-
-    Args:
-        path: Relative path within the interactive directory (e.g., "export.csv")
-        content: File content as bytes
-        content_type: MIME type (auto-detected if not provided)
-
-    Returns:
-        True if successful, False otherwise
-    """
     if content_type is None:
         content_type, _ = mimetypes.guess_type(path)
         content_type = content_type or "application/octet-stream"
@@ -97,31 +83,11 @@ def upload_file(path: str, content: bytes, content_type: Optional[str] = None) -
 
 
 def upload_fileobj(path: str, fileobj: BinaryIO, content_type: Optional[str] = None) -> bool:
-    """
-    Upload a file-like object to storage.
-
-    Args:
-        path: Relative path within the interactive directory
-        fileobj: File-like object with read() method
-        content_type: MIME type (auto-detected if not provided)
-
-    Returns:
-        True if successful, False otherwise
-    """
     content = fileobj.read()
     return upload_file(path, content, content_type)
 
 
 def download_file(path: str) -> Optional[bytes]:
-    """
-    Download a file from storage.
-
-    Args:
-        path: Relative path within the interactive directory
-
-    Returns:
-        File content as bytes, or None if not found
-    """
     if config.USE_S3:
         try:
             key = _get_s3_key(path)
@@ -148,19 +114,6 @@ def download_file(path: str) -> Optional[bytes]:
 
 
 def get_file_url(path: str, expires_in: int = 3600) -> Optional[str]:
-    """
-    Get a URL for accessing a file.
-
-    For S3, generates a presigned URL that expires.
-    For local storage, returns None (use serve_interactive route instead).
-
-    Args:
-        path: Relative path within the interactive directory
-        expires_in: URL expiration time in seconds (S3 only)
-
-    Returns:
-        Presigned URL for S3, None for local storage
-    """
     if config.USE_S3:
         try:
             key = _get_s3_key(path)
@@ -177,15 +130,6 @@ def get_file_url(path: str, expires_in: int = 3600) -> Optional[str]:
 
 
 def file_exists(path: str) -> bool:
-    """
-    Check if a file exists in storage.
-
-    Args:
-        path: Relative path within the interactive directory
-
-    Returns:
-        True if file exists, False otherwise
-    """
     if config.USE_S3:
         try:
             key = _get_s3_key(path)
@@ -204,15 +148,6 @@ def file_exists(path: str) -> bool:
 
 
 def delete_file(path: str) -> bool:
-    """
-    Delete a file from storage.
-
-    Args:
-        path: Relative path within the interactive directory
-
-    Returns:
-        True if successful (or file didn't exist), False on error
-    """
     if config.USE_S3:
         try:
             key = _get_s3_key(path)
@@ -235,15 +170,6 @@ def delete_file(path: str) -> bool:
 
 
 def list_files(prefix: str = "") -> list[dict]:
-    """
-    List files in storage with a given prefix.
-
-    Args:
-        prefix: Path prefix to filter by (e.g., "exports/")
-
-    Returns:
-        List of dicts with 'path', 'size', 'last_modified' keys
-    """
     files = []
 
     if config.USE_S3:
@@ -286,15 +212,6 @@ def list_files(prefix: str = "") -> list[dict]:
 
 
 def list_directories(prefix: str = "") -> list[str]:
-    """
-    List subdirectories in storage with a given prefix.
-
-    Args:
-        prefix: Path prefix to filter by
-
-    Returns:
-        List of directory names (not full paths)
-    """
     directories = set()
 
     if config.USE_S3:

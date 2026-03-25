@@ -1,9 +1,4 @@
-"""
-Test Matomo web UI URLs to find correct category/subcategory mappings.
-
-Usage:
-    from scripts.ui_tester import test_ui_url, discover_categories
-"""
+"""Test Matomo web UI URLs to find correct category/subcategory mappings."""
 
 import re
 import subprocess
@@ -11,9 +6,7 @@ import urllib.parse
 from pathlib import Path
 from typing import Optional
 
-
 def _load_cookie() -> str:
-    """Load cookie from .matomo_cookie file."""
     cookie_path = Path(__file__).parent.parent.parent.parent / ".matomo_cookie"
     if not cookie_path.exists():
         raise FileNotFoundError(
@@ -22,14 +15,11 @@ def _load_cookie() -> str:
         )
     return cookie_path.read_text().strip()
 
-
 def _clear_cookie():
-    """Clear the cookie file (call when it starts 403ing)."""
     cookie_path = Path(__file__).parent.parent.parent.parent / ".matomo_cookie"
     if cookie_path.exists():
         cookie_path.write_text("")
         print("Cookie cleared. Get a fresh one from browser.")
-
 
 def build_ui_url(
     site_id: int,
@@ -39,7 +29,6 @@ def build_ui_url(
     subcategory: str,
     segment: Optional[str] = None,
 ) -> str:
-    """Build a Matomo web UI URL."""
     base = "https://matomo.inclusion.beta.gouv.fr/index.php"
 
     main_params = {
@@ -62,7 +51,6 @@ def build_ui_url(
 
     return f"{base}?{main_query}#?{hash_query}"
 
-
 def test_ui_url(
     site_id: int,
     period: str,
@@ -72,17 +60,7 @@ def test_ui_url(
     segment: Optional[str] = None,
     verbose: bool = False,
 ) -> dict:
-    """
-    Test a Matomo web UI URL and return status.
-
-    Returns:
-        dict with:
-        - url: the URL tested
-        - status: 'ok', 'redirect', 'error', or 'auth_failed'
-        - title: page title if found
-        - actual_category: where it actually landed (if different)
-        - message: error message if any
-    """
+    """Test a Matomo web UI URL and return status."""
     url = build_ui_url(site_id, period, date, category, subcategory, segment)
     cookie = _load_cookie()
 
@@ -152,7 +130,6 @@ def test_ui_url(
     except Exception as e:
         return {"url": url, "status": "error", "message": str(e)}
 
-
 def discover_categories(site_id: int = 117) -> dict[str, list[tuple[str, str]]]:
     """
     Discover available categories via Matomo API.
@@ -203,7 +180,6 @@ def discover_categories(site_id: int = 117) -> dict[str, list[tuple[str, str]]]:
 
     return mappings
 
-
 def print_categories(site_id: int = 117):
     """Print all available categories in a readable format."""
     mappings = discover_categories(site_id)
@@ -212,7 +188,6 @@ def print_categories(site_id: int = 117):
         print(f"\n{cat}:")
         for subcat_id, subcat_name in sorted(mappings[cat]):
             print(f"  {subcat_id} ({subcat_name})")
-
 
 def test_all_mappings(site_id: int = 117, period: str = "month", date: str = "2025-12-01"):
     """Test all current UI mappings and report which ones work."""
@@ -245,7 +220,6 @@ def test_all_mappings(site_id: int = 117, period: str = "month", date: str = "20
         print(f"Auth failed: {len(results['auth_failed'])} - refresh cookie!")
 
     return results
-
 
 if __name__ == "__main__":
     # Quick test

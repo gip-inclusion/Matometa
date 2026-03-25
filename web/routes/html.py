@@ -26,7 +26,6 @@ router = APIRouter()
 
 
 def humanize_title(title: str) -> str:
-    """Clean up a title: strip date prefix, ISO timestamps, separators; capitalize."""
     if not title:
         return title
     title = re.sub(r"^\d{4}-\d{2}(-\d{2})?[-_]?", "", title)
@@ -41,25 +40,16 @@ DISPLAY_TZ = ZoneInfo(DISPLAY_TIMEZONE)
 
 
 def _now_local():
-    """Current time in the display timezone (mockable for tests)."""
     return datetime.now(DISPLAY_TZ)
 
 
 def _to_local(dt):
-    """Convert a naive-UTC datetime to the display timezone."""
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(DISPLAY_TZ)
 
 
 def format_relative_date(dt):
-    """Format a datetime as a relative date string in Europe/Paris timezone.
-
-    - If today: just time -> "14:32"
-    - If yesterday: -> "hier, 12:45"
-    - If this week (not today/yesterday): -> "mercredi 11:11"
-    - If older: -> "23/01/2026 a 22:00"
-    """
     now = _now_local()
     dt = _to_local(dt)
     today = now.date()
@@ -83,7 +73,6 @@ def format_relative_date(dt):
 
 
 def get_sidebar_data(user_email: str | None):
-    """Get data for sidebar (recent conversations for current user)."""
     conversations = store.list_conversations(limit=20, user_id=user_email)
 
     # Batch fetch tags for all conversations (1 query instead of 20)
@@ -191,7 +180,6 @@ def index(request: Request, user_email: str = Depends(get_current_user)):
 
 
 def _group_items_by_date(items):
-    """Group mixed items (conversations, reports, apps) by relative date periods."""
     now = _now_local()
     today = now.date()
 
@@ -614,5 +602,4 @@ def connaissances_file(
 
 
 def is_admin(user_email: str | None) -> bool:
-    """Check if a user is an admin."""
     return user_email in ADMIN_USERS

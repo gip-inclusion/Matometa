@@ -8,8 +8,7 @@ import pytest
 
 @pytest.fixture
 def report(app):
-    """Create a test report."""
-    from web.storage import store
+    from web.database import store
 
     report = store.create_report(
         title="Test Report",
@@ -23,16 +22,14 @@ def report(app):
 
 @pytest.fixture
 def conversation(app):
-    """Create a test conversation to link to a report."""
-    from web.storage import store
+    from web.database import store
 
     return store.create_conversation(user_id="test@example.com")
 
 
 @pytest.fixture
 def report_with_source(app, conversation):
-    """Create a report linked to a source conversation."""
-    from web.storage import store
+    from web.database import store
 
     return store.create_report(
         title="Linked Report",

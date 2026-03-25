@@ -25,14 +25,12 @@ router = APIRouter(prefix="/api/knowledge")
 
 @router.get("")
 def list_knowledge():
-    """List all knowledge files."""
     categories = list_knowledge_files()
     return {"categories": categories}
 
 
 @router.get("/files/{file_path:path}")
 def get_knowledge_file(file_path: str):
-    """Get a knowledge file's content."""
     validated_path = validate_knowledge_path(file_path)
     if not validated_path:
         return JSONResponse({"error": "Invalid or non-existent file path"}, status_code=404)
@@ -91,7 +89,6 @@ def start_knowledge_conversation(file_path: str, user_email: str = Depends(get_c
 
 @router.get("/conversations/{conv_id}/files")
 def get_staged_files(conv_id: str):
-    """Get list of staged files for a knowledge conversation."""
     conv = store.get_conversation(conv_id, include_messages=True)
     if not conv or conv.conv_type != "knowledge":
         return JSONResponse({"error": "Knowledge conversation not found"}, status_code=404)
@@ -111,7 +108,6 @@ def get_staged_files(conv_id: str):
 
 @router.post("/conversations/{conv_id}/commit")
 async def commit_knowledge_changes(conv_id: str, request: Request):
-    """Create GitHub PR with staged changes."""
     conv = store.get_conversation(conv_id, include_messages=False)
     if not conv or conv.conv_type != "knowledge":
         return JSONResponse({"error": "Knowledge conversation not found"}, status_code=404)

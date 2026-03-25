@@ -34,7 +34,6 @@ FAILURE_MARKERS = [
 
 
 def find_failure_marker(text: str) -> str | None:
-    """Return the first failure marker found in text, or None."""
     text_lower = text.lower()
     for marker in FAILURE_MARKERS:
         if marker in text_lower:
@@ -43,7 +42,6 @@ def find_failure_marker(text: str) -> str | None:
 
 
 def extract_snippet(content: str, marker: str | None = None) -> str:
-    """Extract a short snippet around the first failure marker found."""
     content_lower = content.lower()
     markers_to_check = [marker] if marker else FAILURE_MARKERS
 

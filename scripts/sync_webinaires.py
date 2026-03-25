@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""Sync webinaire attendance data from Livestorm and Grist into datalake.
-
-Usage:
-    python scripts/sync_webinaires.py                  # Full sync (both sources)
-    python scripts/sync_webinaires.py --grist-only     # Grist only (for daily cron)
-    python scripts/sync_webinaires.py --livestorm-only  # Livestorm only
-"""
+"""Sync webinaire attendance data from Livestorm and Grist into datalake."""
 
 import argparse
 import logging

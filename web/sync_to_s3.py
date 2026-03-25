@@ -90,7 +90,6 @@ def _watch_loop():
 
 
 def _upload_file(local_path: Path, s3_module):
-    """Upload a file to S3."""
     try:
         relative_path = local_path.relative_to(config.INTERACTIVE_DIR)
         content = local_path.read_bytes()

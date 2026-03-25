@@ -69,8 +69,6 @@ VALID_COMPARISONS = {
 
 
 class MatomoError(Exception):
-    """Error from Matomo API."""
-
     pass
 
 
@@ -110,7 +108,6 @@ class MatomoAPI:
         self._session.mount("http://", HTTPAdapter(max_retries=retry))
 
     def close(self) -> None:
-        """Close the underlying HTTP session."""
         self._session.close()
 
     def __enter__(self):
@@ -120,7 +117,6 @@ class MatomoAPI:
         self.close()
 
     def _request(self, method: str, params: dict, timeout: int = 180, http_method: str = "GET") -> Any:
-        """Make an API request."""
         base_params = {
             "module": "API",
             "method": method,
@@ -187,15 +183,12 @@ class MatomoAPI:
             raise MatomoError(f"Request failed: {error_msg}")
 
     def request(self, method: str, timeout: int = 180, **params) -> Any:
-        """Make a raw API request to any Matomo method."""
         return self._request(method, params, timeout)
 
     def post(self, method: str, timeout: int = 30, **params) -> Any:
-        """Generic POST for any Tag Manager write operation."""
         return self._request(method, params, timeout, http_method="POST")
 
     def get_api_url(self, method: str, params: dict) -> str:
-        """Get the full API URL for a request (token redacted)."""
         base_params = {
             "module": "API",
             "method": method,
@@ -209,7 +202,6 @@ class MatomoAPI:
     # --- High-level methods ---
 
     def get_sites(self) -> list[dict]:
-        """Get all sites the API key has access to."""
         return self._request("SitesManager.getSitesWithAtLeastViewAccess", {})
 
     def get_visits(
@@ -219,7 +211,6 @@ class MatomoAPI:
         date: str,
         segment: Optional[str] = None,
     ) -> dict:
-        """Get visit summary for a site."""
         params = {"idSite": site_id, "period": period, "date": date}
         if segment:
             params["segment"] = segment
@@ -232,7 +223,6 @@ class MatomoAPI:
         date: str,
         segment: Optional[str] = None,
     ) -> int:
-        """Get unique visitor count."""
         params = {"idSite": site_id, "period": period, "date": date}
         if segment:
             params["segment"] = segment
@@ -249,7 +239,6 @@ class MatomoAPI:
         flat: bool = True,
         limit: int = 100,
     ) -> list[dict]:
-        """Get page URL statistics."""
         params = {
             "idSite": site_id,
             "period": period,
@@ -265,7 +254,6 @@ class MatomoAPI:
         return self._request("Actions.getPageUrls", params)
 
     def get_configured_dimensions(self, site_id: int) -> list[dict]:
-        """Get custom dimensions configured for a site."""
         return self._request("CustomDimensions.getConfiguredCustomDimensions", {"idSite": site_id})
 
     def get_dimension(
@@ -277,7 +265,6 @@ class MatomoAPI:
         segment: Optional[str] = None,
         limit: int = 100,
     ) -> list[dict]:
-        """Get breakdown by custom dimension."""
         params = {
             "idSite": site_id,
             "idDimension": dimension_id,
@@ -297,7 +284,6 @@ class MatomoAPI:
         segment: Optional[str] = None,
         limit: int = 100,
     ) -> list[dict]:
-        """Get event categories with counts."""
         params = {
             "idSite": site_id,
             "period": period,
@@ -316,7 +302,6 @@ class MatomoAPI:
         segment: Optional[str] = None,
         limit: int = 100,
     ) -> list[dict]:
-        """Get event actions with counts."""
         params = {
             "idSite": site_id,
             "period": period,
@@ -335,7 +320,6 @@ class MatomoAPI:
         segment: Optional[str] = None,
         limit: int = 100,
     ) -> list[dict]:
-        """Get event names with counts."""
         params = {
             "idSite": site_id,
             "period": period,
@@ -355,7 +339,6 @@ class MatomoAPI:
         flat: bool = True,
         limit: int = 100,
     ) -> list[dict]:
-        """Get landing pages (first page of visits)."""
         params = {
             "idSite": site_id,
             "period": period,
@@ -377,7 +360,6 @@ class MatomoAPI:
         flat: bool = True,
         limit: int = 100,
     ) -> list[dict]:
-        """Get exit pages (last page of visits)."""
         params = {
             "idSite": site_id,
             "period": period,
@@ -399,7 +381,6 @@ class MatomoAPI:
         segment: Optional[str] = None,
         limit: int = 100,
     ) -> dict:
-        """Get page flow: what pages users visited before and after a URL."""
         params = {
             "idSite": site_id,
             "period": period,
@@ -419,7 +400,6 @@ class MatomoAPI:
         date: str,
         segment: Optional[str] = None,
     ) -> list[dict]:
-        """Get visit distribution by hour of day."""
         params = {"idSite": site_id, "period": period, "date": date}
         if segment:
             params["segment"] = segment
@@ -432,7 +412,6 @@ class MatomoAPI:
         date: str,
         segment: Optional[str] = None,
     ) -> list[dict]:
-        """Get visit distribution by day of week."""
         params = {"idSite": site_id, "period": period, "date": date}
         if segment:
             params["segment"] = segment
@@ -446,7 +425,6 @@ class MatomoAPI:
         segment: Optional[str] = None,
         limit: int = 100,
     ) -> list[dict]:
-        """Get all referrer types with visit counts."""
         params = {
             "idSite": site_id,
             "period": period,
@@ -465,7 +443,6 @@ class MatomoAPI:
         segment: Optional[str] = None,
         limit: int = 100,
     ) -> list[dict]:
-        """Get referring websites with visit counts."""
         params = {
             "idSite": site_id,
             "period": period,
@@ -484,7 +461,6 @@ class MatomoAPI:
         segment: Optional[str] = None,
         limit: int = 100,
     ) -> list[dict]:
-        """Get search engines with visit counts."""
         params = {
             "idSite": site_id,
             "period": period,
@@ -503,7 +479,6 @@ class MatomoAPI:
         segment: Optional[str] = None,
         limit: int = 100,
     ) -> list[dict]:
-        """Get social networks with visit counts."""
         params = {
             "idSite": site_id,
             "period": period,
@@ -521,7 +496,6 @@ class MatomoAPI:
         date: str,
         segment: Optional[str] = None,
     ) -> dict:
-        """Get metrics for returning visitors vs new visitors."""
         params = {"idSite": site_id, "period": period, "date": date}
         if segment:
             params["segment"] = segment
@@ -552,11 +526,9 @@ class MatomoAPI:
     # --- Tag Manager: Container operations ---
 
     def get_container(self, site_id: int, container_id: str) -> dict:
-        """Get container details including draft version and releases."""
         return self._request("TagManager.getContainer", {"idSite": site_id, "idContainer": container_id})
 
     def get_draft_version(self, site_id: int, container_id: str) -> int:
-        """Get current draft version ID (convenience method)."""
         container = self.get_container(site_id, container_id)
         return container["draft"]["idcontainerversion"]
 
@@ -602,7 +574,6 @@ class MatomoAPI:
         trigger_id: int,
         **kwargs,
     ):
-        """Update existing trigger."""
         params = {
             "idSite": site_id,
             "idContainer": container_id,
@@ -619,7 +590,6 @@ class MatomoAPI:
         version_id: int,
         trigger_id: int,
     ):
-        """Delete trigger from container version."""
         return self.post(
             "TagManager.deleteContainerTrigger",
             idSite=site_id,
@@ -689,7 +659,6 @@ class MatomoAPI:
         tag_id: int,
         **kwargs,
     ):
-        """Update existing tag."""
         params = {
             "idSite": site_id,
             "idContainer": container_id,
@@ -706,7 +675,6 @@ class MatomoAPI:
         version_id: int,
         tag_id: int,
     ):
-        """Delete tag from container version."""
         return self.post(
             "TagManager.deleteContainerTag",
             idSite=site_id,

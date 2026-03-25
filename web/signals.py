@@ -77,16 +77,13 @@ class SignalRegistry:
             return sig.counter > counter_before
 
     def is_finished(self, conv_id: str) -> bool:
-        """Check if the PM has finished processing this conversation."""
         sig = self._signals.get(conv_id)
         return sig is not None and sig.finished
 
     def is_pm_alive(self, max_age: float = 30.0) -> bool:
-        """Check if the PM has signaled liveness recently."""
         return (time.monotonic() - self._pm_alive_at) < max_age
 
     def cleanup(self, conv_id: str) -> None:
-        """Remove signal state for a conversation (call on stream end)."""
         self._signals.pop(conv_id, None)
 
     def _evict_stale(self, max_age: float = 600.0) -> None:

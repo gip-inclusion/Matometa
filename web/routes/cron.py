@@ -74,7 +74,6 @@ async def toggle_task(slug: str, request: Request):
 
 @router.get("/api/cron/{slug}/script")
 def view_script(slug: str):
-    """Return the cron.py source code for auditing."""
     task = find_task(slug)
     if not task:
         return JSONResponse({"error": "Task not found"}, status_code=404)
@@ -87,6 +86,5 @@ def view_script(slug: str):
 
 @router.get("/api/cron/{slug}/logs")
 def task_logs(slug: str, limit: int = Query(default=20)):
-    """Return recent runs for a task as JSON."""
     runs = get_app_runs(slug, limit=limit)
     return runs

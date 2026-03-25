@@ -14,7 +14,6 @@ try:
 except ImportError:
     pass  # dotenv not installed, rely on shell environment
 
-
 MATOMO_TEST_SITE_ID = int(os.environ.get("MATOMO_TEST_SITE_ID", "117"))
 MATOMO_TEST_PERIOD = os.environ.get("MATOMO_TEST_PERIOD", "month")
 MATOMO_TEST_DATE = os.environ.get("MATOMO_TEST_DATE", "2025-12-01")

@@ -62,7 +62,6 @@ KNOWN_CARD_ID = 4413
 
 @pytest.fixture(scope="module")
 def api():
-    """Create API client for all tests."""
     return get_metabase(instance="stats")
 
 
@@ -81,7 +80,6 @@ class TestExecuteSQL:
     """Test raw SQL execution."""
 
     def test_simple_query(self, api):
-        """Execute a trivial query."""
         result = api.execute_sql("SELECT 1 as test")
         assert isinstance(result, QueryResult)
         assert result.row_count == 1
@@ -89,7 +87,6 @@ class TestExecuteSQL:
         assert result.rows[0][0] == 1
 
     def test_query_with_multiple_columns(self, api):
-        """Execute query with multiple columns."""
         result = api.execute_sql("SELECT 1 as a, 2 as b, 'hello' as c")
         assert result.row_count == 1
         assert len(result.columns) == 3
@@ -119,7 +116,6 @@ class TestExecuteCard:
     """Test saved card/question execution."""
 
     def test_execute_known_card(self, api):
-        """Execute a known card."""
         result = api.execute_card(KNOWN_CARD_ID)
         assert isinstance(result, QueryResult)
         assert result.row_count >= 0
@@ -134,7 +130,6 @@ class TestGetCard:
     """Test card metadata retrieval."""
 
     def test_get_known_card(self, api):
-        """Get metadata for a known card."""
         card = api.get_card(KNOWN_CARD_ID)
         assert "id" in card
         assert card["id"] == KNOWN_CARD_ID
@@ -151,7 +146,6 @@ class TestListCards:
     """Test listing cards in collections."""
 
     def test_list_cards_in_collection(self, api):
-        """List cards in a known collection."""
         cards = api.list_cards(COLLECTION_453)
         assert isinstance(cards, list)
         # Collection 453 should have cards
@@ -166,14 +160,12 @@ class TestSearchCards:
     """Test card search functionality."""
 
     def test_search_cards(self, api):
-        """Search for cards."""
         cards = api.search_cards("candidature")
         assert isinstance(cards, list)
         # Should find some cards with "candidature" in name/description
         assert len(cards) > 0
 
     def test_search_no_results(self, api):
-        """Search with no results returns empty list."""
         cards = api.search_cards("xyznonexistent123456")
         assert isinstance(cards, list)
         assert len(cards) == 0
@@ -183,7 +175,6 @@ class TestGetCardSQL:
     """Test SQL extraction from cards."""
 
     def test_get_card_sql(self, api):
-        """Get SQL for a known card."""
         sql = api.get_card_sql(KNOWN_CARD_ID)
         # Should return non-empty SQL
         assert isinstance(sql, str)
@@ -195,13 +186,11 @@ class TestDashboards:
     """Test dashboard methods."""
 
     def test_list_dashboards(self, api):
-        """List dashboards in a collection."""
         dashboards = api.list_dashboards(COLLECTION_452)
         assert isinstance(dashboards, list)
         # May or may not have dashboards
 
     def test_get_dashboard(self, api):
-        """Get dashboard metadata."""
         # First find a dashboard
         dashboards = api.list_dashboards(COLLECTION_452)
         if dashboards:

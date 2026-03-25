@@ -88,7 +88,6 @@ KNOWN_ANSWERS = [
 
 @pytest.fixture(scope="module")
 def api():
-    """Create API client for all tests."""
     return get_metabase(instance="stats")
 
 
@@ -157,7 +156,6 @@ class TestEndToEnd:
     """
 
     def test_find_and_execute_card(self, api):
-        """Find a card by search and execute it."""
         db = load_cards_db()
 
         # Search for a card

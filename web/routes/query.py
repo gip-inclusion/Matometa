@@ -24,7 +24,6 @@ ALLOWED_ORIGINS = {
 
 
 def _cors_headers(origin: str | None) -> dict:
-    """Build CORS headers if origin is allowed."""
     headers = {}
     if origin in ALLOWED_ORIGINS:
         headers["Access-Control-Allow-Origin"] = origin
@@ -37,26 +36,26 @@ def _cors_headers(origin: str | None) -> dict:
 @router.api_route("/query", methods=["POST", "OPTIONS"])
 async def query(request: Request):
     """
-        Execute a query against Metabase or Matomo.
+    Execute a query against Metabase or Matomo.
 
-        Request body (JSON):
-            source: "metabase" or "matomo"
-            instance: Instance name (e.g., "stats", "datalake", "inclusion")
-        
-            # For Metabase:
-            sql: SQL query string (with database_id)
-            database_id: Metabase database ID
-            card_id: Metabase card/question ID (alternative to sql)
+    Request body (JSON):
+        source: "metabase" or "matomo"
+        instance: Instance name (e.g., "stats", "datalake", "inclusion")
 
-            # For Matomo:
-            method: Matomo API method (e.g., "VisitsSummary.get")
-            params: Matomo API parameters dict
+        # For Metabase:
+        sql: SQL query string (with database_id)
+        database_id: Metabase database ID
+        card_id: Metabase card/question ID (alternative to sql)
 
-            # Optional:
-            timeout: Request timeout in seconds (default 60)
+        # For Matomo:
+        method: Matomo API method (e.g., "VisitsSummary.get")
+        params: Matomo API parameters dict
 
-        Returns:
-            JSON with success, data, error, execution_time_ms
+        # Optional:
+        timeout: Request timeout in seconds (default 60)
+
+    Returns:
+        JSON with success, data, error, execution_time_ms
     """
     origin = request.headers.get("Origin")
     cors = _cors_headers(origin)

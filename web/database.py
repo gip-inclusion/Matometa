@@ -2,10 +2,6 @@
 
 import json
 import uuid
-
-# =============================================================================
-# Data Classes
-# =============================================================================
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
@@ -60,7 +56,6 @@ class UploadedFile:
     created_at: datetime = field(default_factory=datetime.now)
 
     def to_dict(self) -> dict:
-        """Convert to JSON-serializable dict."""
         return {
             "id": self.id,
             "conversation_id": self.conversation_id,
@@ -145,7 +140,6 @@ class Conversation:
         return self.report is not None
 
     def to_dict(self) -> dict:
-        """Convert to JSON-serializable dict."""
         return {
             "id": self.id,
             "user_id": self.user_id,
@@ -251,7 +245,6 @@ class ConversationStore:
         conv_type: str = "exploration",
         file_path: Optional[str] = None,
     ) -> Conversation:
-        """Create a new conversation."""
         conv = Conversation(
             id=str(uuid.uuid4()),
             user_id=user_id,
@@ -281,7 +274,6 @@ class ConversationStore:
     def get_conversation(
         self, conv_id: str, include_messages: bool = True, user_id: Optional[str] = None
     ) -> Optional[Conversation]:
-        """Get a conversation by ID. Optionally filter by user_id for access control."""
         with get_db() as conn:
             if user_id:
                 row = conn.execute(
@@ -480,7 +472,6 @@ class ConversationStore:
             return [_row_to_list_conversation(row) for row in rows]
 
     def pin_item(self, item_type: str, item_id: str, label: str) -> bool:
-        """Pin an item (conversation, report, or app)."""
         with get_db() as conn:
             conn.execute(
                 """INSERT INTO pinned_items (item_type, item_id, label, pinned_at)
@@ -491,7 +482,6 @@ class ConversationStore:
             return True
 
     def unpin_item(self, item_type: str, item_id: str) -> bool:
-        """Unpin an item."""
         with get_db() as conn:
             cursor = conn.execute(
                 "DELETE FROM pinned_items WHERE item_type = %s AND item_id = %s", (item_type, str(item_id))
@@ -499,7 +489,6 @@ class ConversationStore:
             return cursor.rowcount > 0
 
     def list_pinned_items(self, item_type: Optional[str] = None) -> list[PinnedItem]:
-        """List pinned items, optionally filtered by type."""
         with get_db() as conn:
             if item_type:
                 rows = conn.execute(
@@ -519,7 +508,6 @@ class ConversationStore:
             ]
 
     def get_pinned_ids(self) -> set[tuple[str, str]]:
-        """Get set of (item_type, item_id) for all pinned items."""
         with get_db() as conn:
             rows = conn.execute("SELECT item_type, item_id FROM pinned_items").fetchall()
             return {(row["item_type"], row["item_id"]) for row in rows}
@@ -532,7 +520,6 @@ class ConversationStore:
         return self.unpin_item("conversation", conv_id)
 
     def list_pinned_conversations(self) -> list[Conversation]:
-        """List pinned conversations (legacy wrapper)."""
         with get_db() as conn:
             rows = conn.execute(
                 """SELECT c.*, p.pinned_at AS p_pinned_at, p.label AS p_label
@@ -556,7 +543,6 @@ class ConversationStore:
     def get_active_knowledge_conversation(
         self, file_path: str, user_id: Optional[str] = None
     ) -> Optional[Conversation]:
-        """Get active knowledge conversation for a file, optionally filtered by user."""
         with get_db() as conn:
             if user_id:
                 row = conn.execute(
@@ -579,7 +565,6 @@ class ConversationStore:
             return _row_to_knowledge_conversation(row)
 
     def list_active_knowledge_conversations(self) -> list[Conversation]:
-        """List all active knowledge conversations."""
         with get_db() as conn:
             rows = conn.execute(
                 """SELECT * FROM conversations
@@ -590,7 +575,6 @@ class ConversationStore:
             return [_row_to_knowledge_conversation(row) for row in rows]
 
     def get_running_conversation_ids(self) -> list[str]:
-        """Return IDs of conversations where needs_response is True."""
         with get_db() as conn:
             rows = conn.execute("SELECT id FROM conversations WHERE needs_response = 1").fetchall()
             return [r["id"] for r in rows]
@@ -608,7 +592,6 @@ class ConversationStore:
             return ids
 
     def update_pm_heartbeat(self):
-        """Update the PM heartbeat timestamp. Called each PM poll loop iteration."""
         now = datetime.now().isoformat()
         with get_db() as conn:
             conn.execute(
@@ -617,7 +600,6 @@ class ConversationStore:
             )
 
     def is_pm_alive(self, max_age_seconds: int = 30) -> bool:
-        """Check if the PM has sent a heartbeat recently."""
         with get_db() as conn:
             row = conn.execute("SELECT last_seen FROM pm_heartbeat WHERE id = 1").fetchone()
             if not row:
@@ -626,7 +608,6 @@ class ConversationStore:
             return (datetime.now() - last_seen).total_seconds() < max_age_seconds
 
     def update_conversation(self, conv_id: str, **kwargs) -> bool:
-        """Update conversation fields."""
         allowed = {"title", "session_id", "user_id", "status", "pr_url", "needs_response"}
         updates = {k: v for k, v in kwargs.items() if k in allowed}
         if not updates:
@@ -651,7 +632,6 @@ class ConversationStore:
         backend: Optional[str] = None,
         extra: Optional[dict] = None,
     ) -> bool:
-        """Set usage data on a conversation (overwrites existing values)."""
         extra_json = json.dumps(extra) if extra else None
         with get_db() as conn:
             cursor = conn.execute(
@@ -687,10 +667,7 @@ class ConversationStore:
         backend: Optional[str] = None,
         extra: Optional[dict] = None,
     ) -> bool:
-        """Add usage to existing counts (for incremental updates).
-
-        Note: extra dict is replaced, not merged.
-        """
+        """Add usage to existing counts (for incremental updates)."""
         extra_json = json.dumps(extra) if extra else None
         with get_db() as conn:
             cursor = conn.execute(
@@ -717,7 +694,6 @@ class ConversationStore:
             return cursor.rowcount > 0
 
     def delete_conversation(self, conv_id: str) -> bool:
-        """Delete a conversation and all related data."""
         with get_db() as conn:
             conn.execute("DELETE FROM reports WHERE conversation_id = %s", (conv_id,))
             conn.execute("DELETE FROM messages WHERE conversation_id = %s", (conv_id,))
@@ -765,7 +741,6 @@ class ConversationStore:
         return msg
 
     def update_message(self, message_id: int, content: str) -> bool:
-        """Update a message's content. Returns True if updated."""
         with get_db() as conn:
             cursor = conn.execute("UPDATE messages SET content = %s WHERE id = %s", (content, message_id))
             return cursor.rowcount > 0
@@ -776,7 +751,6 @@ class ConversationStore:
         types: Optional[list[str]] = None,
         limit: Optional[int] = None,
     ) -> list[Message]:
-        """Get messages for a conversation, optionally filtered by type."""
         with get_db() as conn:
             query = """SELECT id, conversation_id, COALESCE(type, role) as type, content, timestamp
                        FROM messages WHERE conversation_id = %s"""
@@ -817,7 +791,6 @@ class ConversationStore:
         source_conversation_id: Optional[str] = None,
         user_id: Optional[str] = None,
     ) -> Optional[Report]:
-        """Create a report with content."""
         report = Report(
             title=title,
             content=content,
@@ -853,7 +826,6 @@ class ConversationStore:
         return report
 
     def get_report(self, report_id: int) -> Optional[Report]:
-        """Get a report by ID."""
         with get_db() as conn:
             row = conn.execute("SELECT * FROM reports WHERE id = %s", (report_id,)).fetchone()
 
@@ -896,7 +868,6 @@ class ConversationStore:
         include_archived: bool = False,
         limit: int = 50,
     ) -> list[Report]:
-        """List reports with optional filtering. Excludes archived by default."""
         with get_db() as conn:
             query = "SELECT * FROM reports WHERE 1=1"
             params = []
@@ -920,7 +891,6 @@ class ConversationStore:
             return [_row_to_list_report(row) for row in rows]
 
     def archive_report(self, report_id: int) -> bool:
-        """Archive a report (soft delete)."""
         with get_db() as conn:
             cursor = conn.execute(
                 "UPDATE reports SET archived = 1, updated_at = %s WHERE id = %s",
@@ -929,7 +899,6 @@ class ConversationStore:
             return cursor.rowcount > 0
 
     def update_report(self, report_id: int, **kwargs) -> bool:
-        """Update report fields, incrementing version."""
         allowed = {"title", "content", "website", "category", "tags", "original_query"}
         updates = {k: v for k, v in kwargs.items() if k in allowed}
         if not updates:
@@ -952,13 +921,11 @@ class ConversationStore:
             return cursor.rowcount > 0
 
     def delete_report(self, report_id: int) -> bool:
-        """Delete a report."""
         with get_db() as conn:
             cursor = conn.execute("DELETE FROM reports WHERE id = %s", (report_id,))
             return cursor.rowcount > 0
 
     def get_all_tags(self, tag_type: Optional[str] = None) -> list[Tag]:
-        """Get all tags, optionally filtered by type."""
         with get_db() as conn:
             if tag_type:
                 rows = conn.execute("SELECT * FROM tags WHERE type = %s ORDER BY label", (tag_type,)).fetchall()
@@ -968,7 +935,6 @@ class ConversationStore:
             return [Tag(id=row["id"], name=row["name"], type=row["type"], label=row["label"]) for row in rows]
 
     def get_tags_by_type(self) -> dict[str, list[Tag]]:
-        """Get all tags grouped by type."""
         tags = self.get_all_tags()
         result: dict[str, list[Tag]] = {}
         for tag in tags:
@@ -1038,7 +1004,6 @@ class ConversationStore:
             return result
 
     def get_used_report_tags_by_type(self) -> dict[str, list[Tag]]:
-        """Get tags that are actually used by non-archived reports, grouped by type."""
         with get_db() as conn:
             rows = conn.execute(
                 """SELECT DISTINCT t.* FROM tags t
@@ -1057,7 +1022,6 @@ class ConversationStore:
             return result
 
     def get_tag_by_name(self, name: str) -> Optional[Tag]:
-        """Get a tag by its name."""
         with get_db() as conn:
             row = conn.execute("SELECT * FROM tags WHERE name = %s", (name,)).fetchone()
             if row:
@@ -1065,7 +1029,6 @@ class ConversationStore:
             return None
 
     def set_conversation_tags(self, conv_id: str, tag_names: list[str], update_timestamp: bool = True) -> bool:
-        """Set tags for a conversation (replaces existing tags)."""
         with get_db() as conn:
             # Clear existing tags
             conn.execute("DELETE FROM conversation_tags WHERE conversation_id = %s", (conv_id,))
@@ -1084,7 +1047,6 @@ class ConversationStore:
             return True
 
     def get_conversation_tags(self, conv_id: str) -> list[Tag]:
-        """Get tags for a conversation."""
         with get_db() as conn:
             rows = conn.execute(
                 """SELECT t.* FROM tags t
@@ -1096,7 +1058,6 @@ class ConversationStore:
             return [Tag(id=row["id"], name=row["name"], type=row["type"], label=row["label"]) for row in rows]
 
     def get_conversation_tags_batch(self, conv_ids: list[str]) -> dict[str, list[Tag]]:
-        """Get tags for multiple conversations in a single query."""
         if not conv_ids:
             return {}
         with get_db() as conn:
@@ -1117,7 +1078,6 @@ class ConversationStore:
             return result
 
     def set_report_tags(self, report_id: int, tag_names: list[str], update_timestamp: bool = True) -> bool:
-        """Set tags for a report (replaces existing tags)."""
         with get_db() as conn:
             # Clear existing tags
             conn.execute("DELETE FROM report_tags WHERE report_id = %s", (report_id,))
@@ -1136,7 +1096,6 @@ class ConversationStore:
             return True
 
     def get_report_tags(self, report_id: int) -> list[Tag]:
-        """Get tags for a report."""
         with get_db() as conn:
             rows = conn.execute(
                 """SELECT t.* FROM tags t
@@ -1148,7 +1107,6 @@ class ConversationStore:
             return [Tag(id=row["id"], name=row["name"], type=row["type"], label=row["label"]) for row in rows]
 
     def get_report_tags_batch(self, report_ids: list[int]) -> dict[int, list[Tag]]:
-        """Get tags for multiple reports in a single query."""
         if not report_ids:
             return {}
         with get_db() as conn:
@@ -1174,7 +1132,6 @@ class ConversationStore:
         tag_names: Optional[list[str]] = None,
         limit: int = 100,
     ) -> list[tuple[Conversation, list[Tag]]]:
-        """List conversations with their tags, optionally filtered."""
         with get_db() as conn:
             conditions = ["(c.conv_type = 'exploration' OR c.conv_type IS NULL)"]
             params: list = []
@@ -1240,7 +1197,6 @@ class ConversationStore:
         include_archived: bool = False,
         limit: int = 100,
     ) -> list[tuple[Report, list[Tag]]]:
-        """List reports with their tags, optionally filtered."""
         with get_db() as conn:
             conditions: list[str] = []
             params: list = []
@@ -1353,7 +1309,6 @@ class ConversationStore:
         return uploaded_file
 
     def get_uploaded_file(self, file_id: int) -> Optional[UploadedFile]:
-        """Get an uploaded file by ID."""
         with get_db() as conn:
             row = conn.execute("SELECT * FROM uploaded_files WHERE id = %s", (file_id,)).fetchone()
 
@@ -1377,7 +1332,6 @@ class ConversationStore:
             )
 
     def get_uploaded_file_by_hash(self, sha256_hash: str) -> Optional[UploadedFile]:
-        """Get an uploaded file by its SHA256 hash (for deduplication)."""
         with get_db() as conn:
             row = conn.execute("SELECT * FROM uploaded_files WHERE sha256_hash = %s LIMIT 1", (sha256_hash,)).fetchone()
 
@@ -1401,7 +1355,6 @@ class ConversationStore:
             )
 
     def get_conversation_files(self, conversation_id: str) -> list[UploadedFile]:
-        """Get all uploaded files for a conversation."""
         with get_db() as conn:
             rows = conn.execute(
                 """SELECT * FROM uploaded_files
@@ -1430,7 +1383,6 @@ class ConversationStore:
             ]
 
     def update_uploaded_file_av_status(self, file_id: int, av_scanned: bool, av_clean: Optional[bool]) -> bool:
-        """Update the AV scan status of an uploaded file."""
         with get_db() as conn:
             cursor = conn.execute(
                 "UPDATE uploaded_files SET av_scanned = %s, av_clean = %s WHERE id = %s",
@@ -1439,13 +1391,11 @@ class ConversationStore:
             return cursor.rowcount > 0
 
     def delete_uploaded_file(self, file_id: int) -> bool:
-        """Delete an uploaded file record."""
         with get_db() as conn:
             cursor = conn.execute("DELETE FROM uploaded_files WHERE id = %s", (file_id,))
             return cursor.rowcount > 0
 
     def get_messages_since(self, conv_id: str, after_id: int) -> list[Message]:
-        """Get messages with id > after_id for a conversation."""
         with get_db() as conn:
             rows = conn.execute(
                 """SELECT id, conversation_id, COALESCE(type, role) as type, content, timestamp
@@ -1467,7 +1417,6 @@ class ConversationStore:
             ]
 
     def get_last_message_role(self, conversation_id: str) -> Optional[str]:
-        """Get the role/type of the last message in a conversation."""
         with get_db() as conn:
             row = conn.execute(
                 """SELECT COALESCE(type, role) as type FROM messages
@@ -1513,7 +1462,6 @@ class ConversationStore:
             ]
 
     def get_pending_pm_commands(self) -> list[dict]:
-        """Get unprocessed PM commands (read-only, for status checks)."""
         with get_db() as conn:
             rows = conn.execute(
                 """SELECT id, conversation_id, command, payload, created_at
@@ -1532,11 +1480,6 @@ class ConversationStore:
                 }
                 for r in rows
             ]
-
-
-# =============================================================================
-# Backwards compatibility
-# =============================================================================
 
 
 class LazyConversationStore:

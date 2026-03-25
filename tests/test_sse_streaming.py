@@ -12,10 +12,6 @@ import time
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
 
 @pytest.fixture(scope="module")
 def app():
@@ -51,9 +47,8 @@ def client(app):
 
 @pytest.fixture
 def conversation(app):
-    """Create a conversation with one user message awaiting response."""
+    from web.database import store
     from web.signals import signals
-    from web.storage import store
 
     store.update_pm_heartbeat()  # Simulate PM being alive
     signals.update_pm_alive()
@@ -65,8 +60,7 @@ def conversation(app):
 
 @pytest.fixture
 def responded_conversation(app):
-    """Create a conversation with a user message and an assistant response."""
-    from web.storage import store
+    from web.database import store
 
     conv = store.create_conversation(user_id="test@example.com")
     store.add_message(conv.id, "user", "Hello agent")
@@ -75,7 +69,6 @@ def responded_conversation(app):
 
 
 def _parse_sse_events(response_data: bytes) -> list[dict]:
-    """Parse SSE event stream into a list of {event, data} dicts."""
     events = []
     current_event = None
     current_data = None
@@ -138,13 +131,11 @@ def _simulate_pm(conv_id, messages, delay=0.1):
     return t
 
 
-# ---------------------------------------------------------------------------
 # Tests: SSE endpoint behavior (signal-based architecture)
 #
 # The SSE handler waits on in-memory signals fired by the Process Manager.
 # These tests use _simulate_pm() to insert messages and fire signals in a
 # background thread, simulating real PM behavior.
-# ---------------------------------------------------------------------------
 
 
 class TestDoneStream:
@@ -326,13 +317,11 @@ class TestNeedsResponse:
         assert updated.needs_response is False
 
 
-# ---------------------------------------------------------------------------
 # Tests: DB storage logic (tested directly, no SSE involved)
 #
 # These test the collect_events() storage invariants by simulating
 # what happens in the streaming pipeline. Testing through SSE introduces
 # non-deterministic async behavior.
-# ---------------------------------------------------------------------------
 
 
 class TestAppendMode:
@@ -403,7 +392,6 @@ class TestAssistantTextReset:
     """tool_use must reset assistant accumulation."""
 
     def test_tool_use_creates_separate_assistant_messages(self, app):
-        """Text before and after a tool call are stored as separate DB messages."""
         from web.agents.base import AgentMessage
         from web.storage import store
 
@@ -447,12 +435,10 @@ class TestAssistantTextReset:
         assert assistant_msgs[1].content == "Here is what I found"
 
 
-# ---------------------------------------------------------------------------
 # Tests: Client disconnect must NOT kill the agent
 #
 # The SSE handler waits on signals — closing the connection just stops the
 # generator. The PM continues running independently.
-# ---------------------------------------------------------------------------
 
 
 class TestClientDisconnect:

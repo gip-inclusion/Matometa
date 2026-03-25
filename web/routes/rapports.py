@@ -18,7 +18,6 @@ router = APIRouter()
 
 
 def _parse_app_md(content: str, folder_name: str) -> dict | None:
-    """Parse APP.md content and return app dict, or None if invalid."""
     if not content.startswith("---"):
         return None
 
@@ -77,7 +76,6 @@ _apps_cache: list[dict] | None = None
 
 
 def invalidate_apps_cache():
-    """Clear the cached app list (call when interactive files change)."""
     global _apps_cache
     _apps_cache = None
 
@@ -103,7 +101,6 @@ def scan_interactive_apps():
 
 
 def _scan_interactive_apps_uncached():
-    """Fetch interactive apps from S3 or local filesystem (no cache)."""
     apps = []
 
     if config.USE_S3:
@@ -154,7 +151,6 @@ def rapports(report_id: int | None = Query(default=None, alias="id")):
 
 @router.get("/rapports/{report_id}.txt")
 def rapport_txt(report_id: int):
-    """Return raw markdown content of a report as text/plain."""
     report = store.get_report(report_id)
     if not report:
         return JSONResponse({"error": "Report not found"}, status_code=404)
@@ -168,7 +164,6 @@ def rapport_detail(report_id: int, request: Request, user_email: str = Depends(g
 
 
 def _render_report_content(raw_content: str) -> tuple[dict, Markup]:
-    """Parse YAML front-matter and render markdown to HTML server-side."""
     front_matter = {}
     content = raw_content
 
@@ -189,7 +184,6 @@ def _render_report_content(raw_content: str) -> tuple[dict, Markup]:
 
 
 def _render_rapports_page(request: Request, user_email: str, report_id: int):
-    """Render a specific report detail page."""
     data = get_sidebar_data(user_email)
 
     current_report = store.get_report(report_id)
@@ -215,7 +209,6 @@ def _render_rapports_page(request: Request, user_email: str, report_id: int):
 
 @router.post("/api/apps/{slug}/pin")
 async def pin_app(slug: str, request: Request, user_email: str = Depends(get_current_user)):
-    """Pin an app. Admin only."""
     if user_email not in ADMIN_USERS:
         return JSONResponse({"error": "Permission denied"}, status_code=403)
 
@@ -234,7 +227,6 @@ async def pin_app(slug: str, request: Request, user_email: str = Depends(get_cur
 
 @router.delete("/api/apps/{slug}/pin")
 def unpin_app(slug: str, user_email: str = Depends(get_current_user)):
-    """Unpin an app. Admin only."""
     if user_email not in ADMIN_USERS:
         return JSONResponse({"error": "Permission denied"}, status_code=403)
 

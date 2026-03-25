@@ -1,28 +1,4 @@
-"""
-Query execution with observability logging.
-
-Usage:
-    from lib.query import execute_metabase_query, execute_matomo_query, CallerType
-
-    # Using execute functions (returns QueryResult, never raises)
-    result = execute_metabase_query(
-        instance="datalake",
-        caller=CallerType.AGENT,
-        sql="SELECT * FROM table LIMIT 10",
-        database_id=2,
-    )
-    if result.success:
-        print(result.data)
-
-    # Using helpers to get configured API clients
-    from lib.query import get_metabase, get_matomo
-
-    api = get_metabase(instance='stats')
-    result = api.execute_sql("SELECT 1")
-
-    api = get_matomo(instance='inclusion')
-    visits = api.get_visits(site_id=117, period="month", date="2025-12-01")
-"""
+"""Query execution with observability logging."""
 
 import time
 from dataclasses import dataclass
@@ -144,28 +120,6 @@ def execute_query(
     # Common
     timeout: int = 60,
 ) -> QueryResult:
-    """
-    Execute a query against Metabase or Matomo with logging.
-
-    Args:
-        source: "metabase" or "matomo"
-        instance: Instance name (e.g., "stats", "datalake", "inclusion")
-        caller: CallerType.AGENT or CallerType.APP
-
-        # For Metabase:
-        sql: SQL query string
-        database_id: Metabase database ID
-        card_id: Metabase card/question ID (alternative to sql)
-
-        # For Matomo:
-        method: Matomo API method (e.g., "VisitsSummary.get")
-        params: Matomo API parameters
-
-        timeout: Request timeout in seconds
-
-    Returns:
-        QueryResult with success status, data, and timing info
-    """
     if source == "metabase":
         return execute_metabase_query(
             instance=instance,

@@ -186,7 +186,6 @@ class TestSchema:
             )
 
     def test_registration_different_sessions_ok(self, db):
-        """Same email in different sessions is allowed."""
         db.execute(
             f"INSERT INTO {T_INSCRIPTIONS} (source, webinar_id, session_id, email) "
             "VALUES ('test', 'w1', 's1', 'a@b.com')"

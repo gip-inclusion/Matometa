@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""Send weekly Slack DMs asking active users for Tally feedback.
-
-Queries conversations updated in the last 7 days, resolves Slack user IDs
-via email, and sends a short DM with a pre-filled Tally link.
-
-Usage:
-    python scripts/slack_feedback.py              # send DMs to all active users
-    python scripts/slack_feedback.py --dry-run    # list targeted emails, don't send
-    python scripts/slack_feedback.py --test EMAIL # send a single test DM
-"""
+"""Send weekly Slack DMs asking active users for Tally feedback."""
 
 import argparse
 import os
@@ -37,7 +28,6 @@ SLACK_MESSAGE = (
 
 
 def get_active_emails() -> list[str]:
-    """Return distinct user emails with activity in the last 7 days."""
     init_db()
 
     cutoff = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S")
@@ -71,7 +61,6 @@ def slack_lookup_user(token: str, email: str) -> str | None:
 
 
 def slack_send_dm(token: str, user_id: str, text: str) -> bool:
-    """Send a DM to a Slack user (channel = user ID)."""
     resp = requests.post(
         "https://slack.com/api/chat.postMessage",
         headers={"Authorization": f"Bearer {token}"},
@@ -83,7 +72,6 @@ def slack_send_dm(token: str, user_id: str, text: str) -> bool:
 
 
 def build_message(email: str) -> str:
-    """Build the Slack message with a pre-filled Tally link."""
     tally_url = f"{TALLY_FORM_URL}?email={quote(email)}"
     return SLACK_MESSAGE.format(tally_url=tally_url)
 

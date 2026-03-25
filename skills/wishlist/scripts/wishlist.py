@@ -23,16 +23,12 @@ NOTION_WISHLIST_DB = os.getenv("NOTION_WISHLIST_DB")
 
 CATEGORIES = ["permission", "tool", "knowledge", "skill", "workflow", "other"]
 
-
 def _get_conn():
-    """Get a PostgreSQL connection."""
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL not set in .env")
     return psycopg2.connect(DATABASE_URL)
 
-
 def push_to_notion(title: str, category: str, description: str = None) -> str | None:
-    """Create a page in Notion wishlist database. Returns page ID or None."""
     if not NOTION_TOKEN or not NOTION_WISHLIST_DB:
         return None
 
@@ -82,7 +78,6 @@ def push_to_notion(title: str, category: str, description: str = None) -> str | 
         print(f"  → Notion sync error: {e}")
         return None
 
-
 def add_wish(category: str, title: str, description: str = None, conversation_id: str = None):
     """Add a new wish to the database."""
     if category not in CATEGORIES:
@@ -106,9 +101,7 @@ def add_wish(category: str, title: str, description: str = None, conversation_id
     print(f"Added wish #{wish_id}: [{category}] {title}")
     return True
 
-
 def list_wishes(category: str = None, status: str = "open", limit: int = 20):
-    """List wishes from the database."""
     conn = _get_conn()
     cur = conn.cursor(cursor_factory=RealDictCursor)
 
@@ -143,9 +136,7 @@ def list_wishes(category: str = None, status: str = "open", limit: int = 20):
             for line in row["description"].split("\n"):
                 print(f"     {line}")
 
-
 def update_status(wish_id: int, status: str):
-    """Update wish status (open, done, wontfix)."""
     conn = _get_conn()
     cur = conn.cursor()
     cur.execute(
@@ -155,7 +146,6 @@ def update_status(wish_id: int, status: str):
     conn.commit()
     conn.close()
     print(f"Updated wish #{wish_id} to status: {status}")
-
 
 def sync_to_notion():
     """Sync all wishes without a notion_page_id to Notion."""
@@ -191,7 +181,6 @@ def sync_to_notion():
     conn.close()
     print(f"Synced {synced}/{len(rows)} wishes.")
 
-
 def stats():
     """Show wishlist statistics."""
     conn = _get_conn()
@@ -220,7 +209,6 @@ def stats():
         print(f"  {row['status']}: {row['count']}")
 
     conn.close()
-
 
 def main():
     parser = argparse.ArgumentParser(description="Manage capability wishlist")
@@ -264,7 +252,6 @@ def main():
         stats()
     elif args.command == "sync":
         sync_to_notion()
-
 
 if __name__ == "__main__":
     main()

@@ -63,21 +63,6 @@ def get_ui_url(
     segment: Optional[str] = None,
     dimension_id: Optional[int] = None,
 ) -> str:
-    """
-    Generate a Matomo web UI URL for a given API method.
-
-    Args:
-        base_url: Matomo instance URL (e.g., "matomo.inclusion.beta.gouv.fr")
-        method: API method name (e.g., "VisitsSummary.get")
-        site_id: Matomo site ID
-        period: day, week, month, or year
-        date: YYYY-MM-DD format
-        segment: Optional segment filter
-        dimension_id: Required for CustomDimensions methods
-
-    Returns:
-        Full URL to the Matomo web UI with the appropriate view.
-    """
     mapping = UI_MAPPING.get(method)
     if not mapping:
         # Fallback to dashboard
@@ -118,22 +103,6 @@ def format_data_source(
     params: dict,
     dimension_id: Optional[int] = None,
 ) -> str:
-    """
-    Format a data source reference for reports.
-
-    Returns a markdown string with:
-    - A hyperlink to the web UI
-    - The raw API call for reproducibility
-
-    Args:
-        base_url: Matomo instance URL
-        method: API method name
-        params: Dict with idSite, period, date, and optionally segment
-        dimension_id: For custom dimension queries
-
-    Returns:
-        Markdown-formatted data source string.
-    """
     site_id = params.get("idSite")
     period = params.get("period")
     date = params.get("date")

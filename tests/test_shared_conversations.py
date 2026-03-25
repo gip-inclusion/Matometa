@@ -13,7 +13,6 @@ import pytest
 
 @pytest.fixture
 def owner_client(app):
-    """Create a test client with owner user header."""
     from starlette.testclient import TestClient
 
     return TestClient(app)
@@ -21,7 +20,6 @@ def owner_client(app):
 
 @pytest.fixture
 def guest_client(app):
-    """Create a test client with guest user header."""
     from starlette.testclient import TestClient
 
     return TestClient(app)
@@ -29,8 +27,7 @@ def guest_client(app):
 
 @pytest.fixture
 def conversation(app, owner_client):
-    """Create a test conversation owned by owner@example.com."""
-    from web.storage import store
+    from web.database import store
 
     # Create conversation as owner
     conv = store.create_conversation(user_id="owner@example.com")
@@ -154,8 +151,7 @@ class TestRelaunchConversation:
 
     @pytest.fixture
     def stuck_conversation(self, app):
-        """Create a conversation stuck on a user message (no agent response)."""
-        from web.storage import store
+        from web.database import store
 
         conv = store.create_conversation(user_id="owner@example.com")
         store.add_message(conv.id, "user", "Hello")

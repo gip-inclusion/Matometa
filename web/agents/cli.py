@@ -22,7 +22,6 @@ class CLIBackend(AgentBackend):
         self._processes: dict[str, asyncio.subprocess.Process] = {}
 
     def _build_env(self, conversation_id: str) -> dict:
-        """Build subprocess environment. Override in subclasses."""
         env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
         return env
 
@@ -31,7 +30,6 @@ class CLIBackend(AgentBackend):
         return []
 
     def _build_prompt(self, message: str, history: list[dict]) -> str:
-        """Build a prompt including conversation history."""
         if not history:
             return message
 
@@ -222,7 +220,6 @@ class CLIBackend(AgentBackend):
             logger.info(f"Cleaned up conversation {conversation_id}")
 
     def _parse_event(self, event: dict) -> Optional[AgentMessage]:
-        """Parse a stream-json event into an AgentMessage."""
         event_type = event.get("type")
 
         if event_type == "assistant":
@@ -328,7 +325,6 @@ class CLIBackend(AgentBackend):
         return None
 
     async def cancel(self, conversation_id: str) -> bool:
-        """Cancel a running conversation."""
         process = self._processes.get(conversation_id)
         if not process:
             return False
@@ -344,10 +340,8 @@ class CLIBackend(AgentBackend):
 
     @property
     def _running(self) -> set[str]:
-        """Get set of currently running conversation IDs."""
         return {conv_id for conv_id, process in self._processes.items() if process.returncode is None}
 
     def is_running(self, conversation_id: str) -> bool:
-        """Check if a conversation is currently running."""
         process = self._processes.get(conversation_id)
         return process is not None and process.returncode is None

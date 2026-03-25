@@ -100,7 +100,6 @@ ADMIN_CATEGORIES = {
 
 
 def is_public_category(category: str) -> bool:
-    """Check if a category should be visible to non-admin users."""
     # Exact match
     if category in PUBLIC_CATEGORIES:
         return True
@@ -111,15 +110,6 @@ def is_public_category(category: str) -> bool:
 
 
 def classify_tool(tool_name: str, tool_input: dict) -> str:
-    """Classify a tool call into a taxonomy category.
-
-    Args:
-        tool_name: The tool being called (Bash, Read, Write, Edit, etc.)
-        tool_input: The input parameters for the tool
-
-    Returns:
-        Category string like "API: Matomo", "Read: knowledge", etc.
-    """
     if tool_name == "Bash":
         return _classify_bash(tool_input.get("command", ""))
 
@@ -155,7 +145,6 @@ def classify_tool(tool_name: str, tool_input: dict) -> str:
 
 
 def _classify_bash(cmd: str) -> str:
-    """Classify a Bash command."""
     # API calls - check these first (most important for observability)
     has_matomo = "MatomoAPI" in cmd or "matomo_api" in cmd or "execute_matomo_query" in cmd
     has_metabase = (
@@ -203,7 +192,6 @@ def _classify_bash(cmd: str) -> str:
 
 
 def _classify_read(path: str) -> str:
-    """Classify a Read operation by file path."""
     if "/knowledge/" in path:
         return "Read: knowledge"
     if "/skills/" in path and "skill.md" in path:
@@ -220,7 +208,6 @@ def _classify_read(path: str) -> str:
 
 
 def _classify_write(path: str) -> str:
-    """Classify a Write operation by file path."""
     if "/tmp/" in path:
         return "Write: temp"
     if "/interactive/" in path:
@@ -233,7 +220,6 @@ def _classify_write(path: str) -> str:
 
 
 def _classify_edit(path: str) -> str:
-    """Classify an Edit operation by file path."""
     if "/knowledge/" in path:
         return "Edit: knowledge"
     if "/skills/" in path:

@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""
-Backfill script to auto-tag existing conversations using the configured LLM backend.
-
-Usage:
-    python scripts/backfill_conversation_tags.py [--dry-run] [--limit N]
-
-Run with --dry-run to see what would be tagged without making changes.
-"""
+"""Backfill script to auto-tag existing conversations using the configured LLM backend."""
 
 import argparse
 import os
@@ -96,7 +89,6 @@ VALID_TAGS = {
 
 
 def get_untagged_conversations(limit: int = 100):
-    """Get conversations that have no tags."""
     with get_db() as conn:
         rows = conn.execute(
             """
@@ -115,7 +107,6 @@ def get_untagged_conversations(limit: int = 100):
 
 
 def get_first_user_message(conv_id: str) -> str | None:
-    """Get the first user message from a conversation."""
     messages = store.get_messages(conv_id, types=["user"], limit=1)
     if messages:
         return messages[0].content
@@ -123,7 +114,6 @@ def get_first_user_message(conv_id: str) -> str | None:
 
 
 def _parse_tags(response: str) -> list[str]:
-    """Extract valid tag names from response."""
     # Handle potential explanation text - take just the tag line
     if "\n" in response:
         for line in response.split("\n"):
@@ -140,7 +130,6 @@ def _parse_tags(response: str) -> list[str]:
 
 
 def _build_prompt(message: str) -> str:
-    """Build the tagging prompt."""
     return f"""Analyse cette demande utilisateur et attribue des tags parmi la taxonomie suivante.
 
 {TAG_TAXONOMY}
@@ -159,7 +148,6 @@ Exemple: emplois, candidats, trafic, analyse"""
 
 
 def generate_tags_for_message(message: str) -> list[str]:
-    """Generate tags using the configured LLM backend."""
     prompt = _build_prompt(message)
     model = config.OLLAMA_TAG_MODEL if config.LLM_BACKEND == "ollama" else config.CLAUDE_MODEL
 
@@ -233,7 +221,6 @@ def backfill_tags(dry_run: bool = False, limit: int = 100, delay: float = 1.0):
 
 
 def list_untagged():
-    """List conversations that don't have tags."""
     init_db()
 
     conversations = get_untagged_conversations(limit=200)
