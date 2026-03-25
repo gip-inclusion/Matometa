@@ -50,7 +50,8 @@ jobs:
       - name: pip-audit
         run: |
           uv export --frozen --no-hashes --no-emit-project > /tmp/requirements.txt
-          uv run pip-audit -r /tmp/requirements.txt
+          # CVE-2026-4539 (pygments ReDoS): no PyPI release >2.19.2 yet; remove when pygments>=2.19.3 exists
+          uv run pip-audit -r /tmp/requirements.txt --ignore-vuln CVE-2026-4539
 
       # Secret detection (CLI — the gitleaks GitHub Action is not in the org allowlist)
       - name: Gitleaks

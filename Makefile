@@ -47,7 +47,8 @@ format:
 ## Security checks (SAST + dependency audit)
 security:
 	uv run --frozen bandit -r web/ lib/ scripts/ -c pyproject.toml --severity-level medium --confidence-level high -q
-	uv export --frozen --no-hashes --no-emit-project > /tmp/requirements.txt && uv run --frozen pip-audit -r /tmp/requirements.txt
+	# pygments: CVE-2026-4539 — no fixed release on PyPI yet; drop --ignore-vuln when pygments>=2.19.3
+	uv export --frozen --no-hashes --no-emit-project > /tmp/requirements.txt && uv run --frozen pip-audit -r /tmp/requirements.txt --ignore-vuln CVE-2026-4539
 
 ## Run all CI checks locally
 ci: lint security test
