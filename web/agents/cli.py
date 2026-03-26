@@ -111,8 +111,6 @@ class CLIBackend(AgentBackend):
             "--output-format",
             "stream-json",
             "--verbose",
-            "--setting-sources",
-            "project",  # Only load project skills, not user plugins
         ]
 
         # Add additional directories the agent can access
