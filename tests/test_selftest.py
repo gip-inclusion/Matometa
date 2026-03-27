@@ -1,8 +1,106 @@
 """Tests for web/selftest.py — unit tests with mocked externals."""
 
+import json
+
 import pytest
 
-from web.selftest import Check, _fmt, _probe, _run_all_checks
+from web.selftest import (
+    Check,
+    _check_claude_code_ping,
+    _check_claude_status_page,
+    _fmt,
+    _probe,
+    _run_all_checks,
+)
+
+
+class TestClaudeStatusPage:
+    def test_ok(self, mocker):
+        mock_get = mocker.patch("web.selftest.requests.get")
+        mock_resp = mocker.MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "status": {"indicator": "none", "description": "All Systems Operational"},
+            "components": [
+                {"name": "Claude API (api.anthropic.com)", "status": "operational"},
+            ],
+        }
+        mock_get.return_value = mock_resp
+
+        ok, detail = _check_claude_status_page()
+
+        assert ok is True
+        assert detail == "All Systems Operational"
+        mock_get.assert_called_once()
+        assert mock_get.call_args[0][0] == "https://status.claude.com/api/v2/summary.json"
+
+    def test_degraded(self, mocker):
+        mock_get = mocker.patch("web.selftest.requests.get")
+        mock_resp = mocker.MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "status": {
+                "indicator": "minor",
+                "description": "Partially Degraded Service",
+            },
+            "components": [
+                {"name": "Claude Code", "status": "degraded_performance"},
+            ],
+        }
+        mock_get.return_value = mock_resp
+
+        ok, detail = _check_claude_status_page()
+
+        assert ok is False
+        assert "Partially Degraded" in detail
+        assert "Claude Code" in detail
+
+    def test_http_error(self, mocker):
+        mocker.patch(
+            "web.selftest.requests.get",
+            return_value=mocker.MagicMock(status_code=503, text=""),
+        )
+
+        ok, detail = _check_claude_status_page()
+
+        assert ok is False
+        assert "503" in detail
+
+    def test_invalid_json(self, mocker):
+        mock_get = mocker.patch("web.selftest.requests.get")
+        mock_resp = mocker.MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.side_effect = json.JSONDecodeError("msg", "", 0)
+        mock_get.return_value = mock_resp
+
+        ok, detail = _check_claude_status_page()
+
+        assert ok is False
+        assert "invalid JSON" in detail
+
+
+class TestClaudeCodePing:
+    def test_ok(self, mocker):
+        mocker.patch(
+            "web.selftest.subprocess.run",
+            return_value=mocker.MagicMock(returncode=0, stdout="pong\n", stderr=""),
+        )
+
+        ok, detail = _check_claude_code_ping()
+
+        assert ok is True
+        assert detail == "API OK"
+
+    def test_nonzero_exit(self, mocker):
+        mocker.patch(
+            "web.selftest.subprocess.run",
+            return_value=mocker.MagicMock(returncode=1, stdout="", stderr="rate limited"),
+        )
+
+        ok, detail = _check_claude_code_ping()
+
+        assert ok is False
+        assert "rate" in detail
 
 
 class TestProbe:
@@ -75,6 +173,8 @@ class TestRunAllChecks:
         mocker.patch("web.selftest._check_process_manager", return_value=(True, "heartbeat OK"))
         mocker.patch("web.selftest._check_conversation_roundtrip", return_value=(True, "OK"))
         mocker.patch("web.selftest._check_claude_cli", return_value=(True, "1.0.0"))
+        mocker.patch("web.selftest._check_claude_status_page", return_value=(True, "page OK"))
+        mocker.patch("web.selftest._check_claude_code_ping", return_value=(True, "API OK"))
         mocker.patch("web.selftest._check_s3", return_value=(False, "not configured"))
         mocker.patch("web.selftest._check_matomo", return_value=(True, "v5.0"))
         mocker.patch("web.selftest._check_metabase_instance", return_value=(True, "healthy"))
@@ -86,7 +186,7 @@ class TestRunAllChecks:
 
         checks = _run_all_checks()
 
-        assert len(checks) >= 10
+        assert len(checks) >= 12
         assert all(isinstance(c, Check) for c in checks)
         passed = [c for c in checks if c.ok]
         failed = [c for c in checks if not c.ok]

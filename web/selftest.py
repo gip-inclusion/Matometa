@@ -1,6 +1,7 @@
 """Self-test route: lightweight health checks for all core services."""
 
 import asyncio
+import json
 import logging
 import os
 import subprocess
@@ -111,6 +112,51 @@ def _check_claude_cli() -> tuple[bool, str]:
     return (False, result.stderr.strip()[:120])
 
 
+def _check_claude_status_page() -> tuple[bool, str]:
+    # Atlassian Statuspage JSON API (same data as the public status page).
+    url = "https://status.claude.com/api/v2/summary.json"
+    resp = requests.get(url, timeout=5, headers={"Accept": "application/json"})
+    if resp.status_code != 200:
+        return (False, f"HTTP {resp.status_code}")
+    try:
+        data = resp.json()
+    except json.JSONDecodeError:
+        return (False, "invalid JSON")
+    status = data.get("status") or {}
+    indicator = status.get("indicator") or ""
+    description = (status.get("description") or "").strip() or indicator or "unknown"
+    components = data.get("components") or []
+    non_op = [c["name"] for c in components if c.get("status") != "operational"]
+    if indicator == "none" and not non_op:
+        return (True, description)
+    extra = ", ".join(non_op[:8])
+    if len(non_op) > 8:
+        extra += f", +{len(non_op) - 8} more"
+    msg = f"{description} ({extra})" if extra else description
+    return (False, msg[:240])
+
+
+def _check_claude_code_ping() -> tuple[bool, str]:
+    result = subprocess.run(
+        [
+            config.CLAUDE_CLI,
+            "--print",
+            "-p",
+            "Reply with exactly the single word: pong",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        cwd=str(config.BASE_DIR),
+    )
+    if result.returncode != 0:
+        err = (result.stderr or result.stdout or "").strip()[:120]
+        return (False, err or "non-zero exit")
+    if "pong" in result.stdout.lower():
+        return (True, "API OK")
+    return (False, "no pong in output")
+
+
 def _check_s3() -> tuple[bool, str]:
     if not config.USE_S3:
         return (False, "not configured (USE_S3=false)")
@@ -218,6 +264,8 @@ def _run_all_checks() -> list[Check]:
         _probe("Process Manager", _check_process_manager),
         _probe("Conversation roundtrip", _check_conversation_roundtrip),
         _probe("Claude CLI", _check_claude_cli),
+        _probe("Claude status page", _check_claude_status_page),
+        _probe("Claude Code API ping", _check_claude_code_ping),
         _probe("S3", _check_s3),
         _probe("Matomo", _check_matomo),
     ]
