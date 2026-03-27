@@ -103,15 +103,29 @@ def _check_conversation_roundtrip() -> tuple[bool, str]:
 
 
 def _check_claude_cli() -> tuple[bool, str]:
+    """`claude --version` from repo root + one folder name per `skills/<name>/SKILL.md`."""
     result = subprocess.run(
         [config.CLAUDE_CLI, "--version"],
+        cwd=str(config.BASE_DIR),
         capture_output=True,
         text=True,
         timeout=SELFTEST_TIMEOUT_SEC,
     )
-    if result.returncode == 0:
-        return (True, result.stdout.strip().split("\n")[0][:80])
-    return (False, (result.stderr or result.stdout).strip()[:120])
+    if result.returncode != 0:
+        return (False, (result.stderr or result.stdout).strip()[:120])
+    cli_line = result.stdout.strip().split("\n")[0][:80]
+
+    skills_root = config.BASE_DIR / "skills"
+    if not skills_root.is_dir():
+        return (False, f"{cli_line}; skills/ missing")
+    names = sorted(p.name for p in skills_root.iterdir() if p.is_dir() and (p / "SKILL.md").is_file())
+    if not names:
+        return (False, f"{cli_line}; no skills/*/SKILL.md")
+
+    tail = ", ".join(names)
+    if len(tail) > 90:
+        tail = tail[:87] + "..."
+    return (True, f"{cli_line}; {len(names)} skills: {tail}")
 
 
 def _check_s3() -> tuple[bool, str]:

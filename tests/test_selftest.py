@@ -2,6 +2,7 @@
 
 import pytest
 
+from web.config import BASE_DIR
 from web.selftest import Check, _fmt, _probe, _run_all_checks
 
 
@@ -58,6 +59,7 @@ class TestRunAllChecks:
         mock_get = mocker.patch("web.selftest.requests.get")
         mock_subprocess = mocker.patch("web.selftest.subprocess.run")
         mock_config = mocker.patch("web.selftest.config")
+        mock_config.BASE_DIR = BASE_DIR
         mock_config.ADMIN_USERS = ["admin@localhost"]
         mock_config.USE_S3 = False
         mock_config.CLAUDE_CLI = "claude"
@@ -74,7 +76,7 @@ class TestRunAllChecks:
         mocker.patch("web.selftest._check_admin_users", return_value=(True, "1 configured"))
         mocker.patch("web.selftest._check_process_manager", return_value=(True, "heartbeat OK"))
         mocker.patch("web.selftest._check_conversation_roundtrip", return_value=(True, "OK"))
-        mocker.patch("web.selftest._check_claude_cli", return_value=(True, "1.0.0"))
+        mocker.patch("web.selftest._check_claude_cli", return_value=(True, "1.0.0; 3 skills: a, b, c"))
         mocker.patch("web.selftest._check_s3", return_value=(False, "not configured"))
         mocker.patch("web.selftest._check_matomo", return_value=(True, "v5.0"))
         mocker.patch("web.selftest._check_metabase_instance", return_value=(True, "healthy"))
@@ -88,6 +90,9 @@ class TestRunAllChecks:
 
         assert len(checks) >= 10
         assert all(isinstance(c, Check) for c in checks)
+        claude_cli = next(c for c in checks if c.name == "Claude CLI")
+        assert claude_cli.ok, claude_cli.detail
+        assert "skills:" in claude_cli.detail
         passed = [c for c in checks if c.ok]
         failed = [c for c in checks if not c.ok]
         assert len(passed) >= 5
