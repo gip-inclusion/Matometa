@@ -23,7 +23,7 @@ ALLOWED_ORIGINS = {
 }
 
 
-def _cors_headers(origin: str | None) -> dict:
+def cors_headers(origin: str | None) -> dict:
     headers = {}
     if origin in ALLOWED_ORIGINS:
         headers["Access-Control-Allow-Origin"] = origin
@@ -58,7 +58,7 @@ async def query(request: Request):
         JSON with success, data, error, execution_time_ms
     """
     origin = request.headers.get("Origin")
-    cors = _cors_headers(origin)
+    cors = cors_headers(origin)
 
     # Handle preflight
     if request.method == "OPTIONS":

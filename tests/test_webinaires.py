@@ -10,13 +10,13 @@ from lib.webinaires import (
     T_SYNC_META,
     T_WEBINAIRES,
     GristClient,
-    _batch_upsert,
-    _extract_organisation,
-    _grist_duration_to_minutes,
-    _ts_to_iso,
+    batch_upsert,
     ensure_schema,
+    extract_organisation,
+    grist_duration_to_minutes,
     infer_product,
     sync_grist,
+    ts_to_iso,
 )
 
 
@@ -89,60 +89,60 @@ class TestInferProduct:
 
 class TestTsToIso:
     def test_valid_timestamp(self):
-        result = _ts_to_iso(1700000000)
+        result = ts_to_iso(1700000000)
         assert result.startswith("2023-11-14")
         assert "+00:00" in result
 
     def test_float_timestamp(self):
-        result = _ts_to_iso(1700000000.5)
+        result = ts_to_iso(1700000000.5)
         assert result is not None
 
     def test_zero(self):
-        assert _ts_to_iso(0) is None
+        assert ts_to_iso(0) is None
 
     def test_none(self):
-        assert _ts_to_iso(None) is None
+        assert ts_to_iso(None) is None
 
     def test_invalid(self):
-        assert _ts_to_iso("not-a-number") is None
+        assert ts_to_iso("not-a-number") is None
 
 
 class TestGristDurationToMinutes:
     def test_30_min(self):
-        assert _grist_duration_to_minutes("30 min") == 30
+        assert grist_duration_to_minutes("30 min") == 30
 
     def test_45_min(self):
-        assert _grist_duration_to_minutes("45 min") == 45
+        assert grist_duration_to_minutes("45 min") == 45
 
     def test_60_min(self):
-        assert _grist_duration_to_minutes("60 min") == 60
+        assert grist_duration_to_minutes("60 min") == 60
 
     def test_none(self):
-        assert _grist_duration_to_minutes(None) is None
+        assert grist_duration_to_minutes(None) is None
 
     def test_empty(self):
-        assert _grist_duration_to_minutes("") is None
+        assert grist_duration_to_minutes("") is None
 
 
 class TestExtractOrganisation:
     def test_company_field(self):
         fields = [{"id": "company", "value": "ACME Corp"}]
-        assert _extract_organisation(fields) == "ACME Corp"
+        assert extract_organisation(fields) == "ACME Corp"
 
     def test_structure_field(self):
         fields = [{"id": "quel_est_le_nom_de_votre_structure", "value": "PLIE Bordeaux"}]
-        assert _extract_organisation(fields) == "PLIE Bordeaux"
+        assert extract_organisation(fields) == "PLIE Bordeaux"
 
     def test_entreprise_field(self):
         fields = [{"id": "entreprise", "value": "Mission Locale"}]
-        assert _extract_organisation(fields) == "Mission Locale"
+        assert extract_organisation(fields) == "Mission Locale"
 
     def test_no_match(self):
         fields = [{"id": "departement", "value": "75"}]
-        assert _extract_organisation(fields) is None
+        assert extract_organisation(fields) is None
 
     def test_empty(self):
-        assert _extract_organisation([]) is None
+        assert extract_organisation([]) is None
 
     def test_priority(self):
         """company takes precedence over entreprise."""
@@ -150,14 +150,14 @@ class TestExtractOrganisation:
             {"id": "entreprise", "value": "second"},
             {"id": "company", "value": "first"},
         ]
-        assert _extract_organisation(fields) == "first"
+        assert extract_organisation(fields) == "first"
 
     def test_skips_empty_value(self):
         fields = [
             {"id": "company", "value": ""},
             {"id": "entreprise", "value": "Fallback"},
         ]
-        assert _extract_organisation(fields) == "Fallback"
+        assert extract_organisation(fields) == "Fallback"
 
 
 class TestSchema:
@@ -198,7 +198,7 @@ class TestSchema:
         assert count == 2
 
 
-def _mock_grist_response(mocker, records):
+def mock_grist_response(mocker, records):
     resp = mocker.MagicMock()
     resp.status_code = 200
     resp.json.return_value = {"records": records}
@@ -290,30 +290,30 @@ class TestBatchUpsert:
     def test_inserts_all_rows(self, db):
         """All rows are inserted across batches."""
         rows = [(f"id-{i}", "grist", f"src-{i}", f"title-{i}") for i in range(250)]
-        _batch_upsert(db, self.INSERT_PREFIX, self.CONFLICT_SUFFIX, rows, batch_size=100)
+        batch_upsert(db, self.INSERT_PREFIX, self.CONFLICT_SUFFIX, rows, batch_size=100)
         db.commit()
         count = db.execute(f"SELECT COUNT(*) FROM {T_WEBINAIRES}").fetchone()[0]
         assert count == 250
 
     def test_upsert_on_conflict(self, db):
         """ON CONFLICT updates existing rows."""
-        _batch_upsert(db, self.INSERT_PREFIX, self.CONFLICT_SUFFIX, [("id-1", "grist", "src-1", "old title")])
+        batch_upsert(db, self.INSERT_PREFIX, self.CONFLICT_SUFFIX, [("id-1", "grist", "src-1", "old title")])
         db.commit()
-        _batch_upsert(db, self.INSERT_PREFIX, self.CONFLICT_SUFFIX, [("id-1", "grist", "src-1", "new title")])
+        batch_upsert(db, self.INSERT_PREFIX, self.CONFLICT_SUFFIX, [("id-1", "grist", "src-1", "new title")])
         db.commit()
         title = db.execute(f"SELECT title FROM {T_WEBINAIRES} WHERE id='id-1'").fetchone()[0]
         assert title == "new title"
 
     def test_empty_rows(self, db):
         """Empty row list is a no-op."""
-        _batch_upsert(db, self.INSERT_PREFIX, self.CONFLICT_SUFFIX, [])
+        batch_upsert(db, self.INSERT_PREFIX, self.CONFLICT_SUFFIX, [])
         count = db.execute(f"SELECT COUNT(*) FROM {T_WEBINAIRES}").fetchone()[0]
         assert count == 0
 
     def test_handles_special_characters(self, db):
         """Values with quotes and special chars are escaped properly."""
         rows = [("id-quote", "grist", "src-q", "It's a \"test\" with 'quotes'")]
-        _batch_upsert(db, self.INSERT_PREFIX, self.CONFLICT_SUFFIX, rows)
+        batch_upsert(db, self.INSERT_PREFIX, self.CONFLICT_SUFFIX, rows)
         db.commit()
         title = db.execute(f"SELECT title FROM {T_WEBINAIRES} WHERE id='id-quote'").fetchone()[0]
         assert title == "It's a \"test\" with 'quotes'"
@@ -321,7 +321,7 @@ class TestBatchUpsert:
     def test_handles_none_values(self, db):
         """None values are inserted as NULL."""
         rows = [("id-null", "grist", "src-n", None)]
-        _batch_upsert(db, self.INSERT_PREFIX, self.CONFLICT_SUFFIX, rows)
+        batch_upsert(db, self.INSERT_PREFIX, self.CONFLICT_SUFFIX, rows)
         db.commit()
         title = db.execute(f"SELECT title FROM {T_WEBINAIRES} WHERE id='id-null'").fetchone()[0]
         assert title is None
@@ -329,7 +329,7 @@ class TestBatchUpsert:
     def test_exact_batch_boundary(self, db):
         """Row count exactly equal to batch_size works."""
         rows = [(f"id-{i}", "grist", f"src-{i}", f"t-{i}") for i in range(100)]
-        _batch_upsert(db, self.INSERT_PREFIX, self.CONFLICT_SUFFIX, rows, batch_size=100)
+        batch_upsert(db, self.INSERT_PREFIX, self.CONFLICT_SUFFIX, rows, batch_size=100)
         db.commit()
         count = db.execute(f"SELECT COUNT(*) FROM {T_WEBINAIRES}").fetchone()[0]
         assert count == 100
@@ -341,8 +341,8 @@ class TestGristSync:
 
         def mock_get(url, **kwargs):
             if "Webinaires" in url:
-                return _mock_grist_response(mocker, SAMPLE_WEBINAIRES)
-            return _mock_grist_response(mocker, [])
+                return mock_grist_response(mocker, SAMPLE_WEBINAIRES)
+            return mock_grist_response(mocker, [])
 
         grist_client._session.get.side_effect = mock_get
         sync_grist(db, grist_client)
@@ -363,10 +363,10 @@ class TestGristSync:
 
         def mock_get(url, **kwargs):
             if "Webinaires" in url:
-                return _mock_grist_response(mocker, SAMPLE_WEBINAIRES)
+                return mock_grist_response(mocker, SAMPLE_WEBINAIRES)
             if "Inscriptions" in url:
-                return _mock_grist_response(mocker, SAMPLE_INSCRIPTIONS)
-            return _mock_grist_response(mocker, [])
+                return mock_grist_response(mocker, SAMPLE_INSCRIPTIONS)
+            return mock_grist_response(mocker, [])
 
         grist_client._session.get.side_effect = mock_get
         sync_grist(db, grist_client)
@@ -388,10 +388,10 @@ class TestGristSync:
 
         def mock_get(url, **kwargs):
             if "Webinaires" in url:
-                return _mock_grist_response(mocker, SAMPLE_WEBINAIRES)
+                return mock_grist_response(mocker, SAMPLE_WEBINAIRES)
             if "Inscriptions" in url:
-                return _mock_grist_response(mocker, SAMPLE_INSCRIPTIONS)
-            return _mock_grist_response(mocker, [])
+                return mock_grist_response(mocker, SAMPLE_INSCRIPTIONS)
+            return mock_grist_response(mocker, [])
 
         grist_client._session.get.side_effect = mock_get
         sync_grist(db, grist_client)
@@ -405,10 +405,10 @@ class TestGristSync:
 
         def mock_get(url, **kwargs):
             if "Webinaires" in url:
-                return _mock_grist_response(mocker, SAMPLE_WEBINAIRES)
+                return mock_grist_response(mocker, SAMPLE_WEBINAIRES)
             if "Inscriptions" in url:
-                return _mock_grist_response(mocker, SAMPLE_INSCRIPTIONS)
-            return _mock_grist_response(mocker, [])
+                return mock_grist_response(mocker, SAMPLE_INSCRIPTIONS)
+            return mock_grist_response(mocker, [])
 
         grist_client._session.get.side_effect = mock_get
 
@@ -425,10 +425,10 @@ class TestGristSync:
 
         def mock_get_v1(url, **kwargs):
             if "Webinaires" in url:
-                return _mock_grist_response(mocker, SAMPLE_WEBINAIRES)
+                return mock_grist_response(mocker, SAMPLE_WEBINAIRES)
             if "Inscriptions" in url:
-                return _mock_grist_response(mocker, SAMPLE_INSCRIPTIONS[:1])
-            return _mock_grist_response(mocker, [])
+                return mock_grist_response(mocker, SAMPLE_INSCRIPTIONS[:1])
+            return mock_grist_response(mocker, [])
 
         grist_client._session.get.side_effect = mock_get_v1
         sync_grist(db, grist_client)
@@ -450,10 +450,10 @@ class TestGristSync:
 
         def mock_get_v2(url, **kwargs):
             if "Webinaires" in url:
-                return _mock_grist_response(mocker, SAMPLE_WEBINAIRES)
+                return mock_grist_response(mocker, SAMPLE_WEBINAIRES)
             if "Inscriptions" in url:
-                return _mock_grist_response(mocker, updated)
-            return _mock_grist_response(mocker, [])
+                return mock_grist_response(mocker, updated)
+            return mock_grist_response(mocker, [])
 
         grist_client._session.get.side_effect = mock_get_v2
         sync_grist(db, grist_client)
@@ -477,10 +477,10 @@ class TestGristSync:
 
         def mock_get(url, **kwargs):
             if "Webinaires" in url:
-                return _mock_grist_response(mocker, SAMPLE_WEBINAIRES)
+                return mock_grist_response(mocker, SAMPLE_WEBINAIRES)
             if "Inscriptions" in url:
-                return _mock_grist_response(mocker, no_email)
-            return _mock_grist_response(mocker, [])
+                return mock_grist_response(mocker, no_email)
+            return mock_grist_response(mocker, [])
 
         grist_client._session.get.side_effect = mock_get
         sync_grist(db, grist_client)
@@ -502,8 +502,8 @@ class TestGristSync:
 
         def mock_get(url, **kwargs):
             if "Webinaires" in url:
-                return _mock_grist_response(mocker, no_event_id)
-            return _mock_grist_response(mocker, [])
+                return mock_grist_response(mocker, no_event_id)
+            return mock_grist_response(mocker, [])
 
         grist_client._session.get.side_effect = mock_get
         sync_grist(db, grist_client)
@@ -516,10 +516,10 @@ class TestGristSync:
 
         def mock_get(url, **kwargs):
             if "Webinaires" in url:
-                return _mock_grist_response(mocker, SAMPLE_WEBINAIRES)
+                return mock_grist_response(mocker, SAMPLE_WEBINAIRES)
             if "Inscriptions" in url:
-                return _mock_grist_response(mocker, SAMPLE_INSCRIPTIONS)
-            return _mock_grist_response(mocker, [])
+                return mock_grist_response(mocker, SAMPLE_INSCRIPTIONS)
+            return mock_grist_response(mocker, [])
 
         grist_client._session.get.side_effect = mock_get
         webinars, regs = sync_grist(db, grist_client)

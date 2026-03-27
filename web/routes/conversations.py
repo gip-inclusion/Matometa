@@ -13,6 +13,7 @@ from .. import config, llm
 from ..config import ADMIN_USERS
 from ..database import store
 from ..deps import get_current_user
+from ..helpers import KNOWLEDGE_ROOT, get_staging_dir
 from ..signals import signals
 from ..uploads import (
     AVScanFailedError,
@@ -416,8 +417,6 @@ async def send_message(conv_id: str, request: Request, user_email: str = Depends
 
     # Inject knowledge editing context for knowledge conversations
     if conv.conv_type == "knowledge" and conv.file_path:
-        from ..helpers import KNOWLEDGE_ROOT, get_staging_dir
-
         staging_dir = get_staging_dir(conv_id)
         original_path = (KNOWLEDGE_ROOT / conv.file_path).resolve()
         staged_path = (staging_dir / conv.file_path).resolve()

@@ -1,5 +1,6 @@
 """Cron task management routes."""
 
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -7,7 +8,8 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 
 from ..cron import discover_cron_tasks, find_task, get_app_runs, get_last_runs, run_cron_task, set_cron_enabled
 from ..deps import get_current_user, templates
-from .html import format_relative_date, get_sidebar_data
+from ..helpers import format_relative_date
+from .html import get_sidebar_data
 
 router = APIRouter()
 
@@ -23,8 +25,6 @@ def cron_page(request: Request, user_email: str = Depends(get_current_user)):
         runs = last_runs.get(task["slug"], [])
         task["last_run"] = runs[0] if runs else None
         if task["last_run"] and task["last_run"]["started_at"]:
-            from datetime import datetime
-
             try:
                 dt = datetime.fromisoformat(task["last_run"]["started_at"])
                 task["last_run"]["formatted_date"] = format_relative_date(dt)

@@ -13,6 +13,8 @@ from typing import Iterator
 import requests
 from dotenv import load_dotenv
 
+from lib.query import CallerType, execute_metabase_query
+
 load_dotenv(Path(__file__).parent.parent / ".env")
 
 log = logging.getLogger(__name__)
@@ -60,14 +62,10 @@ class DatalakeWriter:
     """
 
     def __init__(self, database_id: int = 2):
-        from lib.query import CallerType
-
         self._database_id = database_id
         self._caller = CallerType.APP
 
     def execute(self, sql, params=None):
-        from lib.query import execute_metabase_query
-
         if params:
             sql = self._interpolate(sql, params)
         result = execute_metabase_query(
@@ -93,11 +91,11 @@ class DatalakeWriter:
             raise ValueError(f"Expected {len(parts) - 1} placeholders, got {len(params)} params")
         out = parts[0]
         for i, val in enumerate(params):
-            out += _escape_val(val) + parts[i + 1]
+            out += escape_val(val) + parts[i + 1]
         return out
 
 
-def _escape_val(val):
+def escape_val(val):
     if val is None:
         return "NULL"
     if isinstance(val, bool):
@@ -108,14 +106,14 @@ def _escape_val(val):
     return f"'{s}'"
 
 
-def _batch_upsert(conn, insert_prefix, conflict_suffix, rows, batch_size=100):
+def batch_upsert(conn, insert_prefix, conflict_suffix, rows, batch_size=100):
     if not rows:
         return
     for i in range(0, len(rows), batch_size):
         batch = rows[i : i + batch_size]
         values_clauses = []
         for row in batch:
-            escaped = ", ".join(_escape_val(v) for v in row)
+            escaped = ", ".join(escape_val(v) for v in row)
             values_clauses.append(f"({escaped})")
         sql = insert_prefix + ", ".join(values_clauses) + conflict_suffix
         conn.execute(sql)
@@ -293,7 +291,7 @@ def ensure_schema(conn: sqlite3.Connection):
     conn.commit()
 
 
-def _ts_to_iso(ts) -> str | None:
+def ts_to_iso(ts) -> str | None:
     if ts is None or ts == 0:
         return None
     try:
@@ -302,11 +300,11 @@ def _ts_to_iso(ts) -> str | None:
         return None
 
 
-def _now_iso() -> str:
+def now_iso() -> str:
     return datetime.now(tz=timezone.utc).isoformat()
 
 
-def _extract_custom_field(fields: list[dict], field_id: str) -> str | None:
+def extract_custom_field(fields: list[dict], field_id: str) -> str | None:
     for f in fields:
         if f.get("id") == field_id:
             val = f.get("value")
@@ -316,7 +314,7 @@ def _extract_custom_field(fields: list[dict], field_id: str) -> str | None:
     return None
 
 
-def _extract_organisation(fields: list[dict]) -> str | None:
+def extract_organisation(fields: list[dict]) -> str | None:
     """Try to extract organisation from various custom field names."""
     for field_id in (
         "company",
@@ -327,7 +325,7 @@ def _extract_organisation(fields: list[dict]) -> str | None:
         "organisation",
         "entreprise",
     ):
-        val = _extract_custom_field(fields, field_id)
+        val = extract_custom_field(fields, field_id)
         if val:
             return val
     return None
@@ -335,7 +333,7 @@ def _extract_organisation(fields: list[dict]) -> str | None:
 
 def sync_livestorm(conn, client: LivestormClient):
     """Full Livestorm sync: events -> sessions -> people."""
-    now = _now_iso()
+    now = now_iso()
 
     # Phase 1: Events
     print("  Fetching events...")
@@ -425,8 +423,8 @@ def sync_livestorm(conn, client: LivestormClient):
                     sess_id,
                     webinar_id,
                     sa.get("status"),
-                    _ts_to_iso(sa.get("started_at") or sa.get("estimated_started_at")),
-                    _ts_to_iso(sa.get("ended_at")),
+                    ts_to_iso(sa.get("started_at") or sa.get("estimated_started_at")),
+                    ts_to_iso(sa.get("ended_at")),
                     sa.get("duration"),
                     sa.get("registrants_count"),
                     sa.get("attendees_count"),
@@ -484,7 +482,7 @@ def sync_livestorm(conn, client: LivestormClient):
             if not email:
                 continue
 
-            organisation = _extract_organisation(fields)
+            organisation = extract_organisation(fields)
             custom = {
                 f["id"]: f.get("value") for f in fields if f.get("id") not in ("email", "first_name", "last_name")
             }
@@ -520,7 +518,7 @@ def sync_livestorm(conn, client: LivestormClient):
                     rd.get("attendance_duration"),
                     1 if rd.get("has_viewed_replay") else 0,
                     json.dumps(custom, ensure_ascii=False) if custom else None,
-                    _ts_to_iso(rd.get("created_at")),
+                    ts_to_iso(rd.get("created_at")),
                     now,
                 ),
             )
@@ -541,7 +539,7 @@ def sync_livestorm(conn, client: LivestormClient):
     return len(events), session_count, reg_count
 
 
-def _grist_duration_to_minutes(duree: str | None) -> int | None:
+def grist_duration_to_minutes(duree: str | None) -> int | None:
     if not duree:
         return None
     m = re.search(r"(\d+)", str(duree))
@@ -550,7 +548,7 @@ def _grist_duration_to_minutes(duree: str | None) -> int | None:
 
 def sync_grist(conn, client: GristClient):
     """Full Grist sync (always full replace for this small dataset)."""
-    now = _now_iso()
+    now = now_iso()
 
     # Phase 1: Webinaires
     print("  Fetching Webinaires...")
@@ -578,9 +576,9 @@ def sync_grist(conn, client: GristClient):
                 organizer_email,
                 infer_product(title, organizer_email),
                 "active" if f.get("status") else "inactive",
-                _ts_to_iso(f.get("date_event")),
-                _ts_to_iso(f.get("date_fin")),
-                _grist_duration_to_minutes(f.get("duree")),
+                ts_to_iso(f.get("date_event")),
+                ts_to_iso(f.get("date_fin")),
+                grist_duration_to_minutes(f.get("duree")),
                 f.get("capacite"),
                 f.get("nb_inscrits"),
                 f.get("form_inscription_url"),
@@ -590,7 +588,7 @@ def sync_grist(conn, client: GristClient):
             )
         )
 
-    _batch_upsert(
+    batch_upsert(
         conn,
         f"""INSERT INTO {T_WEBINAIRES}
            (id, source, source_id, title, description, organizer_email,
@@ -643,12 +641,12 @@ def sync_grist(conn, client: GristClient):
                 f.get("entreprise"),
                 1,
                 1 if f.get("a_participe") else 0,
-                _ts_to_iso(f.get("date_inscription")),
+                ts_to_iso(f.get("date_inscription")),
                 now,
             )
         )
 
-    _batch_upsert(
+    batch_upsert(
         conn,
         f"""INSERT INTO {T_INSCRIPTIONS}
            (source, webinar_id, session_id, email, first_name, last_name,

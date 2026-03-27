@@ -9,6 +9,9 @@ import asyncio
 import json
 import logging
 import os
+import threading
+
+import requests as req
 
 from lib.api_signals import parse_api_signals
 from lib.failure_detection import extract_snippet, find_failure_marker
@@ -18,6 +21,7 @@ from . import config
 from .agents import get_agent
 from .agents.base import AgentBackend
 from .database import store
+from .logging_utils import setup_logging
 from .signals import signals
 
 logger = logging.getLogger(__name__)
@@ -222,8 +226,6 @@ class ProcessManager:
         conv = store.get_conversation(conversation_id)
         title = conv.title if conv and conv.title else "Sans titre"
 
-        import threading
-
         threading.Thread(
             target=self._send_failure_notification,
             args=(conversation_id, title, snippet),
@@ -232,8 +234,6 @@ class ProcessManager:
 
     @staticmethod
     def _send_failure_notification(conv_id: str, title: str, snippet: str):
-        import requests as req
-
         notify_email = os.environ.get("EMAIL_ANNAELLE", "")
         if not notify_email:
             logger.warning("EMAIL_ANNAELLE not set, skipping failure notification")
@@ -283,8 +283,6 @@ class ProcessManager:
 
 async def main():
     """Entry point for the process manager."""
-    from .logging_utils import setup_logging
-
     setup_logging(level=logging.DEBUG if config.DEBUG else logging.INFO)
     pm = ProcessManager()
     await pm.run()

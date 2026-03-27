@@ -5,7 +5,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from web.routes.html import _group_items_by_date, format_relative_date
+from web.helpers import format_relative_date
+from web.routes.html import group_items_by_date
 
 PARIS = ZoneInfo("Europe/Paris")
 
@@ -46,14 +47,14 @@ PARIS = ZoneInfo("Europe/Paris")
     ],
 )
 def test_format_relative_date_paris(mocker, fake_now_utc, event_dt, expected):
-    mocker.patch("web.routes.html._now_local", return_value=fake_now_utc.astimezone(PARIS))
+    mocker.patch("web.helpers.now_local", return_value=fake_now_utc.astimezone(PARIS))
     assert format_relative_date(event_dt) == expected
 
 
 def test_group_items_late_utc_bucket(mocker):
     fake_now = datetime(2026, 1, 13, 0, 0, tzinfo=timezone.utc)
-    mocker.patch("web.routes.html._now_local", return_value=fake_now.astimezone(PARIS))
+    mocker.patch("web.helpers.now_local", return_value=fake_now.astimezone(PARIS))
     items = [{"sort_date": datetime(2026, 1, 12, 23, 30)}]
-    groups = _group_items_by_date(items)
+    groups = group_items_by_date(items)
     assert "aujourd'hui" in groups
     assert len(groups["aujourd'hui"]) == 1

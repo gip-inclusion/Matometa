@@ -36,15 +36,15 @@ def extract_json_data(markdown: str) -> list[dict] | None:
     return None
 
 
-def _flatten_numbers(obj, prefix="") -> dict[str, float]:
+def flatten_numbers(obj, prefix="") -> dict[str, float]:
     """Recursively extract all numeric values with dotted key paths."""
     results = {}
     if isinstance(obj, dict):
         for k, v in obj.items():
-            results.update(_flatten_numbers(v, f"{prefix}{k}."))
+            results.update(flatten_numbers(v, f"{prefix}{k}."))
     elif isinstance(obj, list):
         for i, v in enumerate(obj):
-            results.update(_flatten_numbers(v, f"{prefix}[{i}]."))
+            results.update(flatten_numbers(v, f"{prefix}[{i}]."))
     elif isinstance(obj, (int, float)) and not isinstance(obj, bool):
         results[prefix.rstrip(".")] = float(obj)
     return results
@@ -75,7 +75,7 @@ def compare_results(
         flat = {}
         for i, call in enumerate(calls):
             result = call.get("result", {})
-            flat.update(_flatten_numbers(result, f"call[{i}]."))
+            flat.update(flatten_numbers(result, f"call[{i}]."))
         all_numbers[backend] = flat
 
     discrepancies = []

@@ -17,7 +17,7 @@ class LLMError(RuntimeError):
     """Raised when an LLM backend fails or is misconfigured."""
 
 
-def _get_llm_backend() -> str:
+def get_llm_backend() -> str:
     backend = (config.LLM_BACKEND or config.AGENT_BACKEND).lower()
     return backend
 
@@ -30,10 +30,10 @@ def generate_text(
     temperature: float = 0.2,
     timeout: Optional[float] = None,
 ) -> str:
-    backend = _get_llm_backend()
+    backend = get_llm_backend()
 
     if backend in ("ollama", "cli-ollama"):
-        return _ollama_generate(
+        return ollama_generate(
             prompt,
             model=model or config.OLLAMA_MODEL,
             max_tokens=max_tokens,
@@ -42,7 +42,7 @@ def generate_text(
         )
 
     if backend == "cli":
-        return _claude_cli_generate(
+        return claude_cli_generate(
             prompt,
             timeout=timeout,
         )
@@ -50,7 +50,7 @@ def generate_text(
     raise LLMError(f"Unsupported LLM backend: {backend}")
 
 
-def _ollama_generate(
+def ollama_generate(
     prompt: str,
     *,
     model: str,
@@ -82,7 +82,7 @@ def _ollama_generate(
         raise LLMError(f"Ollama request failed: {exc}") from exc
 
 
-def _claude_cli_generate(prompt: str, *, timeout: Optional[float]) -> str:
+def claude_cli_generate(prompt: str, *, timeout: Optional[float]) -> str:
     timeout = timeout or 60
     try:
         result = subprocess.run(

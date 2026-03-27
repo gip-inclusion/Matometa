@@ -23,7 +23,7 @@ NOTION_WISHLIST_DB = os.getenv("NOTION_WISHLIST_DB")
 
 CATEGORIES = ["permission", "tool", "knowledge", "skill", "workflow", "other"]
 
-def _get_conn():
+def get_conn():
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL not set in .env")
     return psycopg2.connect(DATABASE_URL)
@@ -87,7 +87,7 @@ def add_wish(category: str, title: str, description: str = None, conversation_id
     # Push to Notion first
     notion_page_id = push_to_notion(title, category, description)
 
-    conn = _get_conn()
+    conn = get_conn()
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute(
         """INSERT INTO wishlist (timestamp, category, title, description, conversation_id, notion_page_id)
@@ -102,7 +102,7 @@ def add_wish(category: str, title: str, description: str = None, conversation_id
     return True
 
 def list_wishes(category: str = None, status: str = "open", limit: int = 20):
-    conn = _get_conn()
+    conn = get_conn()
     cur = conn.cursor(cursor_factory=RealDictCursor)
 
     query = "SELECT * FROM wishlist WHERE 1=1"
@@ -137,7 +137,7 @@ def list_wishes(category: str = None, status: str = "open", limit: int = 20):
                 print(f"     {line}")
 
 def update_status(wish_id: int, status: str):
-    conn = _get_conn()
+    conn = get_conn()
     cur = conn.cursor()
     cur.execute(
         "UPDATE wishlist SET status = %s WHERE id = %s",
@@ -153,7 +153,7 @@ def sync_to_notion():
         print("Error: NOTION_TOKEN and NOTION_WISHLIST_DB must be set")
         return
 
-    conn = _get_conn()
+    conn = get_conn()
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute(
         "SELECT * FROM wishlist WHERE notion_page_id IS NULL ORDER BY timestamp"
@@ -183,7 +183,7 @@ def sync_to_notion():
 
 def stats():
     """Show wishlist statistics."""
-    conn = _get_conn()
+    conn = get_conn()
     cur = conn.cursor(cursor_factory=RealDictCursor)
 
     # By category

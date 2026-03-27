@@ -12,19 +12,19 @@ import mimetypes
 from pathlib import Path
 from typing import BinaryIO, Optional
 
+import boto3
+from botocore.config import Config as BotoConfig
+from botocore.exceptions import ClientError
+
 from . import config
 
 logger = logging.getLogger(__name__)
 
 # Initialize S3 client if configured
-_s3_client = None
+s3_client = None
 
 if config.USE_S3:
-    import boto3
-    from botocore.config import Config as BotoConfig
-    from botocore.exceptions import ClientError
-
-    _s3_client = boto3.client(
+    s3_client = boto3.client(
         "s3",
         endpoint_url=config.S3_ENDPOINT,
         aws_access_key_id=config.S3_ACCESS_KEY,
@@ -37,13 +37,13 @@ else:
     logger.info("S3 storage disabled, using local filesystem")
 
 
-def _get_s3_key(path: str) -> str:
+def get_s3_key(path: str) -> str:
     # Normalize path separators and remove leading slash
     path = path.replace("\\", "/").lstrip("/")
     return f"{config.S3_PREFIX}{path}"
 
 
-def _get_local_path(path: str) -> Path:
+def get_local_path(path: str) -> Path:
     path = path.replace("\\", "/").lstrip("/")
     resolved = (config.INTERACTIVE_DIR / path).resolve()
     if not str(resolved).startswith(str(config.INTERACTIVE_DIR.resolve())):
@@ -58,8 +58,8 @@ def upload_file(path: str, content: bytes, content_type: Optional[str] = None) -
 
     if config.USE_S3:
         try:
-            key = _get_s3_key(path)
-            _s3_client.put_object(
+            key = get_s3_key(path)
+            s3_client.put_object(
                 Bucket=config.S3_BUCKET,
                 Key=key,
                 Body=content,
@@ -72,7 +72,7 @@ def upload_file(path: str, content: bytes, content_type: Optional[str] = None) -
             return False
     else:
         try:
-            local_path = _get_local_path(path)
+            local_path = get_local_path(path)
             local_path.parent.mkdir(parents=True, exist_ok=True)
             local_path.write_bytes(content)
             logger.debug(f"Saved locally: {local_path}")
@@ -90,8 +90,8 @@ def upload_fileobj(path: str, fileobj: BinaryIO, content_type: Optional[str] = N
 def download_file(path: str) -> Optional[bytes]:
     if config.USE_S3:
         try:
-            key = _get_s3_key(path)
-            response = _s3_client.get_object(Bucket=config.S3_BUCKET, Key=key)
+            key = get_s3_key(path)
+            response = s3_client.get_object(Bucket=config.S3_BUCKET, Key=key)
             return response["Body"].read()
         except ClientError as e:
             if e.response["Error"]["Code"] == "NoSuchKey":
@@ -104,7 +104,7 @@ def download_file(path: str) -> Optional[bytes]:
             return None
     else:
         try:
-            local_path = _get_local_path(path)
+            local_path = get_local_path(path)
             if local_path.exists():
                 return local_path.read_bytes()
             return None
@@ -116,8 +116,8 @@ def download_file(path: str) -> Optional[bytes]:
 def get_file_url(path: str, expires_in: int = 3600) -> Optional[str]:
     if config.USE_S3:
         try:
-            key = _get_s3_key(path)
-            url = _s3_client.generate_presigned_url(
+            key = get_s3_key(path)
+            url = s3_client.generate_presigned_url(
                 "get_object",
                 Params={"Bucket": config.S3_BUCKET, "Key": key},
                 ExpiresIn=expires_in,
@@ -132,8 +132,8 @@ def get_file_url(path: str, expires_in: int = 3600) -> Optional[str]:
 def file_exists(path: str) -> bool:
     if config.USE_S3:
         try:
-            key = _get_s3_key(path)
-            _s3_client.head_object(Bucket=config.S3_BUCKET, Key=key)
+            key = get_s3_key(path)
+            s3_client.head_object(Bucket=config.S3_BUCKET, Key=key)
             return True
         except ClientError as e:
             if e.response["Error"]["Code"] == "404":
@@ -142,7 +142,7 @@ def file_exists(path: str) -> bool:
             return False
     else:
         try:
-            return _get_local_path(path).exists()
+            return get_local_path(path).exists()
         except ValueError:
             return False
 
@@ -150,8 +150,8 @@ def file_exists(path: str) -> bool:
 def delete_file(path: str) -> bool:
     if config.USE_S3:
         try:
-            key = _get_s3_key(path)
-            _s3_client.delete_object(Bucket=config.S3_BUCKET, Key=key)
+            key = get_s3_key(path)
+            s3_client.delete_object(Bucket=config.S3_BUCKET, Key=key)
             logger.debug(f"Deleted from S3: {key}")
             return True
         except Exception as e:
@@ -159,7 +159,7 @@ def delete_file(path: str) -> bool:
             return False
     else:
         try:
-            local_path = _get_local_path(path)
+            local_path = get_local_path(path)
             if local_path.exists():
                 local_path.unlink()
                 logger.debug(f"Deleted locally: {local_path}")
@@ -174,8 +174,8 @@ def list_files(prefix: str = "") -> list[dict]:
 
     if config.USE_S3:
         try:
-            s3_prefix = _get_s3_key(prefix)
-            paginator = _s3_client.get_paginator("list_objects_v2")
+            s3_prefix = get_s3_key(prefix)
+            paginator = s3_client.get_paginator("list_objects_v2")
 
             for page in paginator.paginate(Bucket=config.S3_BUCKET, Prefix=s3_prefix):
                 for obj in page.get("Contents", []):
@@ -192,7 +192,7 @@ def list_files(prefix: str = "") -> list[dict]:
             logger.error(f"S3 list failed for prefix {prefix}: {e}")
     else:
         try:
-            base_path = _get_local_path(prefix)
+            base_path = get_local_path(prefix)
             if base_path.exists():
                 for file_path in base_path.rglob("*"):
                     if file_path.is_file():
@@ -216,9 +216,9 @@ def list_directories(prefix: str = "") -> list[str]:
 
     if config.USE_S3:
         try:
-            s3_prefix = _get_s3_key(prefix)
+            s3_prefix = get_s3_key(prefix)
             # Use delimiter to get "directories"
-            response = _s3_client.list_objects_v2(
+            response = s3_client.list_objects_v2(
                 Bucket=config.S3_BUCKET,
                 Prefix=s3_prefix,
                 Delimiter="/",
@@ -235,7 +235,7 @@ def list_directories(prefix: str = "") -> list[str]:
             logger.error(f"S3 list directories failed for prefix {prefix}: {e}")
     else:
         try:
-            base_path = _get_local_path(prefix) if prefix else config.INTERACTIVE_DIR
+            base_path = get_local_path(prefix) if prefix else config.INTERACTIVE_DIR
             if base_path.exists():
                 for item in base_path.iterdir():
                     if item.is_dir():

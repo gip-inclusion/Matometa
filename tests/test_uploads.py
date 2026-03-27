@@ -25,11 +25,11 @@ from web.uploads import (
     TEXT_EXTENSIONS,
     BlockedFileTypeError,
     FileTooLargeError,
-    _compute_sha256,
-    _generate_stored_filename,
-    _is_text_file,
-    _sanitize_filename,
+    compute_sha256,
     format_file_for_context,
+    generate_stored_filename,
+    is_text_file,
+    sanitize_filename,
     upload_file,
 )
 
@@ -53,7 +53,7 @@ def setup_db(tmp_path, monkeypatch):
     from web.db import test_transaction
 
     monkeypatch.setattr(
-        "web.uploads._scan_with_clamav",
+        "web.uploads.scan_with_clamav",
         lambda _path: (False, None),
     )
 
@@ -74,17 +74,17 @@ class TestComputeSha256:
     def test_computes_correct_hash(self):
         content = b"Hello, World!"
         expected = hashlib.sha256(content).hexdigest()
-        assert _compute_sha256(content) == expected
+        assert compute_sha256(content) == expected
 
     def test_empty_content(self):
         content = b""
         expected = hashlib.sha256(content).hexdigest()
-        assert _compute_sha256(content) == expected
+        assert compute_sha256(content) == expected
 
     def test_deterministic(self):
         content = b"test content"
-        hash1 = _compute_sha256(content)
-        hash2 = _compute_sha256(content)
+        hash1 = compute_sha256(content)
+        hash2 = compute_sha256(content)
         assert hash1 == hash2
 
 
@@ -93,24 +93,24 @@ class TestIsTextFile:
 
     def test_text_extension_is_detected(self):
         for ext in [".txt", ".md", ".csv", ".json", ".py", ".ts"]:
-            assert _is_text_file(f"file{ext}", None, b"") is True
+            assert is_text_file(f"file{ext}", None, b"") is True
 
     def test_binary_extension_is_not_text(self):
-        assert _is_text_file("image.png", "image/png", b"\x89PNG") is False
+        assert is_text_file("image.png", "image/png", b"\x89PNG") is False
         # PDF with binary content is detected as binary
-        assert _is_text_file("doc.pdf", "application/pdf", b"\x00\x01\x02") is False
+        assert is_text_file("doc.pdf", "application/pdf", b"\x00\x01\x02") is False
 
     def test_text_mime_type_is_detected(self):
-        assert _is_text_file("file", "text/plain", b"") is True
-        assert _is_text_file("file", "application/json", b"") is True
+        assert is_text_file("file", "text/plain", b"") is True
+        assert is_text_file("file", "application/json", b"") is True
 
     def test_content_based_detection(self):
         text_content = b"This is plain text content with mostly printable characters."
-        assert _is_text_file("unknown", None, text_content) is True
+        assert is_text_file("unknown", None, text_content) is True
 
     def test_binary_content_not_detected_as_text(self):
         binary_content = bytes(range(256))  # Contains non-printable bytes
-        assert _is_text_file("unknown", None, binary_content) is False
+        assert is_text_file("unknown", None, binary_content) is False
 
 
 class TestSanitizeFilename:
@@ -118,16 +118,16 @@ class TestSanitizeFilename:
 
     def test_removes_path_components(self):
         """Path traversal attempts are blocked."""
-        assert _sanitize_filename("../../../etc/passwd") == "passwd"
-        assert _sanitize_filename("/etc/passwd") == "passwd"
+        assert sanitize_filename("../../../etc/passwd") == "passwd"
+        assert sanitize_filename("/etc/passwd") == "passwd"
         # On Unix, backslashes are treated as regular characters (sanitized to underscores)
-        result = _sanitize_filename("..\\..\\windows\\system32\\config")
+        result = sanitize_filename("..\\..\\windows\\system32\\config")
         assert "passwd" not in result.lower()  # Not confused with Unix paths
         assert "_" in result  # Backslashes replaced
 
     def test_removes_problematic_chars(self):
         """Problematic characters are replaced."""
-        result = _sanitize_filename('file<>:"|?*name.txt')
+        result = sanitize_filename('file<>:"|?*name.txt')
         assert result.endswith(".txt")
         assert "<" not in result
         assert ">" not in result
@@ -140,19 +140,19 @@ class TestSanitizeFilename:
     def test_limits_length(self):
         """Long filenames are truncated."""
         long_name = "a" * 300 + ".txt"
-        result = _sanitize_filename(long_name)
+        result = sanitize_filename(long_name)
         assert len(result) <= 200
         assert result.endswith(".txt")
 
     def test_empty_filename(self):
         """Empty filename returns 'unnamed'."""
-        assert _sanitize_filename("") == "unnamed"
+        assert sanitize_filename("") == "unnamed"
         # Note: whitespace-only filenames are not currently treated as empty
         # This is acceptable since os.path.basename("   ") returns "   "
 
     def test_preserves_valid_filename(self):
         """Valid filenames are preserved."""
-        assert _sanitize_filename("my_file-2024.csv") == "my_file-2024.csv"
+        assert sanitize_filename("my_file-2024.csv") == "my_file-2024.csv"
 
 
 class TestGenerateStoredFilename:
@@ -160,22 +160,22 @@ class TestGenerateStoredFilename:
 
     def test_preserves_extension(self):
         """File extension is preserved."""
-        result = _generate_stored_filename("document.pdf")
+        result = generate_stored_filename("document.pdf")
         assert result.endswith(".pdf")
 
     def test_includes_original_stem(self):
         """Original filename stem is included."""
-        result = _generate_stored_filename("my_report.csv")
+        result = generate_stored_filename("my_report.csv")
         assert "my_report" in result
 
     def test_generates_unique_names(self):
         """Generated names are unique."""
-        name1 = _generate_stored_filename("file.txt")
-        name2 = _generate_stored_filename("file.txt")
+        name1 = generate_stored_filename("file.txt")
+        name2 = generate_stored_filename("file.txt")
         assert name1 != name2
 
     def test_handles_no_extension(self):
-        result = _generate_stored_filename("Makefile")
+        result = generate_stored_filename("Makefile")
         assert "Makefile" in result
 
 
@@ -198,7 +198,7 @@ class TestUploadFile:
         assert result.original_filename == "hello.txt"
         assert result.file_size == len(content)
         assert result.is_text is True
-        assert result.sha256_hash == _compute_sha256(content)
+        assert result.sha256_hash == compute_sha256(content)
         assert text_content == "Hello, World!"
 
     def test_upload_binary_file(self):

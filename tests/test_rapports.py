@@ -132,7 +132,7 @@ class TestRapportsListRedirect:
         assert response.headers["location"] == "/rechercher?show=reports"
 
 
-def _extract_main_content(html: str) -> str:
+def extract_main_content(html: str) -> str:
     """Extract the innerHTML of <main id="main"> from a full page.
 
     This is what HTMX swaps when using hx-target="#main" hx-select="#main > *".
@@ -178,9 +178,9 @@ class TestRapportHtmxNavigation:
         )
         assert response.status_code == 200
         html = response.content.decode("utf-8")
-        main_content = _extract_main_content(html)
+        main_content = extract_main_content(html)
 
-        assert _report_body_has_content(main_content), (
+        assert report_body_has_content(main_content), (
             "Report body is empty inside #main. Content must be server-side rendered so it survives HTMX navigation."
         )
 
@@ -191,7 +191,7 @@ class TestRapportHtmxNavigation:
             headers={"X-Forwarded-Email": "test@example.com"},
         )
         html = response.content.decode("utf-8")
-        main_content = _extract_main_content(html)
+        main_content = extract_main_content(html)
 
         # Each report link should have the htmx attributes
         assert 'hx-boost="true"' in main_content
@@ -205,7 +205,7 @@ class TestRapportHtmxNavigation:
             headers={"X-Forwarded-Email": "test@example.com"},
         )
         html = response.content.decode("utf-8")
-        main_content = _extract_main_content(html)
+        main_content = extract_main_content(html)
 
         # Rendered HTML (not raw markdown) must be present
         assert "<h1" in main_content, "Heading should be rendered as HTML"
@@ -214,7 +214,7 @@ class TestRapportHtmxNavigation:
         assert "---\ndate:" not in main_content
 
 
-def _report_body_has_content(main_html: str) -> bool:
+def report_body_has_content(main_html: str) -> bool:
     """Check whether #reportBody has any meaningful content (not just empty).
 
     Returns True if reportBody contains rendered HTML (server-side rendering).
@@ -264,7 +264,7 @@ class TestReportAuthorInSearch:
             headers={"X-Forwarded-Email": "test@example.com"},
         )
         html = response.content.decode("utf-8")
-        main_content = _extract_main_content(html)
+        main_content = extract_main_content(html)
         # No /explorations/ link inside the report item
         assert "/explorations/" not in main_content
 

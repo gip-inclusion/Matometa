@@ -16,19 +16,19 @@ from . import config
 
 logger = logging.getLogger(__name__)
 
-_pg_pool: Optional[ThreadedConnectionPool] = None
+pg_pool: Optional[ThreadedConnectionPool] = None
 
 
-def _get_pg_pool() -> ThreadedConnectionPool:
-    global _pg_pool
-    if _pg_pool is None or _pg_pool.closed:
-        _pg_pool = ThreadedConnectionPool(
+def get_pg_pool() -> ThreadedConnectionPool:
+    global pg_pool
+    if pg_pool is None or pg_pool.closed:
+        pg_pool = ThreadedConnectionPool(
             minconn=1,
             maxconn=10,
             dsn=config.DATABASE_URL,
         )
         logger.info("PostgreSQL connection pool created (max=10)")
-    return _pg_pool
+    return pg_pool
 
 
 # Valid column names for dynamic updates (security: prevents SQL injection)
@@ -38,7 +38,7 @@ VALID_CONVERSATION_COLUMNS = frozenset(
 VALID_REPORT_COLUMNS = frozenset({"title", "website", "category", "tags", "original_query", "content", "updated_at"})
 
 
-def _build_update_clause(updates: dict, valid_columns: frozenset) -> tuple[str, list]:
+def build_update_clause(updates: dict, valid_columns: frozenset) -> tuple[str, list]:
     """
     Build a safe UPDATE SET clause from a dict of updates.
 
@@ -125,12 +125,12 @@ class ConnectionWrapper:
 
 
 def get_connection() -> ConnectionWrapper:
-    pool = _get_pg_pool()
+    pool = get_pg_pool()
     conn = pool.getconn()
     return ConnectionWrapper(conn)
 
 
-_test_conn_var: ContextVar[Optional[ConnectionWrapper]] = ContextVar("db_test_conn", default=None)
+test_conn_var: ContextVar[Optional[ConnectionWrapper]] = ContextVar("db_test_conn", default=None)
 
 
 @contextmanager
@@ -140,7 +140,7 @@ def test_transaction():
     Rolls back on exit so tests leave no durable DB state. Used by pytest fixtures.
     """
     conn = get_connection()
-    token = _test_conn_var.set(conn)
+    token = test_conn_var.set(conn)
     conn.rollback()
     try:
         yield
@@ -148,15 +148,15 @@ def test_transaction():
         try:
             conn.rollback()
         finally:
-            _test_conn_var.reset(token)
-            pool = _get_pg_pool()
+            test_conn_var.reset(token)
+            pool = get_pg_pool()
             pool.putconn(conn._conn)
 
 
 @contextmanager
 def get_db():
     """Context manager for database connections."""
-    test_conn = _test_conn_var.get()
+    test_conn = test_conn_var.get()
     if test_conn is not None:
         yield test_conn
         return
@@ -168,5 +168,5 @@ def get_db():
         conn.rollback()
         raise
     finally:
-        pool = _get_pg_pool()
+        pool = get_pg_pool()
         pool.putconn(conn._conn)

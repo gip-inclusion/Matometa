@@ -50,7 +50,7 @@ def test_public_api_exports():
     assert hasattr(query, "MetabaseAPI")
 
 
-def _metabase_api_mock(mocker):
+def metabase_api_mock(mocker):
     from lib._metabase import QueryResult as MetabaseQueryResult
 
     mock_result = MetabaseQueryResult(
@@ -68,7 +68,7 @@ def _metabase_api_mock(mocker):
 def test_execute_metabase_sql(mocker):
     from lib.query import CallerType, execute_metabase_query
 
-    mock_api = _metabase_api_mock(mocker)
+    mock_api = metabase_api_mock(mocker)
     mocker.patch("lib.query.get_metabase", return_value=mock_api)
 
     result = execute_metabase_query(
@@ -86,7 +86,7 @@ def test_execute_metabase_sql(mocker):
 def test_execute_metabase_card(mocker):
     from lib.query import CallerType, execute_metabase_query
 
-    mock_api = _metabase_api_mock(mocker)
+    mock_api = metabase_api_mock(mocker)
     mocker.patch("lib.query.get_metabase", return_value=mock_api)
 
     result = execute_metabase_query(
@@ -102,7 +102,7 @@ def test_execute_metabase_card(mocker):
 def test_execute_metabase_requires_sql_or_card(mocker):
     from lib.query import CallerType, execute_metabase_query
 
-    mock_api = _metabase_api_mock(mocker)
+    mock_api = metabase_api_mock(mocker)
     mocker.patch("lib.query.get_metabase", return_value=mock_api)
 
     result = execute_metabase_query(
