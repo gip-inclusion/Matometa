@@ -1,25 +1,30 @@
 """Test Matomo web UI URLs to find correct category/subcategory mappings."""
 
+import json
 import re
 import subprocess
 import urllib.parse
 from pathlib import Path
 from typing import Optional
 
-def _load_cookie() -> str:
+from lib._matomo_ui import UI_MAPPING
+
+
+def load_cookie() -> str:
     cookie_path = Path(__file__).parent.parent.parent.parent / ".matomo_cookie"
     if not cookie_path.exists():
         raise FileNotFoundError(
-            f"Cookie file not found at {cookie_path}. "
-            "Get a fresh cookie from browser dev tools and save it there."
+            f"Cookie file not found at {cookie_path}. Get a fresh cookie from browser dev tools and save it there."
         )
     return cookie_path.read_text().strip()
 
-def _clear_cookie():
+
+def clear_cookie():
     cookie_path = Path(__file__).parent.parent.parent.parent / ".matomo_cookie"
     if cookie_path.exists():
         cookie_path.write_text("")
         print("Cookie cleared. Get a fresh one from browser.")
+
 
 def build_ui_url(
     site_id: int,
@@ -51,6 +56,7 @@ def build_ui_url(
 
     return f"{base}?{main_query}#?{hash_query}"
 
+
 def test_ui_url(
     site_id: int,
     period: str,
@@ -62,16 +68,22 @@ def test_ui_url(
 ) -> dict:
     """Test a Matomo web UI URL and return status."""
     url = build_ui_url(site_id, period, date, category, subcategory, segment)
-    cookie = _load_cookie()
+    cookie = load_cookie()
 
     # Use curl to fetch the page
     cmd = [
-        "curl", "-s", "-L",
-        "-H", f"Cookie: {cookie}",
-        "-H", "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15",
-        "-H", "Accept: text/html",
-        "-w", "\n%{http_code}",
-        url
+        "curl",
+        "-s",
+        "-L",
+        "-H",
+        f"Cookie: {cookie}",
+        "-H",
+        "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15",
+        "-H",
+        "Accept: text/html",
+        "-w",
+        "\n%{http_code}",
+        url,
     ]
 
     try:
@@ -79,9 +91,9 @@ def test_ui_url(
         output = result.stdout
 
         # Extract HTTP status code (last line)
-        lines = output.strip().split('\n')
+        lines = output.strip().split("\n")
         status_code = lines[-1] if lines else "000"
-        html = '\n'.join(lines[:-1])
+        html = "\n".join(lines[:-1])
 
         if verbose:
             print(f"Status code: {status_code}")
@@ -89,14 +101,10 @@ def test_ui_url(
 
         # Check for auth failure
         if status_code == "403" or "login" in html.lower() and "password" in html.lower():
-            return {
-                "url": url,
-                "status": "auth_failed",
-                "message": "Cookie expired or invalid. Get a fresh one."
-            }
+            return {"url": url, "status": "auth_failed", "message": "Cookie expired or invalid. Get a fresh one."}
 
         # Extract page title
-        title_match = re.search(r'<title>([^<]+)</title>', html, re.IGNORECASE)
+        title_match = re.search(r"<title>([^<]+)</title>", html, re.IGNORECASE)
         title = title_match.group(1).strip() if title_match else None
 
         # Check if we landed on a different category (redirect)
@@ -130,30 +138,28 @@ def test_ui_url(
     except Exception as e:
         return {"url": url, "status": "error", "message": str(e)}
 
+
 def discover_categories(site_id: int = 117) -> dict[str, list[tuple[str, str]]]:
     """
     Discover available categories via Matomo API.
 
     Returns dict: {category_id: [(subcategory_id, subcategory_name), ...]}
     """
-    import json
-    from pathlib import Path
-
     # Load API credentials
     env_path = Path(__file__).parent.parent.parent.parent / ".env"
     env = {}
     with open(env_path) as f:
         for line in f:
-            if '=' in line and not line.startswith('#'):
-                k, v = line.strip().split('=', 1)
+            if "=" in line and not line.startswith("#"):
+                k, v = line.strip().split("=", 1)
                 env[k] = v
 
-    url = env['MATOMO_URL']
-    token = env['MATOMO_API_KEY']
+    url = env["MATOMO_URL"]
+    token = env["MATOMO_API_KEY"]
 
     api_url = f"https://{url}/?module=API&method=API.getWidgetMetadata&idSite={site_id}&format=JSON&token_auth={token}"
 
-    cmd = ['curl', '-s', api_url]
+    cmd = ["curl", "-s", api_url]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
     data = json.loads(result.stdout)
 
@@ -161,15 +167,15 @@ def discover_categories(site_id: int = 117) -> dict[str, list[tuple[str, str]]]:
     mappings = {}
     for widget in data:
         if isinstance(widget, dict):
-            cat = widget.get('category', {})
-            cat_id = cat.get('id', '') if isinstance(cat, dict) else ''
-            subcat = widget.get('subcategory', {})
+            cat = widget.get("category", {})
+            cat_id = cat.get("id", "") if isinstance(cat, dict) else ""
+            subcat = widget.get("subcategory", {})
             if isinstance(subcat, dict):
-                subcat_id = subcat.get('id', '')
-                subcat_name = subcat.get('name', '')
+                subcat_id = subcat.get("id", "")
+                subcat_name = subcat.get("name", "")
             else:
-                subcat_id = str(subcat) if subcat else ''
-                subcat_name = ''
+                subcat_id = str(subcat) if subcat else ""
+                subcat_name = ""
 
             if cat_id and subcat_id:
                 if cat_id not in mappings:
@@ -180,6 +186,7 @@ def discover_categories(site_id: int = 117) -> dict[str, list[tuple[str, str]]]:
 
     return mappings
 
+
 def print_categories(site_id: int = 117):
     """Print all available categories in a readable format."""
     mappings = discover_categories(site_id)
@@ -189,10 +196,9 @@ def print_categories(site_id: int = 117):
         for subcat_id, subcat_name in sorted(mappings[cat]):
             print(f"  {subcat_id} ({subcat_name})")
 
+
 def test_all_mappings(site_id: int = 117, period: str = "month", date: str = "2025-12-01"):
     """Test all current UI mappings and report which ones work."""
-    from lib._matomo_ui import UI_MAPPING
-
     print(f"Testing {len(UI_MAPPING)} UI mappings...\n")
 
     results = {"ok": [], "redirect": [], "error": [], "auth_failed": []}
@@ -216,18 +222,15 @@ def test_all_mappings(site_id: int = 117, period: str = "month", date: str = "20
     print(f"OK: {len(results['ok'])}")
     print(f"Redirected: {len(results['redirect'])}")
     print(f"Errors: {len(results['error'])}")
-    if results['auth_failed']:
+    if results["auth_failed"]:
         print(f"Auth failed: {len(results['auth_failed'])} - refresh cookie!")
 
     return results
 
+
 if __name__ == "__main__":
     # Quick test
     result = test_ui_url(
-        site_id=117,
-        period="month",
-        date="2025-12-01",
-        category="General_Visitors",
-        subcategory="General_Overview"
+        site_id=117, period="month", date="2025-12-01", category="General_Visitors", subcategory="General_Overview"
     )
     print(result)

@@ -18,7 +18,7 @@ DEFAULT_TIMEOUT = 300  # 5 minutes
 MAX_OUTPUT_SIZE = 50_000
 
 
-def _parse_frontmatter_text(content: str) -> dict:
+def parse_frontmatter_text(content: str) -> dict:
     """Parse YAML front-matter from a string.
 
     Returns dict of key-value pairs. Returns {} if no front-matter.
@@ -38,7 +38,7 @@ def _parse_frontmatter_text(content: str) -> dict:
     return meta
 
 
-def _parse_frontmatter(md_path: Path) -> dict:
+def parse_frontmatter(md_path: Path) -> dict:
     """Parse YAML front-matter from a markdown file.
 
     Returns dict of key-value pairs. Returns {} if no front-matter.
@@ -48,25 +48,25 @@ def _parse_frontmatter(md_path: Path) -> dict:
     except OSError:
         return {}
 
-    return _parse_frontmatter_text(content)
+    return parse_frontmatter_text(content)
 
 
-def _is_enabled(meta: dict) -> bool:
+def is_enabled(meta: dict) -> bool:
     return meta.get("cron", "true").lower() not in ("false", "no", "0", "off")
 
 
-def _get_timeout(meta: dict) -> int:
+def get_timeout(meta: dict) -> int:
     try:
         return int(meta["timeout"])
     except (KeyError, ValueError):
         return DEFAULT_TIMEOUT
 
 
-def _get_schedule(meta: dict) -> str:
+def get_schedule(meta: dict) -> str:
     return meta.get("schedule", "daily").lower()
 
 
-def _is_due(schedule: str) -> bool:
+def is_due(schedule: str) -> bool:
     if schedule == "daily":
         return True
     if schedule == "weekly":
@@ -120,7 +120,7 @@ def set_cron_enabled(app_slug: str, enabled: bool) -> bool:
     return False
 
 
-def _discover_from_dir(base_dir: Path, md_name: str, tier: str) -> list[dict]:
+def discover_from_dir(base_dir: Path, md_name: str, tier: str) -> list[dict]:
     """Discover cron tasks from a directory."""
     tasks = []
     if not base_dir.exists():
@@ -133,7 +133,7 @@ def _discover_from_dir(base_dir: Path, md_name: str, tier: str) -> list[dict]:
         if not cron_script.exists():
             continue
 
-        meta = _parse_frontmatter(folder / md_name)
+        meta = parse_frontmatter(folder / md_name)
 
         tasks.append(
             {
@@ -142,16 +142,16 @@ def _discover_from_dir(base_dir: Path, md_name: str, tier: str) -> list[dict]:
                 "tier": tier,
                 "path": str(folder),
                 "cron_path": str(cron_script),
-                "enabled": _is_enabled(meta),
-                "timeout": _get_timeout(meta),
-                "schedule": _get_schedule(meta),
+                "enabled": is_enabled(meta),
+                "timeout": get_timeout(meta),
+                "schedule": get_schedule(meta),
             }
         )
 
     return tasks
 
 
-def _discover_from_s3() -> list[dict]:
+def discover_from_s3() -> list[dict]:
     """Discover cron tasks from S3-stored interactive apps."""
     tasks = []
     for slug in s3.list_directories():
@@ -160,7 +160,7 @@ def _discover_from_s3() -> list[dict]:
 
         # Parse APP.md metadata from S3
         md_bytes = s3.download_file(f"{slug}/APP.md")
-        meta = _parse_frontmatter_text(md_bytes.decode()) if md_bytes else {}
+        meta = parse_frontmatter_text(md_bytes.decode()) if md_bytes else {}
 
         tasks.append(
             {
@@ -170,9 +170,9 @@ def _discover_from_s3() -> list[dict]:
                 "source": "s3",
                 "path": slug,  # S3 prefix, not a local path
                 "cron_path": f"{slug}/cron.py",
-                "enabled": _is_enabled(meta),
-                "timeout": _get_timeout(meta),
-                "schedule": _get_schedule(meta),
+                "enabled": is_enabled(meta),
+                "timeout": get_timeout(meta),
+                "schedule": get_schedule(meta),
             }
         )
 
@@ -184,11 +184,11 @@ def discover_cron_tasks() -> list[dict]:
 
     System tasks (cron/) come first, then app tasks (data/interactive/ or S3).
     """
-    tasks = _discover_from_dir(config.CRON_DIR, "CRON.md", "system")
+    tasks = discover_from_dir(config.CRON_DIR, "CRON.md", "system")
     if config.USE_S3:
-        tasks += _discover_from_s3()
+        tasks += discover_from_s3()
     else:
-        tasks += _discover_from_dir(config.INTERACTIVE_DIR, "APP.md", "app")
+        tasks += discover_from_dir(config.INTERACTIVE_DIR, "APP.md", "app")
     return tasks
 
 
@@ -199,7 +199,7 @@ def find_task(slug: str) -> dict | None:
     return None
 
 
-def _prepare_s3_workdir(slug: str) -> Path:
+def prepare_s3_workdir(slug: str) -> Path:
     workdir = Path(tempfile.mkdtemp(prefix=f"cron-{slug}-"))
     for entry in s3.list_files(f"{slug}/"):
         rel_path = entry["path"]
@@ -220,7 +220,7 @@ def _prepare_s3_workdir(slug: str) -> Path:
     return workdir
 
 
-def _upload_s3_results(slug: str, workdir: Path):
+def upload_s3_results(slug: str, workdir: Path):
     workdir_resolved = workdir.resolve()
     for path in workdir.rglob("*"):
         if not path.is_file():
@@ -264,7 +264,7 @@ def run_cron_task(slug: str, trigger: str = "scheduled") -> dict:
 
     try:
         if is_s3:
-            workdir = _prepare_s3_workdir(slug)
+            workdir = prepare_s3_workdir(slug)
             cron_script = str(workdir / "cron.py")
             cwd = str(workdir)
         else:
@@ -290,7 +290,7 @@ def run_cron_task(slug: str, trigger: str = "scheduled") -> dict:
         status = "success" if result.returncode == 0 else "failure"
 
         if is_s3 and status == "success" and workdir:
-            _upload_s3_results(slug, workdir)
+            upload_s3_results(slug, workdir)
 
     except subprocess.TimeoutExpired:
         elapsed_ms = int((time.monotonic() - start_time) * 1000)
@@ -317,11 +317,11 @@ def run_cron_task(slug: str, trigger: str = "scheduled") -> dict:
         "finished_at": finished_at.isoformat(),
     }
 
-    _record_run(run_result, trigger)
+    record_run(run_result, trigger)
     return run_result
 
 
-def _record_run(result: dict, trigger: str):
+def record_run(result: dict, trigger: str):
     try:
         with get_db() as conn:
             conn.execute(
@@ -408,7 +408,7 @@ def run_all(dry_run: bool = False) -> list[dict]:
                 print(f"  SKIP {task['slug']} (disabled)")
             continue
 
-        if not _is_due(task["schedule"]):
+        if not is_due(task["schedule"]):
             if dry_run:
                 print(f"  SKIP {task['slug']} (schedule: {task['schedule']}, not due)")
             continue

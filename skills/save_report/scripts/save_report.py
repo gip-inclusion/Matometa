@@ -1,5 +1,7 @@
 """Save report skill - create, update, or append reports to the database."""
 
+import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -7,7 +9,8 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from web.database import ConversationStore
+from web.database import ConversationStore  # noqa: E402
+
 
 def save_report(
     title: str,
@@ -36,17 +39,13 @@ def save_report(
 
     # Add link message to source conversation if provided
     if source_conversation_id:
-        import json
-        store.add_message(
-            source_conversation_id,
-            "report",
-            json.dumps({"report_id": report.id, "title": report.title})
-        )
+        store.add_message(source_conversation_id, "report", json.dumps({"report_id": report.id, "title": report.title}))
 
     return {
         "report_id": report.id,
         "source_conversation_id": source_conversation_id,
     }
+
 
 def update_report(
     report_id: int,
@@ -81,6 +80,7 @@ def update_report(
         "version": updated_report.version,
     }
 
+
 def append_report(
     conversation_id: str,
     title: str,
@@ -101,6 +101,7 @@ def append_report(
         tags=tags,
     )
 
+
 def list_reports(website: str = None, category: str = None, limit: int = 20) -> list:
     store = ConversationStore()
     reports = store.list_reports(website=website, category=category, limit=limit)
@@ -117,9 +118,8 @@ def list_reports(website: str = None, category: str = None, limit: int = 20) -> 
         for r in reports
     ]
 
-if __name__ == "__main__":
-    import argparse
 
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Save or update reports in the database")
     parser.add_argument("--file", "-f", help="Path to markdown file containing report content")
     parser.add_argument("--title", "-t", help="Report title")

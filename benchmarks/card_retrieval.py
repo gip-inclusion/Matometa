@@ -9,7 +9,9 @@ This spawns sub-agents with restricted tool access to evaluate
 which approach (markdown vs sqlite) performs better for card retrieval.
 """
 
+import argparse
 import json
+import re
 import subprocess
 import time
 from dataclasses import dataclass
@@ -273,8 +275,6 @@ Return your answer in this exact JSON format:
 
 def extract_card_ids(response: str) -> list[int]:
     """Extract card IDs from agent response."""
-    import re
-
     # Try to find JSON in response
     json_match = re.search(r'\{[^{}]*"card_ids"\s*:\s*\[[^\]]*\][^{}]*\}', response, re.DOTALL)
     if json_match:
@@ -409,8 +409,6 @@ def run_test_suite(test_cases: list[dict] = None, modes: list[str] = None):
 
 
 if __name__ == "__main__":
-    import argparse
-
     parser = argparse.ArgumentParser(description="Test card retrieval performance")
     parser.add_argument("--mode", choices=["markdown", "sqlite", "both"], default="both", help="Which mode(s) to test")
     parser.add_argument("--test", type=str, help="Run specific test by ID")

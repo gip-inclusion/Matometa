@@ -9,7 +9,7 @@ from .cli import CLIBackend
 class CLIOllamaBackend(CLIBackend):
     """CLIBackend that routes through Ollama instead of Anthropic."""
 
-    def _build_env(self, conversation_id: str) -> dict:
+    def _build_env(self) -> dict:
         env = dict(os.environ)
         # Translate our OLLAMA_* config into the ANTHROPIC_* env vars
         # that the Claude Code CLI expects for its API connection.

@@ -79,7 +79,6 @@ class SDKBackend(AgentBackend):
             cwd=str(config.BASE_DIR),
             cli_path=config.CLAUDE_CLI,
             add_dirs=list(config.ADDITIONAL_DIRS),
-            setting_sources=["project"],
             env=env,
             max_buffer_size=10 * 1024 * 1024,
         )

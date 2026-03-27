@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from .. import notion
 from ..config import ADMIN_USERS
-from ..database import store
+from ..database import get_db, store
 from ..deps import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -163,9 +163,6 @@ def publish_to_notion(report_id: int):
     except Exception:
         logger.exception("Notion publish failed")
         return JSONResponse({"error": "Failed to publish to Notion"}, status_code=500)
-
-    # Store the URL
-    from ..database import get_db
 
     with get_db() as conn:
         conn.execute("UPDATE reports SET notion_url = %s WHERE id = %s", (url, report_id))

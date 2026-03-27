@@ -13,7 +13,7 @@ def is_configured() -> bool:
     return bool(NOTION_TOKEN and NOTION_REPORTS_DB)
 
 
-def _parse_inline(text: str) -> list[dict]:
+def parse_inline(text: str) -> list[dict]:
     results = []
     pattern = re.compile(
         r"\*\*(.+?)\*\*"  # bold
@@ -26,21 +26,21 @@ def _parse_inline(text: str) -> list[dict]:
     for m in pattern.finditer(text):
         bold, italic, code, link_text, link_url, plain, fallback = m.groups()
         if bold:
-            results.append(_rich_text(bold, bold=True))
+            results.append(rich_text(bold, bold=True))
         elif italic:
-            results.append(_rich_text(italic, italic=True))
+            results.append(rich_text(italic, italic=True))
         elif code:
-            results.append(_rich_text(code, code=True))
+            results.append(rich_text(code, code=True))
         elif link_text:
-            results.append(_rich_text(link_text, link=link_url))
+            results.append(rich_text(link_text, link=link_url))
         elif plain:
-            results.append(_rich_text(plain))
+            results.append(rich_text(plain))
         elif fallback:
-            results.append(_rich_text(fallback))
-    return results or [_rich_text("")]
+            results.append(rich_text(fallback))
+    return results or [rich_text("")]
 
 
-def _rich_text(content: str, bold=False, italic=False, code=False, link=None) -> dict:
+def rich_text(content: str, bold=False, italic=False, code=False, link=None) -> dict:
     content = content[:2000]
     obj = {
         "type": "text",
@@ -59,7 +59,7 @@ def _rich_text(content: str, bold=False, italic=False, code=False, link=None) ->
     return obj
 
 
-_LANG_MAP = {
+NOTION_CODE_LANG_MAP = {
     "django": "html",
     "bash": "bash",
     "python": "python",
@@ -102,7 +102,7 @@ def markdown_to_blocks(md: str) -> list[dict]:
             level = len(heading_match.group(1))
             text = heading_match.group(2).strip()
             htype = f"heading_{level}"
-            blocks.append({"type": htype, htype: {"rich_text": _parse_inline(text)}})
+            blocks.append({"type": htype, htype: {"rich_text": parse_inline(text)}})
             i += 1
             continue
 
@@ -110,7 +110,7 @@ def markdown_to_blocks(md: str) -> list[dict]:
         code_match = re.match(r"^```(\w*)", line)
         if code_match:
             lang = code_match.group(1) or "plain text"
-            notion_lang = _LANG_MAP.get(lang, lang)
+            notion_lang = NOTION_CODE_LANG_MAP.get(lang, lang)
             code_lines = []
             i += 1
             while i < len(lines) and not re.match(r"^```\s*$", lines[i]):
@@ -124,7 +124,7 @@ def markdown_to_blocks(md: str) -> list[dict]:
                 {
                     "type": "code",
                     "code": {
-                        "rich_text": [_rich_text(code_content)],
+                        "rich_text": [rich_text(code_content)],
                         "language": notion_lang,
                     },
                 }
@@ -153,7 +153,7 @@ def markdown_to_blocks(md: str) -> list[dict]:
                         {
                             "type": "table_row",
                             "table_row": {
-                                "cells": [_parse_inline(cell) for cell in row],
+                                "cells": [parse_inline(cell) for cell in row],
                             },
                         }
                     )
@@ -176,7 +176,7 @@ def markdown_to_blocks(md: str) -> list[dict]:
             blocks.append(
                 {
                     "type": "numbered_list_item",
-                    "numbered_list_item": {"rich_text": _parse_inline(num_match.group(2))},
+                    "numbered_list_item": {"rich_text": parse_inline(num_match.group(2))},
                 }
             )
             i += 1
@@ -188,7 +188,7 @@ def markdown_to_blocks(md: str) -> list[dict]:
             blocks.append(
                 {
                     "type": "bulleted_list_item",
-                    "bulleted_list_item": {"rich_text": _parse_inline(bullet_match.group(1))},
+                    "bulleted_list_item": {"rich_text": parse_inline(bullet_match.group(1))},
                 }
             )
             i += 1
@@ -205,7 +205,7 @@ def markdown_to_blocks(md: str) -> list[dict]:
             blocks.append(
                 {
                     "type": "paragraph",
-                    "paragraph": {"rich_text": _parse_inline(" ".join(para_lines))},
+                    "paragraph": {"rich_text": parse_inline(" ".join(para_lines))},
                 }
             )
             continue
@@ -215,7 +215,7 @@ def markdown_to_blocks(md: str) -> list[dict]:
     return blocks
 
 
-def _notion_request(method: str, endpoint: str, payload: dict = None) -> dict:
+def notion_request(method: str, endpoint: str, payload: dict = None) -> dict:
     headers = {
         "Authorization": f"Bearer {NOTION_TOKEN}",
         "Notion-Version": "2022-06-28",
@@ -271,7 +271,7 @@ def publish_report(
         }
 
     # Create page
-    result = _notion_request(
+    result = notion_request(
         "POST",
         "pages",
         {"parent": {"database_id": NOTION_REPORTS_DB}, "properties": properties},
@@ -283,6 +283,6 @@ def publish_report(
     blocks = markdown_to_blocks(content)
     for i in range(0, len(blocks), 100):
         batch = blocks[i : i + 100]
-        _notion_request("PATCH", f"blocks/{page_id}/children", {"children": batch})
+        notion_request("PATCH", f"blocks/{page_id}/children", {"children": batch})
 
     return page_id, page_url

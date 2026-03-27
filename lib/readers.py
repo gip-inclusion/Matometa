@@ -1,7 +1,12 @@
 """File format readers for Excel, Word, PDF, and ZIP files."""
 
+import zipfile
 from pathlib import Path
 from typing import Optional, Union
+
+import mammoth
+import pandas as pd
+import pdfplumber
 
 
 def read_excel(
@@ -9,8 +14,6 @@ def read_excel(
     sheet: Optional[str] = None,
     max_rows: int = 1000,
 ) -> str:
-    import pandas as pd
-
     path = Path(path)
     if not path.exists():
         return f"Error: File not found: {path}"
@@ -46,8 +49,6 @@ def read_excel(
 
 
 def read_word(path: Union[str, Path]) -> str:
-    import mammoth
-
     path = Path(path)
     if not path.exists():
         return f"Error: File not found: {path}"
@@ -74,8 +75,6 @@ def read_pdf(
     pages: Optional[str] = None,
     max_pages: int = 50,
 ) -> str:
-    import pdfplumber
-
     path = Path(path)
     if not path.exists():
         return f"Error: File not found: {path}"
@@ -84,7 +83,7 @@ def read_pdf(
         # Parse page range
         page_nums = None
         if pages:
-            page_nums = _parse_page_range(pages)
+            page_nums = parse_page_range(pages)
 
         results = []
         with pdfplumber.open(path) as pdf:
@@ -113,7 +112,7 @@ def read_pdf(
                 if tables:
                     for j, table in enumerate(tables):
                         results.append(f"\n*Table {j + 1}:*\n")
-                        results.append(_table_to_markdown(table))
+                        results.append(table_to_markdown(table))
 
         return "\n".join(results)
 
@@ -122,8 +121,6 @@ def read_pdf(
 
 
 def list_zip(path: Union[str, Path], max_entries: int = 100) -> str:
-    import zipfile
-
     path = Path(path)
     if not path.exists():
         return f"Error: File not found: {path}"
@@ -138,7 +135,7 @@ def list_zip(path: Union[str, Path], max_entries: int = 100) -> str:
                 if info.is_dir():
                     results.append(f"  {info.filename}/")
                 else:
-                    size = _format_size(info.file_size)
+                    size = format_size(info.file_size)
                     results.append(f"  {info.filename} ({size})")
 
             if len(infos) > max_entries:
@@ -156,8 +153,6 @@ def extract_from_zip(
     zip_path: Union[str, Path],
     file_path: str,
 ) -> str:
-    import zipfile
-
     zip_path = Path(zip_path)
     if not zip_path.exists():
         return f"Error: ZIP file not found: {zip_path}"
@@ -175,7 +170,7 @@ def extract_from_zip(
 
             # Size limit: 10MB
             if info.file_size > 10 * 1024 * 1024:
-                return f"Error: File too large ({_format_size(info.file_size)})"
+                return f"Error: File too large ({format_size(info.file_size)})"
 
             content = zf.read(file_path)
 
@@ -186,13 +181,13 @@ def extract_from_zip(
                 try:
                     return content.decode("latin-1")
                 except UnicodeDecodeError:
-                    return f"Error: Binary file, cannot display as text ({_format_size(len(content))})"
+                    return f"Error: Binary file, cannot display as text ({format_size(len(content))})"
 
     except Exception as e:
         return f"Error extracting from ZIP: {e}"
 
 
-def _parse_page_range(pages: str) -> list[int]:
+def parse_page_range(pages: str) -> list[int]:
     result = []
     for part in pages.split(","):
         part = part.strip()
@@ -204,7 +199,7 @@ def _parse_page_range(pages: str) -> list[int]:
     return result
 
 
-def _table_to_markdown(table: list[list]) -> str:
+def table_to_markdown(table: list[list]) -> str:
     if not table or not table[0]:
         return "(empty table)"
 
@@ -221,7 +216,7 @@ def _table_to_markdown(table: list[list]) -> str:
     return "\n".join(lines)
 
 
-def _format_size(size: int) -> str:
+def format_size(size: int) -> str:
     for unit in ["B", "KB", "MB", "GB"]:
         if size < 1024:
             return f"{size:.1f} {unit}" if unit != "B" else f"{size} {unit}"

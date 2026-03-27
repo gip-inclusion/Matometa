@@ -111,16 +111,16 @@ def is_public_category(category: str) -> bool:
 
 def classify_tool(tool_name: str, tool_input: dict) -> str:
     if tool_name == "Bash":
-        return _classify_bash(tool_input.get("command", ""))
+        return classify_bash(tool_input.get("command", ""))
 
     elif tool_name == "Read":
-        return _classify_read(tool_input.get("file_path", ""))
+        return classify_read(tool_input.get("file_path", ""))
 
     elif tool_name == "Write":
-        return _classify_write(tool_input.get("file_path", ""))
+        return classify_write(tool_input.get("file_path", ""))
 
     elif tool_name == "Edit":
-        return _classify_edit(tool_input.get("file_path", ""))
+        return classify_edit(tool_input.get("file_path", ""))
 
     elif tool_name == "Skill":
         skill = tool_input.get("skill", "unknown")
@@ -144,7 +144,7 @@ def classify_tool(tool_name: str, tool_input: dict) -> str:
     return f"Other: {tool_name}"
 
 
-def _classify_bash(cmd: str) -> str:
+def classify_bash(cmd: str) -> str:
     # API calls - check these first (most important for observability)
     has_matomo = "MatomoAPI" in cmd or "matomo_api" in cmd or "execute_matomo_query" in cmd
     has_metabase = (
@@ -191,7 +191,7 @@ def _classify_bash(cmd: str) -> str:
     return "Shell: other"
 
 
-def _classify_read(path: str) -> str:
+def classify_read(path: str) -> str:
     if "/knowledge/" in path:
         return "Read: knowledge"
     if "/skills/" in path and "skill.md" in path:
@@ -207,7 +207,7 @@ def _classify_read(path: str) -> str:
     return "Read: other"
 
 
-def _classify_write(path: str) -> str:
+def classify_write(path: str) -> str:
     if "/tmp/" in path:
         return "Write: temp"
     if "/interactive/" in path:
@@ -219,7 +219,7 @@ def _classify_write(path: str) -> str:
     return "Write: other"
 
 
-def _classify_edit(path: str) -> str:
+def classify_edit(path: str) -> str:
     if "/knowledge/" in path:
         return "Edit: knowledge"
     if "/skills/" in path:

@@ -14,14 +14,17 @@ from typing import Any
 
 import yaml
 
+from ._matomo import MatomoAPI
+from ._metabase import MetabaseAPI
+
 # Config file location
 CONFIG_PATH = Path(__file__).parent.parent / "config" / "sources.yaml"
 
 # Cached config
-_config: dict | None = None
+config_cache: dict | None = None
 
 
-def _substitute_env_vars(value: Any, strict: bool = False) -> Any:
+def substitute_env_vars(value: Any, strict: bool = False) -> Any:
     """Recursively substitute ${env.VAR} patterns with environment values."""
     if isinstance(value, str):
         pattern = r"\$\{env\.([^}]+)\}"
@@ -38,19 +41,19 @@ def _substitute_env_vars(value: Any, strict: bool = False) -> Any:
         return re.sub(pattern, replacer, value)
 
     elif isinstance(value, dict):
-        return {k: _substitute_env_vars(v, strict=strict) for k, v in value.items()}
+        return {k: substitute_env_vars(v, strict=strict) for k, v in value.items()}
 
     elif isinstance(value, list):
-        return [_substitute_env_vars(item, strict=strict) for item in value]
+        return [substitute_env_vars(item, strict=strict) for item in value]
 
     return value
 
 
 def load_config(force_reload: bool = False) -> dict:
-    global _config
+    global config_cache
 
-    if _config is not None and not force_reload:
-        return _config
+    if config_cache is not None and not force_reload:
+        return config_cache
 
     if not CONFIG_PATH.exists():
         raise FileNotFoundError(
@@ -60,8 +63,8 @@ def load_config(force_reload: bool = False) -> dict:
     with open(CONFIG_PATH) as f:
         raw_config = yaml.safe_load(f)
 
-    _config = _substitute_env_vars(raw_config)
-    return _config
+    config_cache = substitute_env_vars(raw_config)
+    return config_cache
 
 
 def get_source_config(source_type: str, instance: str | None = None) -> dict:
@@ -84,12 +87,10 @@ def get_source_config(source_type: str, instance: str | None = None) -> dict:
 
     # Re-substitute with strict mode to catch missing env vars for this specific instance
     instance_config = source_config[instance]
-    return _substitute_env_vars(instance_config, strict=True)
+    return substitute_env_vars(instance_config, strict=True)
 
 
 def get_metabase(instance: str | None = None, database_id: int | None = None):
-    from ._metabase import MetabaseAPI
-
     config = get_source_config("metabase", instance)
     instance_name = instance or get_default_instance("metabase") or "stats"
 
@@ -102,8 +103,6 @@ def get_metabase(instance: str | None = None, database_id: int | None = None):
 
 
 def get_matomo(instance: str | None = None):
-    from ._matomo import MatomoAPI
-
     config = get_source_config("matomo", instance)
     instance_name = instance or get_default_instance("matomo") or "inclusion"
 

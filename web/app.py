@@ -5,14 +5,16 @@ import logging
 import mimetypes
 from contextlib import asynccontextmanager
 
+import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import config
-
-# Configure logging (stdout only) with injection-safe formatter
+from . import config, sync_to_s3
+from . import s3 as s3_module
+from .interactive_apps import scan_interactive_apps
 from .logging_utils import setup_logging
+from .pm import ProcessManager
 
 setup_logging(level=logging.DEBUG if config.DEBUG else logging.INFO)
 # Silence noisy third-party loggers (boto generates ~30 debug lines per S3 request)
@@ -24,22 +26,10 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown tasks."""
-    # Start S3 sync watcher for interactive files
-    from . import sync_to_s3
-
     sync_to_s3.start_sync_watcher()
 
-    # Warm the interactive apps cache (avoids N+1 S3 calls on first request)
     if config.USE_S3:
-        from .routes.rapports import scan_interactive_apps
-
         await asyncio.to_thread(scan_interactive_apps)
-
-    # Run process manager in-process (no separate container needed).
-    # Single-worker constraint: PM and SSE share an in-memory signal registry
-    # (web/signals.py), so multiple workers would each get their own registry
-    # and PM signals would not reach SSE handlers in other processes.
-    from .pm import ProcessManager
 
     pm = ProcessManager()
     pm_task = asyncio.create_task(pm.run())
@@ -101,9 +91,7 @@ def serve_interactive(request: Request, filename: str = ""):
 
     # Try S3 first if configured
     if config.USE_S3:
-        from . import s3
-
-        content = s3.download_file(filename)
+        content = s3_module.download_file(filename)
         if content is not None:
             return Response(
                 content=content,
@@ -141,8 +129,6 @@ app.include_router(html.router)
 
 def main():
     """Run the development server."""
-    import uvicorn
-
     print(f"Starting Autometa web server at http://{config.HOST}:{config.PORT}")
     print(f"Agent backend: {config.AGENT_BACKEND}")
     print(f"Working directory: {config.BASE_DIR}")

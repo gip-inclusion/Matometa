@@ -2,9 +2,47 @@
 
 import re
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from . import config
+from .config import DISPLAY_TIMEZONE
+
+DISPLAY_TZ = ZoneInfo(DISPLAY_TIMEZONE)
+
+
+def now_local():
+    return datetime.now(DISPLAY_TZ)
+
+
+def to_local(dt):
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(DISPLAY_TZ)
+
+
+def format_relative_date(dt):
+    now = now_local()
+    dt = to_local(dt)
+    today = now.date()
+    dt_date = dt.date()
+
+    day_names = {0: "lundi", 1: "mardi", 2: "mercredi", 3: "jeudi", 4: "vendredi", 5: "samedi", 6: "dimanche"}
+
+    days_since_monday = today.weekday()
+    this_week_start = today - timedelta(days=days_since_monday)
+
+    if dt_date == today:
+        return dt.strftime("%H:%M")
+    elif dt_date == today - timedelta(days=1):
+        return f"hier, {dt.strftime('%H:%M')}"
+    elif this_week_start <= dt_date < today:
+        day_name = day_names[dt_date.weekday()]
+        return f"{day_name} {dt.strftime('%H:%M')}"
+    else:
+        return dt.strftime("%d/%m/%Y à %H:%M")
+
 
 # Knowledge path constants
 KNOWLEDGE_ROOT = (config.BASE_DIR / "knowledge").resolve()
@@ -52,7 +90,7 @@ def validate_knowledge_path(file_param: str) -> Path | None:
     return candidate
 
 
-def _validate_conv_id(conv_id: str) -> bool:
+def validate_conv_id(conv_id: str) -> bool:
     try:
         uuid.UUID(conv_id)
         return True
@@ -61,13 +99,13 @@ def _validate_conv_id(conv_id: str) -> bool:
 
 
 def get_staging_dir(conv_id: str) -> Path:
-    if not _validate_conv_id(conv_id):
+    if not validate_conv_id(conv_id):
         raise ValueError("Invalid conversation ID")
     return KNOWLEDGE_DRAFTS_ROOT / conv_id
 
 
 def list_staged_files(conv_id: str) -> list[str]:
-    if not _validate_conv_id(conv_id):
+    if not validate_conv_id(conv_id):
         return []
     staging_dir = get_staging_dir(conv_id)
     if not staging_dir.exists():

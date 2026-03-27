@@ -3,22 +3,24 @@
 import logging
 import re
 from collections import OrderedDict
-from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import RedirectResponse
 
-from ..config import ADMIN_USERS, DISPLAY_TIMEZONE, FEATURE_KNOWLEDGE_CHAT
+from .. import helpers
+from ..config import ADMIN_USERS, FEATURE_KNOWLEDGE_CHAT
 from ..database import store
 from ..deps import get_current_user, templates
 from ..helpers import (
-    _validate_conv_id,
+    format_relative_date,
     list_knowledge_files,
     list_knowledge_sections,
     list_staged_files,
+    validate_conv_id,
     validate_knowledge_path,
 )
+from ..interactive_apps import scan_interactive_apps
 
 logger = logging.getLogger(__name__)
 
@@ -34,42 +36,6 @@ def humanize_title(title: str) -> str:
     if title:
         title = title[0].upper() + title[1:]
     return title.strip()
-
-
-DISPLAY_TZ = ZoneInfo(DISPLAY_TIMEZONE)
-
-
-def _now_local():
-    return datetime.now(DISPLAY_TZ)
-
-
-def _to_local(dt):
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(DISPLAY_TZ)
-
-
-def format_relative_date(dt):
-    now = _now_local()
-    dt = _to_local(dt)
-    today = now.date()
-    dt_date = dt.date()
-
-    day_names = {0: "lundi", 1: "mardi", 2: "mercredi", 3: "jeudi", 4: "vendredi", 5: "samedi", 6: "dimanche"}
-
-    # Calculate start of this week (Monday)
-    days_since_monday = today.weekday()
-    this_week_start = today - timedelta(days=days_since_monday)
-
-    if dt_date == today:
-        return dt.strftime("%H:%M")
-    elif dt_date == today - timedelta(days=1):
-        return f"hier, {dt.strftime('%H:%M')}"
-    elif this_week_start <= dt_date < today:
-        day_name = day_names[dt_date.weekday()]
-        return f"{day_name} {dt.strftime('%H:%M')}"
-    else:
-        return dt.strftime("%d/%m/%Y à %H:%M")
 
 
 def get_sidebar_data(user_email: str | None):
@@ -122,8 +88,6 @@ def index(request: Request, user_email: str = Depends(get_current_user)):
     data = get_sidebar_data(user_email)
 
     # Pinned items (conversations, reports, apps)
-    from .rapports import scan_interactive_apps
-
     pinned_raw = store.list_pinned_items()
     apps_by_slug = (
         {a["slug"]: a for a in scan_interactive_apps()} if any(p.item_type == "app" for p in pinned_raw) else {}
@@ -179,8 +143,8 @@ def index(request: Request, user_email: str = Depends(get_current_user)):
     )
 
 
-def _group_items_by_date(items):
-    now = _now_local()
+def group_items_by_date(items):
+    now = helpers.now_local()
     today = now.date()
 
     groups = OrderedDict()
@@ -213,7 +177,7 @@ def _group_items_by_date(items):
     }
 
     for item in items:
-        item_date = _to_local(item["sort_date"]).date()
+        item_date = helpers.to_local(item["sort_date"]).date()
 
         if item_date == today:
             groups["aujourd'hui"].append(item)
@@ -245,8 +209,6 @@ def rechercher(
     tag: list[str] = Query(default=[]),
 ):
     """Universal search page — combines conversations, reports, and apps."""
-    from .rapports import scan_interactive_apps
-
     # Parse show param: single value, empty = all
     show_convos = show in ("", "convos", "mine")
     show_mine = show == "mine"
@@ -373,7 +335,7 @@ def rechercher(
     items.sort(key=lambda x: x["sort_date"], reverse=True)
 
     # Group by date
-    grouped_items = _group_items_by_date(items)
+    grouped_items = group_items_by_date(items)
 
     # Merge tags from conversations and reports
     all_tags = {}
@@ -430,7 +392,7 @@ def explorations(
     """Legacy explorations list — redirects to /rechercher."""
     if conv:
         # Validate conv is a UUID to prevent open redirect
-        if _validate_conv_id(conv):
+        if validate_conv_id(conv):
             return RedirectResponse(f"/explorations/{conv}", status_code=301)
         return RedirectResponse("/rechercher?show=convos", status_code=301)
 

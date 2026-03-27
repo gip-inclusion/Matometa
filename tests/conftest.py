@@ -21,7 +21,7 @@ MATOMO_TEST_DIMENSION_ID = int(os.environ.get("MATOMO_TEST_DIMENSION_ID", "1"))
 MATOMO_TEST_SEGMENT = os.environ.get("MATOMO_TEST_SEGMENT", "pageUrl=@/gps/")
 
 
-def _truncate_all_tables():
+def truncate_all_tables():
     from web.db import get_db
 
     with get_db() as conn:
@@ -44,7 +44,7 @@ def app():
 
     yield fastapi_app
 
-    _truncate_all_tables()
+    truncate_all_tables()
 
 
 @pytest.fixture

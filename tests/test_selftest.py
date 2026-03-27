@@ -2,62 +2,40 @@
 
 import pytest
 
-from web.selftest import Check, _fmt, _probe, _run_all_checks
+from web.config import BASE_DIR
+from web.selftest import Check, run_selftest_checks
 
 
-class TestProbe:
-    def test_ok_probe(self):
-        c = _probe("test", lambda: (True, "all good"))
-        assert c.ok is True
-        assert c.detail == "all good"
-        assert c.duration_ms >= 0
+def mock_db_context(mocker):
+    mock_conn = mocker.MagicMock()
 
-    def test_failing_probe(self):
-        c = _probe("test", lambda: (False, "missing"))
-        assert c.ok is False
-        assert c.detail == "missing"
+    def exec_side_effect(sql, *args):
+        q = str(sql)
+        r = mocker.MagicMock()
+        if "SELECT 1" in q:
+            r.fetchone.return_value = {"ok": 1}
+        elif "DISTINCT user_id" in q:
+            r.fetchall.return_value = [{"user_id": "admin@localhost"}]
+        else:
+            r.fetchone.return_value = None
+            r.fetchall.return_value = []
+        return r
 
-    def test_exception_is_caught(self):
-        def boom():
-            raise RuntimeError("kaboom")
-
-        c = _probe("boom", boom)
-        assert c.ok is False
-        assert "kaboom" in c.detail
-
-    def test_detail_truncated_to_120(self):
-        def long_error():
-            raise RuntimeError("x" * 200)
-
-        c = _probe("trunc", long_error)
-        assert len(c.detail) <= 120
+    mock_conn.execute.side_effect = exec_side_effect
+    mock_cm = mocker.MagicMock()
+    mock_cm.__enter__.return_value = mock_conn
+    mock_cm.__exit__.return_value = None
+    return mock_cm
 
 
-class TestFmt:
-    def test_ok_format(self):
-        line = _fmt(Check("Foo", True, "v1.0", 42))
-        assert "\u2705" in line
-        assert "Foo" in line
-        assert "v1.0" in line
-        assert "42ms" in line
-
-    def test_fail_format(self):
-        line = _fmt(Check("Bar", False, "down"))
-        assert "\u274c" in line
-        assert "Bar" in line
-
-    def test_no_detail(self):
-        line = _fmt(Check("Baz", True))
-        assert "\u2014" not in line
-
-
-class TestRunAllChecks:
+class TestRunSelftestChecks:
     def test_all_checks_produce_check_instances(self, mocker):
         mock_getenv = mocker.patch("web.selftest.os.getenv")
         mock_head = mocker.patch("web.selftest.requests.head")
         mock_get = mocker.patch("web.selftest.requests.get")
         mock_subprocess = mocker.patch("web.selftest.subprocess.run")
         mock_config = mocker.patch("web.selftest.config")
+        mock_config.BASE_DIR = BASE_DIR
         mock_config.ADMIN_USERS = ["admin@localhost"]
         mock_config.USE_S3 = False
         mock_config.CLAUDE_CLI = "claude"
@@ -70,28 +48,58 @@ class TestRunAllChecks:
         mock_get.return_value = mock_resp
         mock_head.return_value = mocker.MagicMock(status_code=200)
 
-        mocker.patch("web.selftest._check_postgresql", return_value=(True, ""))
-        mocker.patch("web.selftest._check_admin_users", return_value=(True, "1 configured"))
-        mocker.patch("web.selftest._check_process_manager", return_value=(True, "heartbeat OK"))
-        mocker.patch("web.selftest._check_conversation_roundtrip", return_value=(True, "OK"))
-        mocker.patch("web.selftest._check_claude_cli", return_value=(True, "1.0.0"))
-        mocker.patch("web.selftest._check_s3", return_value=(False, "not configured"))
-        mocker.patch("web.selftest._check_matomo", return_value=(True, "v5.0"))
-        mocker.patch("web.selftest._check_metabase_instance", return_value=(True, "healthy"))
-        mocker.patch("web.selftest._check_notion", return_value=(False, "not set"))
-        mocker.patch("web.selftest._check_grist", return_value=(False, "not set"))
-        mocker.patch("web.selftest._check_livestorm", return_value=(False, "not set"))
-        mocker.patch("web.selftest._check_slack", return_value=(False, "not set"))
+        mocker.patch("web.selftest.get_db", return_value=mock_db_context(mocker))
+        mock_store = mocker.patch("web.selftest.store")
+        mock_store.is_pm_alive.return_value = True
+        mock_conv = mocker.MagicMock()
+        mock_conv.id = "selftest-conv"
+        mock_store.create_conversation.return_value = mock_conv
+        mock_store.get_messages.return_value = [{"role": "user", "content": "x"}]
         mocker.patch("lib._sources.list_instances", return_value=["stats"])
 
-        checks = _run_all_checks()
+        checks = run_selftest_checks()
 
         assert len(checks) >= 10
         assert all(isinstance(c, Check) for c in checks)
+        claude_cli = next(c for c in checks if c.name == "Claude CLI")
+        assert claude_cli.ok, claude_cli.detail
+        assert "skills:" in claude_cli.detail
         passed = [c for c in checks if c.ok]
         failed = [c for c in checks if not c.ok]
         assert len(passed) >= 5
         assert len(failed) >= 4
+
+    def test_probe_catches_exception_from_check(self, mocker):
+        mock_getenv = mocker.patch("web.selftest.os.getenv")
+        mock_head = mocker.patch("web.selftest.requests.head")
+        mock_get = mocker.patch("web.selftest.requests.get")
+        mock_subprocess = mocker.patch("web.selftest.subprocess.run")
+        mock_config = mocker.patch("web.selftest.config")
+        mock_config.BASE_DIR = BASE_DIR
+        mock_config.ADMIN_USERS = ["admin@localhost"]
+        mock_config.USE_S3 = False
+        mock_config.CLAUDE_CLI = "claude"
+        mock_getenv.return_value = None
+        mock_subprocess.return_value = mocker.MagicMock(returncode=0, stdout="x\n", stderr="")
+        mock_resp = mocker.MagicMock(status_code=200)
+        mock_resp.json.return_value = {"value": "5.0"}
+        mock_get.return_value = mock_resp
+        mock_head.return_value = mocker.MagicMock(status_code=200)
+
+        def boom_conn():
+            raise RuntimeError("x" * 200)
+
+        mock_cm = mocker.MagicMock()
+        mock_cm.__enter__ = boom_conn
+        mock_cm.__exit__ = mocker.MagicMock(return_value=False)
+        mocker.patch("web.selftest.get_db", return_value=mock_cm)
+        mocker.patch("web.selftest.store")
+        mocker.patch("lib._sources.list_instances", return_value=[])
+
+        checks = run_selftest_checks()
+        pg = next(c for c in checks if c.name == "PostgreSQL")
+        assert pg.ok is False
+        assert len(pg.detail) <= 120
 
 
 class TestSelftestRoute:
@@ -108,7 +116,7 @@ class TestSelftestRoute:
 
     def test_returns_text(self, mocker, client):
         mocker.patch(
-            "web.selftest._run_all_checks",
+            "web.selftest.run_selftest_checks",
             return_value=[
                 Check("A", True, "ok", 1),
                 Check("B", False, "down", 2),
@@ -125,7 +133,7 @@ class TestSelftestRoute:
 
     def test_200_when_all_pass(self, mocker, client):
         mocker.patch(
-            "web.selftest._run_all_checks",
+            "web.selftest.run_selftest_checks",
             return_value=[Check("X", True, "fine", 1)],
         )
         resp = client.get("/selftest")

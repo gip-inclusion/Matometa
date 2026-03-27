@@ -204,7 +204,7 @@ class TestFrontmatterExtraction:
         from web.notion import publish_report
 
         mocker.patch("web.notion.is_configured", return_value=True)
-        mock_req = mocker.patch("web.notion._notion_request")
+        mock_req = mocker.patch("web.notion.notion_request")
         mock_req.return_value = {"id": "abc", "url": "https://notion.so/page"}
         publish_report(
             title="Test",
@@ -220,7 +220,7 @@ class TestFrontmatterExtraction:
         from web.notion import publish_report
 
         mocker.patch("web.notion.is_configured", return_value=True)
-        mock_req = mocker.patch("web.notion._notion_request")
+        mock_req = mocker.patch("web.notion.notion_request")
         mock_req.return_value = {"id": "abc", "url": "https://notion.so/page"}
         publish_report(
             title="Test",
@@ -235,7 +235,7 @@ class TestFrontmatterExtraction:
         from web.notion import publish_report
 
         mocker.patch("web.notion.is_configured", return_value=True)
-        mock_req = mocker.patch("web.notion._notion_request")
+        mock_req = mocker.patch("web.notion.notion_request")
         mock_req.return_value = {"id": "abc", "url": "https://notion.so/page"}
         content_no_fm = "# Just a heading\n\nSome text.\n"
         publish_report(

@@ -9,7 +9,7 @@ from typing import Optional
 from .db import (
     VALID_CONVERSATION_COLUMNS,
     VALID_REPORT_COLUMNS,
-    _build_update_clause,
+    build_update_clause,
     get_db,
 )
 from .schema import init_db
@@ -182,7 +182,7 @@ class Conversation:
         }
 
 
-def _row_to_list_report(row) -> "Report":
+def row_to_list_report(row) -> "Report":
     return Report(
         id=row["id"],
         title=row["title"],
@@ -201,7 +201,7 @@ def _row_to_list_report(row) -> "Report":
     )
 
 
-def _row_to_list_conversation(row) -> "Conversation":
+def row_to_list_conversation(row) -> "Conversation":
     return Conversation(
         id=row["id"],
         user_id=row["user_id"],
@@ -218,7 +218,7 @@ def _row_to_list_conversation(row) -> "Conversation":
     )
 
 
-def _row_to_knowledge_conversation(row) -> "Conversation":
+def row_to_knowledge_conversation(row) -> "Conversation":
     return Conversation(
         id=row["id"],
         user_id=row["user_id"],
@@ -469,7 +469,7 @@ class ConversationStore:
 
             rows = conn.execute(query, params).fetchall()
 
-            return [_row_to_list_conversation(row) for row in rows]
+            return [row_to_list_conversation(row) for row in rows]
 
     def pin_item(self, item_type: str, item_id: str, label: str) -> bool:
         with get_db() as conn:
@@ -562,7 +562,7 @@ class ConversationStore:
             if not row:
                 return None
 
-            return _row_to_knowledge_conversation(row)
+            return row_to_knowledge_conversation(row)
 
     def list_active_knowledge_conversations(self) -> list[Conversation]:
         with get_db() as conn:
@@ -572,7 +572,7 @@ class ConversationStore:
                    ORDER BY updated_at DESC"""
             ).fetchall()
 
-            return [_row_to_knowledge_conversation(row) for row in rows]
+            return [row_to_knowledge_conversation(row) for row in rows]
 
     def get_running_conversation_ids(self) -> list[str]:
         with get_db() as conn:
@@ -615,7 +615,7 @@ class ConversationStore:
 
         updates["updated_at"] = datetime.now().isoformat()
 
-        set_clause, values = _build_update_clause(updates, VALID_CONVERSATION_COLUMNS)
+        set_clause, values = build_update_clause(updates, VALID_CONVERSATION_COLUMNS)
         values.append(conv_id)
 
         with get_db() as conn:
@@ -888,7 +888,7 @@ class ConversationStore:
 
             rows = conn.execute(query, params).fetchall()
 
-            return [_row_to_list_report(row) for row in rows]
+            return [row_to_list_report(row) for row in rows]
 
     def archive_report(self, report_id: int) -> bool:
         with get_db() as conn:
@@ -910,7 +910,7 @@ class ConversationStore:
 
         updates["updated_at"] = datetime.now().isoformat()
 
-        set_clause, values = _build_update_clause(updates, VALID_REPORT_COLUMNS)
+        set_clause, values = build_update_clause(updates, VALID_REPORT_COLUMNS)
         values.append(report_id)
 
         with get_db() as conn:
@@ -1186,7 +1186,7 @@ class ConversationStore:
 
             results = []
             for row in rows:
-                conv = _row_to_list_conversation(row)
+                conv = row_to_list_conversation(row)
                 results.append((conv, tags_by_conv.get(row["id"], [])))
 
             return results
@@ -1249,7 +1249,7 @@ class ConversationStore:
 
             results = []
             for row in rows:
-                report = _row_to_list_report(row)
+                report = row_to_list_report(row)
                 results.append((report, tags_by_report.get(row["id"], [])))
 
             return results

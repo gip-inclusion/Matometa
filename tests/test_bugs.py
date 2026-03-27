@@ -18,17 +18,17 @@ import pytest
     ],
 )
 def test_substitute_env_vars_strict_raises(nested, match):
-    from lib._sources import _substitute_env_vars
+    from lib._sources import substitute_env_vars
 
     with pytest.raises(ValueError, match=match):
-        _substitute_env_vars(nested, strict=True)
+        substitute_env_vars(nested, strict=True)
 
 
 def test_substitute_env_vars_non_strict_preserves_missing():
-    from lib._sources import _substitute_env_vars
+    from lib._sources import substitute_env_vars
 
     nested = {"key": "${env.TOTALLY_MISSING_VAR}"}
-    result = _substitute_env_vars(nested, strict=False)
+    result = substitute_env_vars(nested, strict=False)
     assert result["key"] == "${env.TOTALLY_MISSING_VAR}"
 
 

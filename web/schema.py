@@ -9,7 +9,7 @@ from .db import ConnectionWrapper, get_db
 SCHEMA_VERSION = 22
 
 
-def _get_schema_version(conn: ConnectionWrapper) -> int:
+def get_schema_version(conn: ConnectionWrapper) -> int:
     """Get current schema version, or 0 if no schema exists."""
     try:
         row = conn.execute("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").fetchone()
@@ -22,7 +22,7 @@ def _get_schema_version(conn: ConnectionWrapper) -> int:
         raise
 
 
-def _set_schema_version(conn: ConnectionWrapper, version: int):
+def set_schema_version(conn: ConnectionWrapper, version: int):
     """Set the schema version."""
     conn.execute(
         "INSERT INTO schema_version (version) VALUES (%s) ON CONFLICT (version) DO UPDATE SET version = %s",
@@ -30,7 +30,7 @@ def _set_schema_version(conn: ConnectionWrapper, version: int):
     )
 
 
-def _get_table_columns(conn: ConnectionWrapper, table_name: str) -> set[str]:
+def get_table_columns(conn: ConnectionWrapper, table_name: str) -> set[str]:
     """Get column names for a table."""
     rows = conn.execute(
         "SELECT column_name FROM information_schema.columns WHERE table_name = %s",
@@ -42,54 +42,54 @@ def _get_table_columns(conn: ConnectionWrapper, table_name: str) -> set[str]:
 def init_db():
     """Initialize or migrate database schema."""
     with get_db() as conn:
-        current_version = _get_schema_version(conn)
+        current_version = get_schema_version(conn)
 
         if current_version < SCHEMA_VERSION:
             # Fresh install or pre-versioned database
             if current_version == 0:
-                _create_schema(conn)
-                _seed_tags(conn)
+                create_schema(conn)
+                seed_tags(conn)
             else:
                 if current_version < 11:
-                    _migrate_to_v11(conn)
+                    migrate_to_v11(conn)
                 if current_version < 12:
-                    _migrate_to_v12(conn)
+                    migrate_to_v12(conn)
                 if current_version < 13:
-                    _migrate_to_v13(conn)
+                    migrate_to_v13(conn)
                 if current_version < 14:
-                    _migrate_to_v14(conn)
+                    migrate_to_v14(conn)
                 if current_version < 15:
-                    _migrate_to_v15(conn)
+                    migrate_to_v15(conn)
                 if current_version < 16:
-                    _migrate_to_v16(conn)
+                    migrate_to_v16(conn)
                 if current_version < 17:
-                    _migrate_to_v17(conn)
+                    migrate_to_v17(conn)
                 if current_version < 18:
-                    _migrate_to_v18(conn)
+                    migrate_to_v18(conn)
                 if current_version < 19:
-                    _migrate_to_v19(conn)
+                    migrate_to_v19(conn)
                 if current_version < 20:
-                    _migrate_to_v20(conn)
+                    migrate_to_v20(conn)
                 if current_version < 21:
-                    _migrate_to_v21(conn)
+                    migrate_to_v21(conn)
                 if current_version < 22:
-                    _migrate_to_v22(conn)
+                    migrate_to_v22(conn)
 
-            _set_schema_version(conn, SCHEMA_VERSION)
+            set_schema_version(conn, SCHEMA_VERSION)
 
         # Safety: ensure tables exist even if version was already bumped
-        _migrate_to_v15(conn)
-        _migrate_to_v17(conn)
-        _migrate_to_v18(conn)
-        _migrate_to_v19(conn)
-        _migrate_to_v20(conn)
-        _migrate_to_v21(conn)
-        _migrate_to_v22(conn)
+        migrate_to_v15(conn)
+        migrate_to_v17(conn)
+        migrate_to_v18(conn)
+        migrate_to_v19(conn)
+        migrate_to_v20(conn)
+        migrate_to_v21(conn)
+        migrate_to_v22(conn)
 
 
-def _migrate_to_v11(conn: ConnectionWrapper):
+def migrate_to_v11(conn: ConnectionWrapper):
     """Migrate to v11: rename token columns to usage_ prefix, add cache/backend columns."""
-    columns = _get_table_columns(conn, "conversations")
+    columns = get_table_columns(conn, "conversations")
 
     # Skip if already migrated
     if "usage_input_tokens" in columns:
@@ -113,7 +113,7 @@ def _migrate_to_v11(conn: ConnectionWrapper):
     conn.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY)")
 
 
-def _migrate_to_v12(conn: ConnectionWrapper):
+def migrate_to_v12(conn: ConnectionWrapper):
     """Migrate to v12: add uploaded_files table for chat file uploads."""
     conn.execute("""
         CREATE TABLE IF NOT EXISTS uploaded_files (
@@ -138,23 +138,23 @@ def _migrate_to_v12(conn: ConnectionWrapper):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_uploaded_files_user ON uploaded_files(user_id)")
 
 
-def _migrate_to_v13(conn: ConnectionWrapper):
+def migrate_to_v13(conn: ConnectionWrapper):
     """Migrate to v13: add pinned_at and pinned_label columns to conversations."""
-    columns = _get_table_columns(conn, "conversations")
+    columns = get_table_columns(conn, "conversations")
     if "pinned_at" not in columns:
         conn.execute("ALTER TABLE conversations ADD COLUMN pinned_at TEXT")
     if "pinned_label" not in columns:
         conn.execute("ALTER TABLE conversations ADD COLUMN pinned_label TEXT")
 
 
-def _migrate_to_v14(conn: ConnectionWrapper):
+def migrate_to_v14(conn: ConnectionWrapper):
     """Migrate to v14: add notion_url column to reports."""
-    columns = _get_table_columns(conn, "reports")
+    columns = get_table_columns(conn, "reports")
     if "notion_url" not in columns:
         conn.execute("ALTER TABLE reports ADD COLUMN notion_url TEXT")
 
 
-def _migrate_to_v15(conn: ConnectionWrapper):
+def migrate_to_v15(conn: ConnectionWrapper):
     """Migrate to v15: add cron_runs table for scheduled task history."""
     conn.execute("""
         CREATE TABLE IF NOT EXISTS cron_runs (
@@ -171,14 +171,14 @@ def _migrate_to_v15(conn: ConnectionWrapper):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cron_runs_slug_started ON cron_runs(app_slug, started_at DESC)")
 
 
-def _migrate_to_v16(conn: ConnectionWrapper):
+def migrate_to_v16(conn: ConnectionWrapper):
     """Migrate to v16: add needs_response column for robust stream completion tracking."""
-    columns = _get_table_columns(conn, "conversations")
+    columns = get_table_columns(conn, "conversations")
     if "needs_response" not in columns:
         conn.execute("ALTER TABLE conversations ADD COLUMN needs_response INTEGER DEFAULT 0")
 
 
-def _migrate_to_v17(conn: ConnectionWrapper):
+def migrate_to_v17(conn: ConnectionWrapper):
     """Migrate to v17: add pinned_items table for generic pinning (conversations, reports, apps)."""
     conn.execute("""
         CREATE TABLE IF NOT EXISTS pinned_items (
@@ -200,7 +200,7 @@ def _migrate_to_v17(conn: ConnectionWrapper):
     """)
 
 
-def _migrate_to_v18(conn: ConnectionWrapper):
+def migrate_to_v18(conn: ConnectionWrapper):
     """Migrate to v18: add pm_commands table for process manager coordination."""
     conn.execute("""
         CREATE TABLE IF NOT EXISTS pm_commands (
@@ -218,7 +218,7 @@ def _migrate_to_v18(conn: ConnectionWrapper):
     """)
 
 
-def _migrate_to_v19(conn: ConnectionWrapper):
+def migrate_to_v19(conn: ConnectionWrapper):
     """Migrate to v19: add pm_heartbeat table for PM liveness detection."""
     conn.execute("""
         CREATE TABLE IF NOT EXISTS pm_heartbeat (
@@ -228,7 +228,7 @@ def _migrate_to_v19(conn: ConnectionWrapper):
     """)
 
 
-def _create_schema(conn: ConnectionWrapper):
+def create_schema(conn: ConnectionWrapper):
     """Create the complete database schema."""
     conn.execute_raw("""
         CREATE TABLE IF NOT EXISTS schema_version (
@@ -389,7 +389,7 @@ def _create_schema(conn: ConnectionWrapper):
     """)
 
 
-def _migrate_to_v21(conn: ConnectionWrapper):
+def migrate_to_v21(conn: ConnectionWrapper):
     """Migrate to v21: add wishlist table."""
     conn.execute("""
         CREATE TABLE IF NOT EXISTS wishlist (
@@ -408,7 +408,7 @@ def _migrate_to_v21(conn: ConnectionWrapper):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_wishlist_status ON wishlist(status)")
 
 
-def _migrate_to_v22(conn: ConnectionWrapper):
+def migrate_to_v22(conn: ConnectionWrapper):
     """Migrate to v22: drop research corpus tables and pgvector extension."""
     conn.execute_raw("""
         DROP TABLE IF EXISTS research_chunks CASCADE;
@@ -420,7 +420,7 @@ def _migrate_to_v22(conn: ConnectionWrapper):
     """)
 
 
-def _migrate_to_v20(conn: ConnectionWrapper):
+def migrate_to_v20(conn: ConnectionWrapper):
     """Migrate to v20: add compound indexes for hot queries.
 
     - messages(conversation_id, id): SSE polling query
@@ -475,7 +475,7 @@ TAGS = [
 ]
 
 
-def _seed_tags(conn: ConnectionWrapper):
+def seed_tags(conn: ConnectionWrapper):
     """Seed the tags table with taxonomy."""
     conn.executemany(
         "INSERT INTO tags (name, type, label) VALUES (%s, %s, %s) ON CONFLICT (name) DO NOTHING",

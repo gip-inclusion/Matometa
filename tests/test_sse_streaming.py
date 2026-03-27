@@ -65,7 +65,7 @@ def responded_conversation(app):
     return conv
 
 
-def _parse_sse_events(response_data: bytes) -> list[dict]:
+def parse_sse_events(response_data: bytes) -> list[dict]:
     events = []
     current_event = None
     current_data = None
@@ -89,7 +89,7 @@ def _parse_sse_events(response_data: bytes) -> list[dict]:
     return events
 
 
-def _simulate_pm(conv_id, messages, delay=0.1):
+def simulate_pm(conv_id, messages, delay=0.1):
     """Simulate the process manager writing messages then clearing needs_response.
 
     Runs in a background thread so the SSE handler can stream concurrently.
@@ -131,7 +131,7 @@ def _simulate_pm(conv_id, messages, delay=0.1):
 # Tests: SSE endpoint behavior (signal-based architecture)
 #
 # The SSE handler waits on in-memory signals fired by the Process Manager.
-# These tests use _simulate_pm() to insert messages and fire signals in a
+# These tests use simulate_pm() to insert messages and fire signals in a
 # background thread, simulating real PM behavior.
 
 
@@ -142,7 +142,7 @@ class TestDoneStream:
             f"/api/conversations/{responded_conversation.id}/stream",
             headers={"X-Forwarded-Email": "test@example.com"},
         )
-        events = _parse_sse_events(response.content)
+        events = parse_sse_events(response.content)
         assert len(events) == 1
         assert events[0]["event"] == "done"
 
@@ -150,24 +150,24 @@ class TestDoneStream:
 class TestSSEFormat:
     def test_stream_ends_with_done(self, app, client, conversation):
         """SSE stream must end with a done event."""
-        t = _simulate_pm(conversation.id, [("assistant", "Hello")])
+        t = simulate_pm(conversation.id, [("assistant", "Hello")])
         response = client.get(
             f"/api/conversations/{conversation.id}/stream",
             headers={"X-Forwarded-Email": "test@example.com"},
         )
         t.join()
-        events = _parse_sse_events(response.content)
+        events = parse_sse_events(response.content)
         assert events[-1]["event"] == "done"
 
     def test_assistant_event_has_content(self, app, client, conversation):
         """Assistant SSE events include the content field."""
-        t = _simulate_pm(conversation.id, [("assistant", "My response")])
+        t = simulate_pm(conversation.id, [("assistant", "My response")])
         response = client.get(
             f"/api/conversations/{conversation.id}/stream",
             headers={"X-Forwarded-Email": "test@example.com"},
         )
         t.join()
-        events = _parse_sse_events(response.content)
+        events = parse_sse_events(response.content)
         assistant = [e for e in events if e["event"] == "assistant"]
         assert len(assistant) == 1
         assert assistant[0]["data"]["content"] == "My response"
@@ -179,13 +179,13 @@ class TestSSEFormat:
             ("tool_result", json.dumps({"output": "data"})),
             ("assistant", "Done"),
         ]
-        t = _simulate_pm(conversation.id, messages)
+        t = simulate_pm(conversation.id, messages)
         response = client.get(
             f"/api/conversations/{conversation.id}/stream",
             headers={"X-Forwarded-Email": "test@example.com"},
         )
         t.join()
-        events = _parse_sse_events(response.content)
+        events = parse_sse_events(response.content)
         types = [e["event"] for e in events]
         assert "tool_use" in types
         assert "tool_result" in types
@@ -215,13 +215,13 @@ class TestRaceCondition:
         signals.notify_message(conv.id)
 
         # Then more messages arrive and PM finishes
-        t = _simulate_pm(conv.id, [("assistant", "Second part")])
+        t = simulate_pm(conv.id, [("assistant", "Second part")])
         response = client.get(
             f"/api/conversations/{conv.id}/stream?after={user_msg.id}",
             headers={"X-Forwarded-Email": "test@example.com"},
         )
         t.join()
-        events = _parse_sse_events(response.content)
+        events = parse_sse_events(response.content)
         assistant = [e for e in events if e["event"] == "assistant"]
 
         assert len(assistant) >= 1, "No assistant events in SSE stream! Messages written before SSE connect were lost."
@@ -252,7 +252,7 @@ class TestRaceCondition:
             f"/api/conversations/{conv.id}/stream?after={user_msg.id}",
             headers={"X-Forwarded-Email": "test@example.com"},
         )
-        events = _parse_sse_events(response.content)
+        events = parse_sse_events(response.content)
         assistant = [e for e in events if e["event"] == "assistant"]
 
         assert len(assistant) == 1, "PM finished before SSE connect but assistant message was lost!"
@@ -276,7 +276,7 @@ class TestNeedsResponse:
             f"/api/conversations/{conv.id}/stream",
             headers={"X-Forwarded-Email": "test@example.com"},
         )
-        events = _parse_sse_events(response.content)
+        events = parse_sse_events(response.content)
         assert len(events) == 1
         assert events[0]["event"] == "done"
 
@@ -288,13 +288,13 @@ class TestNeedsResponse:
         store.add_message(conv.id, "user", "Hello")
         store.update_conversation(conv.id, needs_response=True)
 
-        t = _simulate_pm(conv.id, [("assistant", "Response")])
+        t = simulate_pm(conv.id, [("assistant", "Response")])
         response = client.get(
             f"/api/conversations/{conv.id}/stream",
             headers={"X-Forwarded-Email": "test@example.com"},
         )
         t.join()
-        events = _parse_sse_events(response.content)
+        events = parse_sse_events(response.content)
         types = [e["event"] for e in events]
         assert "assistant" in types
 

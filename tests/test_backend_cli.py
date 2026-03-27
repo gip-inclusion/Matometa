@@ -6,7 +6,7 @@ def test_build_env_removes_api_key(mocker):
 
     backend = CLIBackend()
     mocker.patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-secret", "HOME": "/x"}, clear=True)
-    env = backend._build_env("conv-1")
+    env = backend._build_env()
 
     assert "ANTHROPIC_API_KEY" not in env
     assert env["HOME"] == "/x"

@@ -235,9 +235,9 @@ class TestCLIBackendTokenExtraction:
             },
         }
 
-        msg = backend._parse_event(event)
-        assert msg is not None
-        assert msg.raw.get("usage") == {"input_tokens": 1234, "output_tokens": 567}
+        msgs = backend._parse_events(event)
+        assert len(msgs) == 1
+        assert msgs[0].raw.get("usage") == {"input_tokens": 1234, "output_tokens": 567}
 
     def test_parse_result_event_without_usage(self):
         """CLI backend handles result event without usage gracefully."""
@@ -250,6 +250,6 @@ class TestCLIBackendTokenExtraction:
             "subtype": "success",
         }
 
-        msg = backend._parse_event(event)
-        assert msg is not None
+        msgs = backend._parse_events(event)
+        assert len(msgs) == 1
         # Should not error, usage may be absent

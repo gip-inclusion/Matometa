@@ -3,10 +3,10 @@
 
 import argparse
 import json
-import os
 import re
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
@@ -15,12 +15,15 @@ project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 # Load .env file
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # noqa: E402
+
 load_dotenv(project_root / ".env")
 
-from skills.metabase_query.scripts.metabase import MetabaseError
-from skills.metabase_query.scripts.cards_db import CardsDB, TOPICS, TABLE_TO_TOPIC, DB_PATH
-from lib._sources import load_config, get_source_config, get_metabase, list_instances
+from lib._sources import get_metabase, get_source_config, list_instances  # noqa: E402
+from skills.metabase_query.scripts.cards_db import DB_PATH, TABLE_TO_TOPIC, TOPICS, CardsDB  # noqa: E402
+from skills.metabase_query.scripts.metabase import MetabaseError  # noqa: E402
+from web.llm import generate_text  # noqa: E402
+
 
 def infer_topic_from_tables(tables: list[str]) -> str | None:
     for table in tables:
@@ -29,6 +32,7 @@ def infer_topic_from_tables(tables: list[str]) -> str | None:
             if pattern in table_lower:
                 return topic
     return None
+
 
 def progress_bar(current: int, total: int, prefix: str = "", suffix: str = "", length: int = 40):
     """Simple progress bar."""
@@ -41,6 +45,7 @@ def progress_bar(current: int, total: int, prefix: str = "", suffix: str = "", l
     if current == total:
         print()
 
+
 def extract_table_references(sql: str) -> list[str]:
     if not sql:
         return []
@@ -48,12 +53,12 @@ def extract_table_references(sql: str) -> list[str]:
     tables = set()
     patterns = [
         r'FROM\s+"?(\w+)"?\."?(\w+)"?',  # schema.table
-        r'FROM\s+"?(\w+)"?(?:\s|$|,)',   # simple table
-        r'JOIN\s+"?(\w+)"?\."?(\w+)"?',   # schema.table in JOIN
-        r'JOIN\s+"?(\w+)"?(?:\s|$)',      # simple table in JOIN
+        r'FROM\s+"?(\w+)"?(?:\s|$|,)',  # simple table
+        r'JOIN\s+"?(\w+)"?\."?(\w+)"?',  # schema.table in JOIN
+        r'JOIN\s+"?(\w+)"?(?:\s|$)',  # simple table in JOIN
     ]
 
-    skip_words = {'select', 'case', 'when', 'then', 'else', 'end', 'as', 'on', 'and', 'or'}
+    skip_words = {"select", "case", "when", "then", "else", "end", "as", "on", "and", "or"}
 
     for pattern in patterns:
         matches = re.findall(pattern, sql, re.IGNORECASE)
@@ -69,14 +74,13 @@ def extract_table_references(sql: str) -> list[str]:
 
     return sorted(tables)
 
+
 def categorize_cards_with_llm(cards: list[dict]) -> dict[int, tuple[str, str]]:
     """
     Categorize cards using the configured LLM backend.
 
     Returns dict of card_id -> (topic, reason)
     """
-    from web.llm import generate_text, LLMError
-
     topic_list = "\n".join(f"- {topic}: {desc}" for topic, desc in TOPICS.items())
 
     results = {}
@@ -85,17 +89,21 @@ def categorize_cards_with_llm(cards: list[dict]) -> dict[int, tuple[str, str]]:
 
     for i in range(0, len(cards), batch_size):
         batch_num = i // batch_size + 1
-        progress_bar(batch_num - 1, total_batches, prefix="   Categorizing", suffix=f"batch {batch_num}/{total_batches}")
+        progress_bar(
+            batch_num - 1, total_batches, prefix="   Categorizing", suffix=f"batch {batch_num}/{total_batches}"
+        )
 
-        batch = cards[i:i + batch_size]
+        batch = cards[i : i + batch_size]
         card_summaries = []
         for card in batch:
             sql = card.get("sql_query", "")[:800]
-            card_summaries.append({
-                "id": card["id"],
-                "title": card["name"],
-                "sql": sql,
-            })
+            card_summaries.append(
+                {
+                    "id": card["id"],
+                    "title": card["name"],
+                    "sql": sql,
+                }
+            )
 
         prompt = f"""Categorize these Metabase cards about French IAE employment data.
 
@@ -120,7 +128,7 @@ IMPORTANT:
             result_text = generate_text(prompt, max_tokens=4000, timeout=120)
 
             # Extract JSON array from response (may be wrapped in text or code blocks)
-            json_match = re.search(r'\[[\s\S]*\]', result_text)
+            json_match = re.search(r"\[[\s\S]*\]", result_text)
             if not json_match:
                 raise ValueError("No JSON array found in response")
 
@@ -145,8 +153,11 @@ IMPORTANT:
                 inferred = infer_topic_from_tables(card.get("tables_referenced", []))
                 results[card["id"]] = (inferred if inferred else "candidatures", "inferred from tables")
 
-    progress_bar(total_batches, total_batches, prefix="   Categorizing", suffix=f"batch {total_batches}/{total_batches}")
+    progress_bar(
+        total_batches, total_batches, prefix="   Categorizing", suffix=f"batch {total_batches}/{total_batches}"
+    )
     return results
+
 
 def generate_readme(db: CardsDB, last_sync: str):
     readme_path = DB_PATH.parent / "README.md"
@@ -158,7 +169,7 @@ def generate_readme(db: CardsDB, last_sync: str):
     lines = [
         "# Metabase Cards Inventory",
         "",
-        f"**Database:** `knowledge/metabase/cards.db`",
+        "**Database:** `knowledge/metabase/cards.db`",
         f"**Last synced:** {last_sync}",
         f"**Total cards:** {total_cards}",
         "",
@@ -211,37 +222,41 @@ def generate_readme(db: CardsDB, last_sync: str):
 
     # Add dashboards summary
     dashboards_summary = db.dashboards_summary()
-    lines.extend([
-        "",
-        "## Dashboards",
-        "",
-        "| Dashboard ID | Cards |",
-        "|--------------|-------|",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Dashboards",
+            "",
+            "| Dashboard ID | Cards |",
+            "|--------------|-------|",
+        ]
+    )
 
     for dash_id, count in list(dashboards_summary.items())[:15]:
         lines.append(f"| {dash_id} | {count} |")
 
-    lines.extend([
-        "",
-        "## Querying the Database",
-        "",
-        "```python",
-        "from skills.metabase_query.scripts.cards_db import load_cards_db",
-        "",
-        "db = load_cards_db()",
-        'cards = db.search("file active")  # Full-text search',
-        'cards = db.by_topic("candidatures")  # Filter by topic',
-        'cards = db.by_dashboard(408)  # Cards in a dashboard',
-        'cards = db.by_table("candidats")  # Cards using a table',
-        "card = db.get(7004)  # Get by ID",
-        "```",
-        "",
-        "## Key Tables Referenced",
-        "",
-        "| Table | Cards Using It |",
-        "|-------|----------------|",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Querying the Database",
+            "",
+            "```python",
+            "from skills.metabase_query.scripts.cards_db import load_cards_db",
+            "",
+            "db = load_cards_db()",
+            'cards = db.search("file active")  # Full-text search',
+            'cards = db.by_topic("candidatures")  # Filter by topic',
+            "cards = db.by_dashboard(408)  # Cards in a dashboard",
+            'cards = db.by_table("candidats")  # Cards using a table',
+            "card = db.get(7004)  # Get by ID",
+            "```",
+            "",
+            "## Key Tables Referenced",
+            "",
+            "| Table | Cards Using It |",
+            "|-------|----------------|",
+        ]
+    )
 
     for table, count in list(tables_summary.items())[:15]:
         lines.append(f"| `{table}` | {count} |")
@@ -253,25 +268,40 @@ def generate_readme(db: CardsDB, last_sync: str):
 
     return readme_path
 
+
 def format_sql_for_markdown(sql: str) -> str:
     if not sql:
         return ""
 
     # Add line breaks after major SQL keywords for readability
-    keywords = ['SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'GROUP BY', 'ORDER BY',
-                'HAVING', 'JOIN', 'LEFT JOIN', 'RIGHT JOIN', 'INNER JOIN',
-                'UNION', 'LIMIT', 'OFFSET']
+    keywords = [
+        "SELECT",
+        "FROM",
+        "WHERE",
+        "AND",
+        "OR",
+        "GROUP BY",
+        "ORDER BY",
+        "HAVING",
+        "JOIN",
+        "LEFT JOIN",
+        "RIGHT JOIN",
+        "INNER JOIN",
+        "UNION",
+        "LIMIT",
+        "OFFSET",
+    ]
 
     formatted = sql
     for kw in keywords:
         # Add newline before keyword (case insensitive)
-        import re
-        formatted = re.sub(rf'(\s)({kw}\s)', rf'\1\n{kw} ', formatted, flags=re.IGNORECASE)
+        formatted = re.sub(rf"(\s)({kw}\s)", rf"\1\n{kw} ", formatted, flags=re.IGNORECASE)
 
     # Clean up multiple newlines
-    formatted = re.sub(r'\n\s*\n', '\n', formatted)
+    formatted = re.sub(r"\n\s*\n", "\n", formatted)
 
     return formatted.strip()
+
 
 def generate_markdown(db: CardsDB, cards_dir: Path, dashboards_dir: Path, last_sync: str):
     cards_dir.mkdir(parents=True, exist_ok=True)
@@ -304,11 +334,13 @@ def generate_markdown(db: CardsDB, cards_dir: Path, dashboards_dir: Path, last_s
             desc = TOPICS.get(topic, "")
             index_lines.append(f"- [{topic}](cards/topic-{topic}.md) ({count}) — {desc}")
 
-    index_lines.extend([
-        "",
-        "## Dashboards",
-        "",
-    ])
+    index_lines.extend(
+        [
+            "",
+            "## Dashboards",
+            "",
+        ]
+    )
 
     for dash_id, count in list(dashboards_summary.items())[:30]:
         dash = db.get_dashboard(dash_id)
@@ -316,13 +348,15 @@ def generate_markdown(db: CardsDB, cards_dir: Path, dashboards_dir: Path, last_s
         index_lines.append(f"- [{dash_name}](dashboards/dashboard-{dash_id}.md) ({count} cartes)")
 
     # Best of: most referenced tables
-    index_lines.extend([
-        "",
-        "## Tables les plus utilisées",
-        "",
-        "| Table | Cartes |",
-        "|-------|--------|",
-    ])
+    index_lines.extend(
+        [
+            "",
+            "## Tables les plus utilisées",
+            "",
+            "| Table | Cartes |",
+            "|-------|--------|",
+        ]
+    )
 
     for table, count in list(tables_summary.items())[:15]:
         index_lines.append(f"| `{table}` | {count} |")
@@ -348,11 +382,13 @@ def generate_markdown(db: CardsDB, cards_dir: Path, dashboards_dir: Path, last_s
         ]
 
         for card in cards:
-            lines.extend([
-                f"## {card.name}",
-                "",
-                f"- **ID:** {card.id}",
-            ])
+            lines.extend(
+                [
+                    f"## {card.name}",
+                    "",
+                    f"- **ID:** {card.id}",
+                ]
+            )
             if card.description:
                 lines.append(f"- **Description:** {card.description}")
             if card.dashboard_id:
@@ -365,12 +401,14 @@ def generate_markdown(db: CardsDB, cards_dir: Path, dashboards_dir: Path, last_s
                 sql = format_sql_for_markdown(card.sql_query)
                 if len(sql) > 3000:
                     sql = sql[:3000] + "\n-- ... (truncated)"
-                lines.extend([
-                    "",
-                    "```sql",
-                    sql,
-                    "```",
-                ])
+                lines.extend(
+                    [
+                        "",
+                        "```sql",
+                        sql,
+                        "```",
+                    ]
+                )
 
             lines.append("")
 
@@ -401,12 +439,14 @@ def generate_markdown(db: CardsDB, cards_dir: Path, dashboards_dir: Path, last_s
         lines.extend([f"**{len(cards)} cartes**", ""])
 
         for card in cards:
-            lines.extend([
-                f"## {card.name}",
-                "",
-                f"- **ID:** {card.id}",
-                f"- **Thème:** {card.topic or 'candidatures'}",
-            ])
+            lines.extend(
+                [
+                    f"## {card.name}",
+                    "",
+                    f"- **ID:** {card.id}",
+                    f"- **Thème:** {card.topic or 'candidatures'}",
+                ]
+            )
             if card.description:
                 lines.append(f"- **Description:** {card.description}")
             if card.tables_referenced:
@@ -417,12 +457,14 @@ def generate_markdown(db: CardsDB, cards_dir: Path, dashboards_dir: Path, last_s
                 sql = format_sql_for_markdown(card.sql_query)
                 if len(sql) > 3000:
                     sql = sql[:3000] + "\n-- ... (truncated)"
-                lines.extend([
-                    "",
-                    "```sql",
-                    sql,
-                    "```",
-                ])
+                lines.extend(
+                    [
+                        "",
+                        "```sql",
+                        sql,
+                        "```",
+                    ]
+                )
 
             lines.append("")
 
@@ -431,10 +473,9 @@ def generate_markdown(db: CardsDB, cards_dir: Path, dashboards_dir: Path, last_s
 
     return cards_dir, dashboards_dir
 
+
 def sync_instance(instance_name: str, args):
     """Sync a single Metabase instance."""
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
     # Load instance config
     instance_config = get_source_config("metabase", instance_name)
     public_dashboards = instance_config.get("dashboards", {})
@@ -509,13 +550,15 @@ def sync_instance(instance_name: str, args):
                 if not name or name == f"Card {card['id']}" or re.match(r"^Card \d+$", name):
                     continue
                 seen_card_ids.add(card["id"])
-                all_cards.append({
-                    "id": card["id"],
-                    "name": name,
-                    "description": card.get("description"),
-                    "collection_id": card.get("collection_id"),
-                    "dashboard_id": dash_id,
-                })
+                all_cards.append(
+                    {
+                        "id": card["id"],
+                        "name": name,
+                        "description": card.get("description"),
+                        "collection_id": card.get("collection_id"),
+                        "dashboard_id": dash_id,
+                    }
+                )
                 card_count += 1
 
             print(f"{card_count} cards")
@@ -575,7 +618,7 @@ def sync_instance(instance_name: str, args):
     progress_bar(len(all_cards), len(all_cards), prefix="   Progress", suffix=f"{len(all_cards)}/{len(all_cards)}")
 
     has_sql = sum(1 for c in all_cards if c.get("sql_query"))
-    print(f"   Cards with SQL: {has_sql}/{len(all_cards)} ({100*has_sql/len(all_cards):.1f}%)")
+    print(f"   Cards with SQL: {has_sql}/{len(all_cards)} ({100 * has_sql / len(all_cards):.1f}%)")
     print(f"   Time: {time.time() - start:.1f}s")
 
     # Step 3: Categorize with AI (optional)
@@ -650,11 +693,6 @@ def sync_instance(instance_name: str, args):
         db.save_to_file(sqlite_path)
         print(f"   ✅ Database saved to {sqlite_path}")
 
-        # Generate SQLite README in the instance knowledge dir
-        readme_path = stats_dir / "README.md"
-        # Use generate_readme but with correct path
-        # For now, skip the README generation for non-default instances
-
     db.close()
 
     print()
@@ -667,6 +705,7 @@ def sync_instance(instance_name: str, args):
         print(f"Markdown: {cards_dir}")
         print(f"Dashboards: {dashboards_dir}")
     print()
+
 
 def main():
     parser = argparse.ArgumentParser(description="Sync Metabase cards to markdown/SQLite")
@@ -692,6 +731,7 @@ def main():
 
     for instance_name in instances:
         sync_instance(instance_name, args)
+
 
 if __name__ == "__main__":
     main()

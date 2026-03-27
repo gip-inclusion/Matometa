@@ -21,7 +21,7 @@ class CLIBackend(AgentBackend):
     def __init__(self):
         self._processes: dict[str, asyncio.subprocess.Process] = {}
 
-    def _build_env(self, conversation_id: str) -> dict:
+    def _build_env(self) -> dict:
         env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
         return env
 
@@ -141,7 +141,7 @@ class CLIBackend(AgentBackend):
             f"Starting claude CLI: {' '.join(cmd[:4])}... (prompt length: {len(prompt)}, session: {session_id or 'none'})"
         )
 
-        env = self._build_env(conversation_id)
+        env = self._build_env()
 
         # Spawn process (10 MB buffer to handle large tool results)
         process = await asyncio.create_subprocess_exec(
@@ -157,8 +157,10 @@ class CLIBackend(AgentBackend):
 
         self._processes[conversation_id] = process
 
+        stderr_task = asyncio.create_task(self._drain_stderr(process.stderr))
+
         try:
-            # Read stdout line by line
+            # Read stdout line by line (stderr drained in parallel to avoid pipe deadlock)
             line_count = 0
             while True:
                 line = await process.stdout.readline()
@@ -173,15 +175,12 @@ class CLIBackend(AgentBackend):
                 line_count += 1
                 logger.debug(f"Line {line_count}: {line_str[:100]}...")
 
-                # Parse JSON event
                 try:
                     event = json.loads(line_str)
-                    agent_msg = self._parse_event(event)
-                    if agent_msg:
+                    for agent_msg in self._parse_events(event):
                         logger.debug(f"Parsed event: {agent_msg.type}")
                         yield agent_msg
                 except json.JSONDecodeError:
-                    # Non-JSON output, emit as system message
                     logger.warning(f"Non-JSON line: {line_str[:100]}")
                     yield AgentMessage(
                         type="system",
@@ -189,21 +188,8 @@ class CLIBackend(AgentBackend):
                         raw={"raw_line": line_str},
                     )
 
-            # Wait for process to complete
             await process.wait()
             logger.info(f"Process exited with code: {process.returncode}")
-
-            # Check for errors
-            if process.returncode != 0:
-                stderr = await process.stderr.read()
-                stderr_str = stderr.decode("utf-8")
-                logger.error(f"Process error: {stderr_str}")
-                yield AgentMessage(
-                    type="error",
-                    content=f"Process exited with code {process.returncode}: {stderr_str}",
-                    raw={"stderr": stderr_str, "code": process.returncode},
-                )
-
         finally:
             self._processes.pop(conversation_id, None)
             if process.returncode is None:
@@ -215,17 +201,36 @@ class CLIBackend(AgentBackend):
                         process.kill()
                     except ProcessLookupError:
                         pass
+            stderr_bytes = await stderr_task
             logger.info(f"Cleaned up conversation {conversation_id}")
 
-    def _parse_event(self, event: dict) -> Optional[AgentMessage]:
+        stderr_str = stderr_bytes.decode("utf-8", errors="replace")
+        if process.returncode != 0:
+            logger.error(f"Process error: {stderr_str}")
+            yield AgentMessage(
+                type="error",
+                content=f"Process exited with code {process.returncode}: {stderr_str}",
+                raw={"stderr": stderr_str, "code": process.returncode},
+            )
+
+    @staticmethod
+    async def _drain_stderr(stream: asyncio.StreamReader) -> bytes:
+        chunks: list[bytes] = []
+        while True:
+            line = await stream.readline()
+            if not line:
+                break
+            chunks.append(line)
+        return b"".join(chunks)
+
+    def _parse_events(self, event: dict) -> list[AgentMessage]:
         event_type = event.get("type")
 
         if event_type == "assistant":
-            # Extract content from assistant message
-            message = event.get("message", {})
-            content_blocks = message.get("content", [])
+            msg_payload = event.get("message", {})
+            content_blocks = msg_payload.get("content", [])
 
-            messages = []
+            messages: list[AgentMessage] = []
             for block in content_blocks:
                 block_type = block.get("type")
 
@@ -252,75 +257,82 @@ class CLIBackend(AgentBackend):
                         )
                     )
 
-            # Return first message (we'll handle multiple in the caller if needed)
-            if messages:
-                return messages[0]
+            return messages
 
-        elif event_type == "tool_use":
-            # Standalone tool_use event (fallback)
-            return AgentMessage(
-                type="tool_use",
-                content={
-                    "tool": event.get("tool") or event.get("name"),
-                    "input": event.get("input"),
-                },
-                raw=event,
-            )
+        if event_type == "tool_use":
+            return [
+                AgentMessage(
+                    type="tool_use",
+                    content={
+                        "tool": event.get("tool") or event.get("name"),
+                        "input": event.get("input"),
+                    },
+                    raw=event,
+                )
+            ]
 
-        elif event_type == "tool_result":
-            return AgentMessage(
-                type="tool_result",
-                content={
-                    "tool": event.get("tool"),
-                    "output": event.get("output"),
-                },
-                raw=event,
-            )
+        if event_type == "tool_result":
+            return [
+                AgentMessage(
+                    type="tool_result",
+                    content={
+                        "tool": event.get("tool"),
+                        "output": event.get("output"),
+                    },
+                    raw=event,
+                )
+            ]
 
-        elif event_type == "user":
-            # User messages often contain tool_results
-            message = event.get("message", {})
-            content_blocks = message.get("content", [])
+        if event_type == "user":
+            msg_payload = event.get("message", {})
+            content_blocks = msg_payload.get("content", [])
 
             for block in content_blocks:
                 if block.get("type") == "tool_result":
                     result_content = block.get("content", "")
-                    return AgentMessage(
-                        type="tool_result",
-                        content={
-                            "tool": block.get("tool_use_id", "")[:8],
-                            "output": result_content,
-                        },
-                        raw=event,
-                    )
-            return None  # Ignore other user messages
+                    return [
+                        AgentMessage(
+                            type="tool_result",
+                            content={
+                                "tool": block.get("tool_use_id", "")[:8],
+                                "output": result_content,
+                            },
+                            raw=event,
+                        )
+                    ]
+            return []
 
-        elif event_type == "system":
-            return AgentMessage(
-                type="system",
-                content=event.get("message") or event.get("subtype"),
-                raw=event,
-            )
+        if event_type == "system":
+            return [
+                AgentMessage(
+                    type="system",
+                    content=event.get("message") or event.get("subtype"),
+                    raw=event,
+                )
+            ]
 
-        elif event_type == "error":
-            return AgentMessage(
-                type="error",
-                content=event.get("message") or str(event),
-                raw=event,
-            )
+        if event_type == "error":
+            return [
+                AgentMessage(
+                    type="error",
+                    content=event.get("message") or str(event),
+                    raw=event,
+                )
+            ]
 
-        elif event_type == "result":
-            # Final result message - preserve usage info if present
+        if event_type == "result":
             raw = dict(event)
             if "usage" in event:
                 raw["usage"] = event["usage"]
-            return AgentMessage(
-                type="system",
-                content=f"Completed: {event.get('subtype', 'done')}",
-                raw=raw,
-            )
+            return [
+                AgentMessage(
+                    type="system",
+                    content=f"Completed: {event.get('subtype', 'done')}",
+                    raw=raw,
+                )
+            ]
 
-        return None
+        return []
 
     async def cancel(self, conversation_id: str) -> bool:
         process = self._processes.get(conversation_id)

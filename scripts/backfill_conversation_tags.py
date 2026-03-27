@@ -113,7 +113,7 @@ def get_first_user_message(conv_id: str) -> str | None:
     return None
 
 
-def _parse_tags(response: str) -> list[str]:
+def parse_tags(response: str) -> list[str]:
     # Handle potential explanation text - take just the tag line
     if "\n" in response:
         for line in response.split("\n"):
@@ -129,7 +129,7 @@ def _parse_tags(response: str) -> list[str]:
     return tag_names
 
 
-def _build_prompt(message: str) -> str:
+def build_prompt(message: str) -> str:
     return f"""Analyse cette demande utilisateur et attribue des tags parmi la taxonomie suivante.
 
 {TAG_TAXONOMY}
@@ -148,12 +148,12 @@ Exemple: emplois, candidats, trafic, analyse"""
 
 
 def generate_tags_for_message(message: str) -> list[str]:
-    prompt = _build_prompt(message)
+    prompt = build_prompt(message)
     model = config.OLLAMA_TAG_MODEL if config.LLM_BACKEND == "ollama" else config.CLAUDE_MODEL
 
     try:
         response = llm.generate_text(prompt, model=model, max_tokens=100)
-        return _parse_tags(response)
+        return parse_tags(response)
     except Exception as exc:
         print(f"    Error: {exc}")
         return []

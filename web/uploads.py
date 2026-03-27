@@ -23,8 +23,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import BinaryIO, Optional, Tuple
 
-from . import config
-from .database import UploadedFile, store
+from . import config, s3
+from .database import UploadedFile, get_db, store
 
 logger = logging.getLogger(__name__)
 
@@ -148,17 +148,17 @@ class AVScanFailedError(UploadError):
     pass
 
 
-def _ensure_uploads_dir() -> Path:
+def ensure_uploads_dir() -> Path:
     uploads_dir = config.UPLOADS_DIR
     uploads_dir.mkdir(parents=True, exist_ok=True)
     return uploads_dir
 
 
-def _compute_sha256(content: bytes) -> str:
+def compute_sha256(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
-def _is_text_file(filename: str, mime_type: Optional[str], content: bytes) -> bool:
+def is_text_file(filename: str, mime_type: Optional[str], content: bytes) -> bool:
     """Determine if a file is a text file that can be read directly."""
     # Check by extension
     ext = Path(filename).suffix.lower()
@@ -184,7 +184,7 @@ def _is_text_file(filename: str, mime_type: Optional[str], content: bytes) -> bo
     return False
 
 
-def _sanitize_filename(filename: str) -> str:
+def sanitize_filename(filename: str) -> str:
     """Sanitize a filename to prevent path traversal and other issues."""
     # Remove path components
     filename = os.path.basename(filename)
@@ -197,15 +197,15 @@ def _sanitize_filename(filename: str) -> str:
     return filename or "unnamed"
 
 
-def _generate_stored_filename(original_filename: str) -> str:
+def generate_stored_filename(original_filename: str) -> str:
     ext = Path(original_filename).suffix.lower()
     unique_id = uuid.uuid4().hex[:12]
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    sanitized = _sanitize_filename(Path(original_filename).stem)[:50]
+    sanitized = sanitize_filename(Path(original_filename).stem)[:50]
     return f"{timestamp}_{unique_id}_{sanitized}{ext}"
 
 
-def _set_readonly_permissions(filepath: Path) -> None:
+def set_readonly_permissions(filepath: Path) -> None:
     try:
         # Remove all write and execute permissions, keep only read
         # 0o444 = r--r--r--
@@ -214,7 +214,7 @@ def _set_readonly_permissions(filepath: Path) -> None:
         logger.warning(f"Failed to set readonly permissions on {filepath}: {e}")
 
 
-def _scan_with_clamav(filepath: Path) -> Tuple[bool, bool]:
+def scan_with_clamav(filepath: Path) -> Tuple[bool, bool]:
     # Check if clamscan is available
     if not shutil.which("clamscan"):
         logger.debug("ClamAV not available, skipping scan")
@@ -245,14 +245,11 @@ def _scan_with_clamav(filepath: Path) -> Tuple[bool, bool]:
         return (False, None)
 
 
-def _upload_to_s3(relative_path: str, content: bytes, content_type: Optional[str] = None) -> bool:
+def upload_to_s3(relative_path: str, content: bytes, content_type: Optional[str] = None) -> bool:
     if not config.USE_S3:
         return True  # No S3, local storage is fine
 
     try:
-        from . import s3
-
-        # Use a different prefix for uploads vs interactive
         key = f"uploads/{relative_path}"
         return s3.upload_file(key, content, content_type)
     except Exception as e:
@@ -281,7 +278,7 @@ def upload_file(
         raise BlockedFileTypeError(f"File type {ext} is not allowed")
 
     # Compute hash
-    sha256_hash = _compute_sha256(content)
+    sha256_hash = compute_sha256(content)
 
     # Check for existing file with same hash (deduplication)
     if check_duplicate:
@@ -292,7 +289,7 @@ def upload_file(
             new_record = store.add_uploaded_file(
                 conversation_id=conversation_id,
                 user_id=user_id,
-                original_filename=_sanitize_filename(filename),
+                original_filename=sanitize_filename(filename),
                 stored_filename=existing.stored_filename,
                 storage_path=existing.storage_path,
                 file_size=existing.file_size,
@@ -317,21 +314,21 @@ def upload_file(
         mime_type = "application/octet-stream"
 
     # Check if it's a text file
-    is_text = _is_text_file(filename, mime_type, content)
+    is_text = is_text_file(filename, mime_type, content)
 
     # Generate stored filename and path
-    stored_filename = _generate_stored_filename(filename)
-    uploads_dir = _ensure_uploads_dir()
+    stored_filename = generate_stored_filename(filename)
+    uploads_dir = ensure_uploads_dir()
     storage_path = uploads_dir / stored_filename
 
     # Write file
     storage_path.write_bytes(content)
 
     # Set read-only permissions
-    _set_readonly_permissions(storage_path)
+    set_readonly_permissions(storage_path)
 
     # Run AV scan
-    av_scanned, av_clean = _scan_with_clamav(storage_path)
+    av_scanned, av_clean = scan_with_clamav(storage_path)
 
     # If AV scan found a threat, delete the file and raise error
     if av_scanned and av_clean is False:
@@ -343,14 +340,14 @@ def upload_file(
 
     # Upload to S3 if configured
     relative_path = stored_filename
-    if not _upload_to_s3(relative_path, content, mime_type):
+    if not upload_to_s3(relative_path, content, mime_type):
         logger.warning(f"S3 upload failed for {stored_filename}, keeping local copy")
 
     # Create database record
     uploaded_file = store.add_uploaded_file(
         conversation_id=conversation_id,
         user_id=user_id,
-        original_filename=_sanitize_filename(filename),
+        original_filename=sanitize_filename(filename),
         stored_filename=stored_filename,
         storage_path=str(storage_path),
         file_size=file_size,
@@ -388,8 +385,6 @@ def get_file_content(uploaded_file: UploadedFile) -> Optional[bytes]:
     # Try S3 if configured
     if config.USE_S3:
         try:
-            from . import s3
-
             key = f"uploads/{uploaded_file.stored_filename}"
             return s3.download_file(key)
         except Exception as e:
@@ -416,9 +411,9 @@ def copy_file_for_modification(
 
     # Generate copy filename
     if new_filename:
-        copy_filename = _sanitize_filename(new_filename)
+        copy_filename = sanitize_filename(new_filename)
     else:
-        stem = _sanitize_filename(Path(uploaded_file.original_filename).stem)
+        stem = sanitize_filename(Path(uploaded_file.original_filename).stem)
         ext = Path(uploaded_file.original_filename).suffix
         copy_filename = f"{stem}_copy_{uuid.uuid4().hex[:8]}{ext}"
 
@@ -472,10 +467,6 @@ def delete_file(uploaded_file: UploadedFile) -> bool:
 
     Only deletes if no other records reference the same stored file.
     """
-    # Check if any other records use this stored file
-    # (files with same hash share the same storage)
-    from .database import get_db
-
     with get_db() as conn:
         count = conn.execute(
             "SELECT COUNT(*) as cnt FROM uploaded_files WHERE stored_filename = %s", (uploaded_file.stored_filename,)
@@ -501,8 +492,6 @@ def delete_file(uploaded_file: UploadedFile) -> bool:
     # Delete from S3 if configured
     if config.USE_S3:
         try:
-            from . import s3
-
             key = f"uploads/{uploaded_file.stored_filename}"
             s3.delete_file(key)
         except Exception as e:

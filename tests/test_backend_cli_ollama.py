@@ -5,7 +5,7 @@ def test_build_env_sets_ollama_vars():
     from web.agents.cli_ollama import CLIOllamaBackend
 
     backend = CLIOllamaBackend()
-    env = backend._build_env("conv-123")
+    env = backend._build_env()
 
     assert env["ANTHROPIC_BASE_URL"] == "http://localhost:11434"
     assert env["ANTHROPIC_AUTH_TOKEN"] == "ollama"
@@ -19,7 +19,7 @@ def test_build_env_respects_custom_ollama_url(mocker):
     mock_config.OLLAMA_BASE_URL = "http://gpu-server:11434"
     mock_config.OLLAMA_MODEL = "qwen3-coder"
     backend = CLIOllamaBackend()
-    env = backend._build_env("conv-456")
+    env = backend._build_env()
 
     assert env["ANTHROPIC_BASE_URL"] == "http://gpu-server:11434"
 

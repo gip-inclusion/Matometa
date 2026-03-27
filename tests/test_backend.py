@@ -30,13 +30,13 @@ def test_get_agent_unknown_raises(mocker):
 @pytest.mark.parametrize(
     "backend,expected_fn",
     [
-        ("cli-ollama", "_ollama_generate"),
-        ("ollama", "_ollama_generate"),
-        ("cli", "_claude_cli_generate"),
+        ("cli-ollama", "ollama_generate"),
+        ("ollama", "ollama_generate"),
+        ("cli", "claude_cli_generate"),
     ],
 )
 def test_llm_routes_to_correct_generator(mocker, backend, expected_fn):
-    mocker.patch("web.llm._get_llm_backend", return_value=backend)
+    mocker.patch("web.llm.get_llm_backend", return_value=backend)
     mock_gen = mocker.patch(f"web.llm.{expected_fn}", return_value="ok")
     from web.llm import generate_text
 

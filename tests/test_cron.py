@@ -8,11 +8,11 @@ import pytest
 
 from web import config
 from web.cron import (
-    _is_enabled,
-    _parse_frontmatter,
     discover_cron_tasks,
     get_app_runs,
     get_last_runs,
+    is_enabled,
+    parse_frontmatter,
     run_cron_task,
     set_cron_enabled,
 )
@@ -48,7 +48,7 @@ def db_setup(monkeypatch):
         """)
 
 
-def _create_app(interactive_dir, slug, cron_script=None, app_md=None):
+def create_interactive_app(interactive_dir, slug, cron_script=None, app_md=None):
     app_dir = interactive_dir / slug
     app_dir.mkdir()
 
@@ -64,7 +64,7 @@ def _create_app(interactive_dir, slug, cron_script=None, app_md=None):
 
 class TestParseFrontmatter:
     def test_no_file(self, tmp_path):
-        assert _parse_frontmatter(tmp_path / "nonexistent" / "APP.md") == {}
+        assert parse_frontmatter(tmp_path / "nonexistent" / "APP.md") == {}
 
     @pytest.mark.parametrize(
         "body,expected",
@@ -79,26 +79,26 @@ class TestParseFrontmatter:
     def test_cron_enabled_from_frontmatter(self, tmp_path, body, expected):
         p = tmp_path / "APP.md"
         p.write_text(body)
-        assert _is_enabled(_parse_frontmatter(p)) is expected
+        assert is_enabled(parse_frontmatter(p)) is expected
 
     def test_no_frontmatter(self, tmp_path):
         p = tmp_path / "APP.md"
         p.write_text("Just some text")
-        assert _is_enabled(_parse_frontmatter(p)) is True
+        assert is_enabled(parse_frontmatter(p)) is True
 
     def test_timeout_field(self, tmp_path):
         p = tmp_path / "CRON.md"
         p.write_text("---\ntimeout: 1200\n---\n")
-        from web.cron import _get_timeout
+        from web.cron import get_timeout
 
-        assert _get_timeout(_parse_frontmatter(p)) == 1200
+        assert get_timeout(parse_frontmatter(p)) == 1200
 
     def test_schedule_field(self, tmp_path):
         p = tmp_path / "CRON.md"
         p.write_text("---\nschedule: weekly\n---\n")
-        from web.cron import _get_schedule
+        from web.cron import get_schedule
 
-        assert _get_schedule(_parse_frontmatter(p)) == "weekly"
+        assert get_schedule(parse_frontmatter(p)) == "weekly"
 
 
 class TestDiscoverCronTasks:
@@ -106,18 +106,18 @@ class TestDiscoverCronTasks:
         assert discover_cron_tasks() == []
 
     def test_app_without_cron_py(self, interactive_dir):
-        _create_app(interactive_dir, "no-cron")
+        create_interactive_app(interactive_dir, "no-cron")
         assert discover_cron_tasks() == []
 
     def test_app_with_cron_py(self, interactive_dir):
-        _create_app(interactive_dir, "my-app", cron_script="print('hi')")
+        create_interactive_app(interactive_dir, "my-app", cron_script="print('hi')")
         tasks = discover_cron_tasks()
         assert len(tasks) == 1
         assert tasks[0]["slug"] == "my-app"
         assert tasks[0]["enabled"] is True
 
     def test_disabled_app(self, interactive_dir):
-        _create_app(
+        create_interactive_app(
             interactive_dir,
             "disabled-app",
             cron_script="print('hi')",
@@ -129,13 +129,13 @@ class TestDiscoverCronTasks:
         assert tasks[0]["enabled"] is False
 
     def test_multiple_apps_sorted(self, interactive_dir):
-        _create_app(interactive_dir, "beta", cron_script="pass")
-        _create_app(interactive_dir, "alpha", cron_script="pass")
+        create_interactive_app(interactive_dir, "beta", cron_script="pass")
+        create_interactive_app(interactive_dir, "alpha", cron_script="pass")
         tasks = discover_cron_tasks()
         assert [t["slug"] for t in tasks] == ["alpha", "beta"]
 
     def test_extracts_title(self, interactive_dir):
-        _create_app(
+        create_interactive_app(
             interactive_dir,
             "titled-app",
             cron_script="pass",
@@ -161,7 +161,7 @@ class TestDiscoverCronTasks:
         (sys_dir / "CRON.md").write_text("---\ntitle: System Task\nschedule: weekly\n---\n")
 
         # Create an app task
-        _create_app(interactive_dir, "app-task", cron_script="pass")
+        create_interactive_app(interactive_dir, "app-task", cron_script="pass")
 
         tasks = discover_cron_tasks()
         assert len(tasks) == 2
@@ -174,19 +174,19 @@ class TestDiscoverCronTasks:
 
 class TestRunCronTask:
     def test_success(self, interactive_dir, db_setup):
-        _create_app(interactive_dir, "good-app", cron_script="print('hello world')")
+        create_interactive_app(interactive_dir, "good-app", cron_script="print('hello world')")
         result = run_cron_task("good-app", trigger="manual")
         assert result["status"] == "success"
         assert "hello world" in result["output"]
         assert result["duration_ms"] >= 0
 
     def test_failure_exit_code(self, interactive_dir, db_setup):
-        _create_app(interactive_dir, "bad-app", cron_script="import sys; sys.exit(1)")
+        create_interactive_app(interactive_dir, "bad-app", cron_script="import sys; sys.exit(1)")
         result = run_cron_task("bad-app", trigger="manual")
         assert result["status"] == "failure"
 
     def test_stderr_captured(self, interactive_dir, db_setup):
-        _create_app(
+        create_interactive_app(
             interactive_dir,
             "stderr-app",
             cron_script="import sys; print('err', file=sys.stderr)",
@@ -205,7 +205,7 @@ class TestRunCronTask:
             with open('data.json', 'w') as f:
                 json.dump({"updated": True}, f)
         """)
-        _create_app(interactive_dir, "writer-app", cron_script=script)
+        create_interactive_app(interactive_dir, "writer-app", cron_script=script)
         result = run_cron_task("writer-app")
         assert result["status"] == "success"
 
@@ -214,7 +214,7 @@ class TestRunCronTask:
         assert json.loads(data_file.read_text())["updated"] is True
 
     def test_timeout(self, interactive_dir, db_setup):
-        _create_app(
+        create_interactive_app(
             interactive_dir,
             "slow-app",
             cron_script="import time; time.sleep(10)",
@@ -224,7 +224,7 @@ class TestRunCronTask:
         assert result["status"] == "timeout"
 
     def test_records_in_database(self, interactive_dir, db_setup):
-        _create_app(interactive_dir, "db-app", cron_script="print('ok')")
+        create_interactive_app(interactive_dir, "db-app", cron_script="print('ok')")
         run_cron_task("db-app", trigger="manual")
 
         with get_db() as conn:
@@ -238,7 +238,7 @@ class TestRunCronTask:
             import sys
             print(sys.path)
         """)
-        _create_app(interactive_dir, "path-app", cron_script=script)
+        create_interactive_app(interactive_dir, "path-app", cron_script=script)
         result = run_cron_task("path-app")
         assert result["status"] == "success"
         assert str(config.BASE_DIR) in result["output"]
@@ -249,7 +249,7 @@ class TestGetLastRuns:
         assert get_last_runs() == {}
 
     def test_returns_latest(self, interactive_dir, db_setup):
-        _create_app(interactive_dir, "multi-app", cron_script="print('run')")
+        create_interactive_app(interactive_dir, "multi-app", cron_script="print('run')")
         run_cron_task("multi-app")
         run_cron_task("multi-app")
 
@@ -258,7 +258,7 @@ class TestGetLastRuns:
         assert len(runs["multi-app"]) == 1
 
     def test_limit_per_app(self, interactive_dir, db_setup):
-        _create_app(interactive_dir, "many-app", cron_script="print('x')")
+        create_interactive_app(interactive_dir, "many-app", cron_script="print('x')")
         for _ in range(5):
             run_cron_task("many-app")
 
@@ -271,7 +271,7 @@ class TestGetAppRuns:
         assert get_app_runs("nonexistent") == []
 
     def test_returns_runs(self, interactive_dir, db_setup):
-        _create_app(interactive_dir, "log-app", cron_script="print('logged')")
+        create_interactive_app(interactive_dir, "log-app", cron_script="print('logged')")
         run_cron_task("log-app")
         runs = get_app_runs("log-app")
         assert len(runs) == 1
@@ -280,14 +280,14 @@ class TestGetAppRuns:
 
 class TestSetCronEnabled:
     def test_disable(self, interactive_dir):
-        _create_app(interactive_dir, "toggle-app", cron_script="pass")
+        create_interactive_app(interactive_dir, "toggle-app", cron_script="pass")
         assert set_cron_enabled("toggle-app", False) is True
 
         content = (interactive_dir / "toggle-app" / "APP.md").read_text()
         assert "cron: false" in content
 
     def test_enable(self, interactive_dir):
-        _create_app(
+        create_interactive_app(
             interactive_dir,
             "off-app",
             cron_script="pass",
@@ -302,7 +302,7 @@ class TestSetCronEnabled:
         assert set_cron_enabled("nope", True) is False
 
     def test_adds_field_when_missing(self, interactive_dir):
-        _create_app(
+        create_interactive_app(
             interactive_dir,
             "no-field",
             cron_script="pass",
@@ -314,7 +314,7 @@ class TestSetCronEnabled:
         assert "cron: false" in content
 
     def test_roundtrip(self, interactive_dir):
-        _create_app(interactive_dir, "rt-app", cron_script="pass")
+        create_interactive_app(interactive_dir, "rt-app", cron_script="pass")
 
         set_cron_enabled("rt-app", False)
         tasks = discover_cron_tasks()
@@ -339,7 +339,7 @@ def s3_cron_env(tmp_path, monkeypatch):
     return {"cron_dir": cron_dir, "interactive_dir": interactive_dir}
 
 
-def _mock_s3_app(slug, cron_script="print('hello')", app_md=None):
+def mock_s3_app(slug, cron_script="print('hello')", app_md=None):
     if app_md is None:
         app_md = f"---\ntitle: {slug}\n---\n"
     return {
@@ -351,7 +351,7 @@ def _mock_s3_app(slug, cron_script="print('hello')", app_md=None):
     }
 
 
-def _make_s3_mocks(apps: list[dict]):
+def make_s3_mocks(apps: list[dict]):
     """Create mock functions for web.s3 that serve the given apps.
 
     Returns a dict of {function_name: mock} to use with patch.
@@ -394,7 +394,7 @@ def _make_s3_mocks(apps: list[dict]):
 class TestDiscoverS3:
     def test_discovers_s3_apps(self, mocker, s3_cron_env):
         """When USE_S3 is True and S3 has apps with cron.py, they're discovered."""
-        mocks = _make_s3_mocks([_mock_s3_app("my-s3-app")])
+        mocks = make_s3_mocks([mock_s3_app("my-s3-app")])
         mocker.patch("web.cron.s3.list_directories", side_effect=mocks["list_directories"])
         mocker.patch("web.cron.s3.file_exists", side_effect=mocks["file_exists"])
         mocker.patch("web.cron.s3.download_file", side_effect=mocks["download_file"])
@@ -405,9 +405,9 @@ class TestDiscoverS3:
 
     def test_s3_app_skipped_without_cron_py(self, mocker, s3_cron_env):
         """S3 directories without cron.py are not discovered."""
-        app = _mock_s3_app("no-cron-app")
+        app = mock_s3_app("no-cron-app")
         del app["files"]["no-cron-app/cron.py"]
-        mocks = _make_s3_mocks([app])
+        mocks = make_s3_mocks([app])
         mocker.patch("web.cron.s3.list_directories", side_effect=mocks["list_directories"])
         mocker.patch("web.cron.s3.file_exists", side_effect=mocks["file_exists"])
         mocker.patch("web.cron.s3.download_file", side_effect=mocks["download_file"])
@@ -416,11 +416,11 @@ class TestDiscoverS3:
 
     def test_s3_app_metadata_parsed(self, mocker, s3_cron_env):
         """APP.md front-matter is parsed from S3."""
-        app = _mock_s3_app(
+        app = mock_s3_app(
             "titled-app",
             app_md="---\ntitle: My S3 App\ntimeout: 600\nschedule: weekly\n---\n",
         )
-        mocks = _make_s3_mocks([app])
+        mocks = make_s3_mocks([app])
         mocker.patch("web.cron.s3.list_directories", side_effect=mocks["list_directories"])
         mocker.patch("web.cron.s3.file_exists", side_effect=mocks["file_exists"])
         mocker.patch("web.cron.s3.download_file", side_effect=mocks["download_file"])
@@ -431,11 +431,11 @@ class TestDiscoverS3:
 
     def test_s3_disabled_app(self, mocker, s3_cron_env):
         """Apps with cron: false in S3 APP.md are marked disabled."""
-        app = _mock_s3_app(
+        app = mock_s3_app(
             "off-app",
             app_md="---\ntitle: Off\ncron: false\n---\n",
         )
-        mocks = _make_s3_mocks([app])
+        mocks = make_s3_mocks([app])
         mocker.patch("web.cron.s3.list_directories", side_effect=mocks["list_directories"])
         mocker.patch("web.cron.s3.file_exists", side_effect=mocks["file_exists"])
         mocker.patch("web.cron.s3.download_file", side_effect=mocks["download_file"])
@@ -449,7 +449,7 @@ class TestDiscoverS3:
         (sys_dir / "cron.py").write_text("pass")
         (sys_dir / "CRON.md").write_text("---\ntitle: System\n---\n")
 
-        mocks = _make_s3_mocks([_mock_s3_app("s3-app")])
+        mocks = make_s3_mocks([mock_s3_app("s3-app")])
         mocker.patch("web.cron.s3.list_directories", side_effect=mocks["list_directories"])
         mocker.patch("web.cron.s3.file_exists", side_effect=mocks["file_exists"])
         mocker.patch("web.cron.s3.download_file", side_effect=mocks["download_file"])
@@ -462,10 +462,10 @@ class TestDiscoverS3:
 
     def test_s3_multiple_apps_sorted(self, mocker, s3_cron_env):
         """S3 apps are returned in sorted order."""
-        mocks = _make_s3_mocks(
+        mocks = make_s3_mocks(
             [
-                _mock_s3_app("zeta-app"),
-                _mock_s3_app("alpha-app"),
+                mock_s3_app("zeta-app"),
+                mock_s3_app("alpha-app"),
             ]
         )
         mocker.patch("web.cron.s3.list_directories", side_effect=mocks["list_directories"])
@@ -484,8 +484,8 @@ class TestDiscoverS3:
 class TestRunS3CronTask:
     def test_executes_s3_script(self, mocker, s3_cron_env, db_setup):
         """S3 cron script is downloaded, executed, and output captured."""
-        app = _mock_s3_app("s3-runner", cron_script="print('s3 hello')")
-        mocks = _make_s3_mocks([app])
+        app = mock_s3_app("s3-runner", cron_script="print('s3 hello')")
+        mocks = make_s3_mocks([app])
         mocker.patch("web.cron.s3.list_directories", side_effect=mocks["list_directories"])
         mocker.patch("web.cron.s3.file_exists", side_effect=mocks["file_exists"])
         mocker.patch("web.cron.s3.download_file", side_effect=mocks["download_file"])
@@ -497,8 +497,8 @@ class TestRunS3CronTask:
 
     def test_s3_script_failure(self, mocker, s3_cron_env, db_setup):
         """S3 cron script failure is captured."""
-        app = _mock_s3_app("s3-fail", cron_script="import sys; sys.exit(1)")
-        mocks = _make_s3_mocks([app])
+        app = mock_s3_app("s3-fail", cron_script="import sys; sys.exit(1)")
+        mocks = make_s3_mocks([app])
         mocker.patch("web.cron.s3.list_directories", side_effect=mocks["list_directories"])
         mocker.patch("web.cron.s3.file_exists", side_effect=mocks["file_exists"])
         mocker.patch("web.cron.s3.download_file", side_effect=mocks["download_file"])
@@ -514,8 +514,8 @@ class TestRunS3CronTask:
             Path("data.json").write_text(json.dumps({"updated": True}))
             print("done")
         """)
-        app = _mock_s3_app("s3-writer", cron_script=script)
-        mocks = _make_s3_mocks([app])
+        app = mock_s3_app("s3-writer", cron_script=script)
+        mocks = make_s3_mocks([app])
         mocker.patch("web.cron.s3.list_directories", side_effect=mocks["list_directories"])
         mocker.patch("web.cron.s3.file_exists", side_effect=mocks["file_exists"])
         mocker.patch("web.cron.s3.download_file", side_effect=mocks["download_file"])
@@ -533,8 +533,8 @@ class TestRunS3CronTask:
             import sys
             print(sys.path)
         """)
-        app = _mock_s3_app("s3-path", cron_script=script)
-        mocks = _make_s3_mocks([app])
+        app = mock_s3_app("s3-path", cron_script=script)
+        mocks = make_s3_mocks([app])
         mocker.patch("web.cron.s3.list_directories", side_effect=mocks["list_directories"])
         mocker.patch("web.cron.s3.file_exists", side_effect=mocks["file_exists"])
         mocker.patch("web.cron.s3.download_file", side_effect=mocks["download_file"])
