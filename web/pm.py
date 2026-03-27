@@ -140,6 +140,9 @@ class ProcessManager:
                             store.update_conversation(conversation_id, session_id=new_session_id)
                     if event.raw.get("usage"):
                         self._persist_usage(conversation_id, event.raw["usage"])
+                    if event.raw.get("subtype") == "api_retry":
+                        store.add_message(conversation_id, "system", json.dumps(event.raw))
+                        signals.notify_message(conversation_id)
 
             # Collect final segment
             if assistant_text_parts:

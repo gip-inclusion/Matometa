@@ -557,6 +557,14 @@ async def stream_conversation(
                 sse_data["content"] = json.loads(msg.content)
             except (json.JSONDecodeError, TypeError):
                 pass
+        elif msg.type == "system":
+            try:
+                raw = json.loads(msg.content)
+                if isinstance(raw, dict):
+                    sse_data["raw"] = raw
+                    sse_data["content"] = raw.get("subtype") or raw.get("message") or msg.content
+            except (json.JSONDecodeError, TypeError):
+                pass
         return _sse_event(msg.type, sse_data)
 
     async def _drain_unseen(last_msg_id: int) -> list[str]:

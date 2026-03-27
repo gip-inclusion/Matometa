@@ -49,6 +49,9 @@ function appendEvent(type, data) {
     if (data.raw && data.raw.usage) {
       updateTokenDisplay(data.raw.usage);
     }
+    if (typeof window.updateLoadingLastEvent === 'function') {
+      window.updateLoadingLastEvent('system', data);
+    }
     return;
   }
 

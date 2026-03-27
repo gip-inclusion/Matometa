@@ -124,10 +124,12 @@ def serve_interactive(request: Request, filename: str = ""):
     raise HTTPException(status_code=404)
 
 
+from .benchmark import router as benchmark_router  # noqa: E402
 from .routes import auth, conversations, cron, html, knowledge, query, rapports, reports  # noqa: E402
 from .selftest import router as selftest_router  # noqa: E402
 
 app.include_router(selftest_router)
+app.include_router(benchmark_router)
 app.include_router(query.router)
 app.include_router(auth.router)
 app.include_router(knowledge.router)

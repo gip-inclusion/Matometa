@@ -1085,11 +1085,43 @@ body.has-sidebar {
    ========================================================================== */
 .loading-indicator {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.5rem;
   padding: 1rem;
   color: var(--bs-secondary);
   font-size: 0.875rem;
+}
+
+.loading-indicator-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.loading-debug {
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.loading-base {
+  word-break: break-word;
+  line-height: 1.35;
+  color: var(--bs-secondary);
+  font-size: 0.875rem;
+}
+
+.loading-tech {
+  display: block;
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  color: var(--bs-secondary);
+  opacity: 0.72;
+  word-break: break-word;
+  font-variant-numeric: tabular-nums;
 }
 
 .loading-indicator .spinner {

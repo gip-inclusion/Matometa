@@ -192,6 +192,13 @@ function startStream(afterMsgId = 0) {
     eventSource.addEventListener(type, (e) => {
       retryCount = 0;
       const data = JSON.parse(e.data);
+      if (typeof window.updateLoadingLastEvent === 'function') {
+        if (type === 'assistant') {
+          window.updateLoadingLastEvent('assistant', data);
+        } else if (type === 'tool_use') {
+          window.updateLoadingLastEvent('tool_use', data);
+        }
+      }
       appendEvent(type, data);
     });
   });
@@ -495,6 +502,73 @@ function _scheduleSpinnerPoll() {
   }
 }
 
+const LOADING_BASE = 'Autometa réfléchit…';
+
+/**
+ * Dernier événement utile après « Autometa réfléchit… » (même ligne ou repli legacy).
+ */
+function updateLoadingLastEvent(sourceType, data) {
+  let techLine = '';
+  if (sourceType === 'system' && data.raw && data.raw.subtype === 'api_retry') {
+    const r = data.raw;
+    const attempt = r.attempt != null ? r.attempt : '?';
+    const max = r.max_retries != null ? r.max_retries : '?';
+    const err = r.error != null ? String(r.error) : 'erreur';
+    const st = r.error_status;
+    if (st != null && st !== '') {
+      techLine = `Appel API · tentative ${attempt}/${max} · dernier statut ${st} · ${err}`;
+    } else {
+      techLine = `Appel API · tentative ${attempt}/${max} · ${err}`;
+    }
+  } else if (sourceType === 'tool_use' && data.content && data.content.tool) {
+    techLine = `Outil · ${data.content.tool}`;
+  } else if (sourceType === 'assistant') {
+    techLine = 'Appel modèle · génération de la réponse';
+  }
+
+  if (!techLine) {
+    return;
+  }
+
+  const techEl = document.getElementById('loadingTech');
+  const baseEl = document.getElementById('loadingBase');
+  if (techEl && baseEl) {
+    baseEl.textContent = LOADING_BASE;
+    techEl.textContent = techLine;
+    techEl.classList.remove('d-none');
+    return;
+  }
+
+  const statusEl = document.getElementById('loadingStatus');
+  if (statusEl) {
+    statusEl.textContent = `${LOADING_BASE} — ${techLine}`;
+    return;
+  }
+
+  const legacyDebug = document.getElementById('loadingDebug');
+  if (legacyDebug) {
+    legacyDebug.textContent = ` — ${techLine}`;
+    legacyDebug.classList.remove('d-none');
+    return;
+  }
+
+  const loading = document.getElementById('loadingIndicator');
+  if (!loading) {
+    return;
+  }
+  let fb = document.getElementById('loadingStatusFallback');
+  if (!fb) {
+    fb = document.createElement('div');
+    fb.id = 'loadingStatusFallback';
+    fb.className = 'loading-tech';
+    fb.setAttribute('aria-live', 'polite');
+    loading.appendChild(fb);
+  }
+  fb.textContent = `${LOADING_BASE} — ${techLine}`;
+}
+
+window.updateLoadingLastEvent = updateLoadingLastEvent;
+
 /**
  * Show loading indicator
  */
@@ -509,9 +583,15 @@ function showLoading() {
   hideLoading();
 
   const loading = document.createElement('div');
-  loading.className = 'loading-indicator';
+  loading.className = 'loading-indicator flex-wrap';
   loading.id = 'loadingIndicator';
-  loading.innerHTML = '<div class="spinner"></div> Autometa réfléchit…';
+  loading.innerHTML = `
+    <div class="spinner"></div>
+    <div class="loading-indicator-text">
+      <span id="loadingBase" class="loading-base">${LOADING_BASE}</span>
+      <span id="loadingTech" class="loading-tech d-none" aria-live="polite"></span>
+    </div>
+  `;
 
   chatOutput.appendChild(loading);
 

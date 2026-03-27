@@ -1,8 +1,7 @@
 """Safe logging formatter to prevent log injection.
 
-Strips newlines, carriage returns, null bytes, and ANSI escape sequences
-from all log output so user-controlled values cannot forge log entries
-or manipulate terminal displays.
+Removes null bytes and ANSI escape sequences from log output. Newlines are
+kept so messages are never truncated or collapsed to a single line.
 """
 
 import logging
@@ -17,7 +16,7 @@ class SafeFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         msg = super().format(record)
-        msg = msg.replace("\n", "\\n").replace("\r", "\\r").replace("\x00", "")
+        msg = msg.replace("\x00", "")
         msg = _ANSI_RE.sub("", msg)
         return msg
 
