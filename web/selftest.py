@@ -1,18 +1,7 @@
-"""Self-test route: lightweight health checks for all core services.
-
-GET /selftest :
-
-- ``Accept: text/html`` : page qui consomme le flux ``text/plain`` et remplace
-  tout l'affichage à chaque instantané (séparateurs ``SNAPSHOT_SEP``).
-- Sinon : flux ``text/plain`` seul ; afficher le **dernier** segment complet,
-  pas la concaténation.
-
-HTTP status stays 200 while streaming; use the header line for pass/fail.
-"""
+"""Route GET /selftest : checks services ; HTML consomme le flux text/plain par SNAPSHOT_SEP."""
 
 import asyncio
 import json
-import logging
 import os
 import subprocess
 import time
@@ -26,8 +15,6 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from lib._sources import list_instances
 
 from . import config
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -97,6 +84,7 @@ def _probe(name: str, fn: Callable[[], tuple[bool, str]]) -> Check:
         ok, detail = fn()
         return Check(name, ok, detail, int((time.monotonic() - t0) * 1000))
     except Exception as exc:
+        # Why: un check isolé ne doit pas faire échouer les autres.
         return Check(name, False, str(exc)[:120], int((time.monotonic() - t0) * 1000))
 
 
@@ -199,7 +187,6 @@ def _check_claude_cli() -> tuple[bool, str]:
 
 
 def _check_claude_status_page() -> tuple[bool, str]:
-    # Atlassian Statuspage JSON API (same data as the public status page).
     url = "https://status.claude.com/api/v2/summary.json"
     resp = requests.get(url, timeout=5, headers={"Accept": "application/json"})
     if resp.status_code != 200:
@@ -356,9 +343,7 @@ def _check_specs() -> list[tuple[str, Callable[[], tuple[bool, str]]]]:
         ("Matomo", _check_matomo),
     ]
     for inst in list_instances("metabase"):
-        specs.append(
-            (f"Metabase ({inst})", lambda i=inst: _check_metabase_instance(i)),
-        )
+        specs.append((f"Metabase ({inst})", lambda i=inst: _check_metabase_instance(i)))
     specs += [
         ("Notion", _check_notion),
         ("Grist", _check_grist),

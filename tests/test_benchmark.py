@@ -9,7 +9,9 @@ from web.benchmark import (
     PromptResult,
     _history_for_prompt,
     _original_metrics,
+    _run_prompt_line,
     _table_row,
+    _yield_summary_table,
 )
 from web.database import Conversation, Message
 
@@ -27,7 +29,6 @@ T0 = datetime(2026, 3, 1, 10, 0, 0)
 
 @pytest.fixture
 def two_prompt_conv():
-    """Conversation with 2 user prompts and mixed message types."""
     msgs = [
         _msg("user", "Quel est le trafic ?", T0, id=1),
         _msg("tool_use", _tool_use_content("Bash", "API: Matomo"), T0 + timedelta(seconds=10), id=2),
@@ -120,6 +121,40 @@ class TestTableRow:
     def test_separator_row(self):
         row = _table_row(["──", "──"], [4, 4])
         assert "──" in row
+
+
+@pytest.mark.parametrize(
+    ("res", "substrs"),
+    [
+        (PromptResult(duration_s=1.0, events=3), ["✓", "1.0s", "3 events"]),
+        (
+            PromptResult(
+                duration_s=2.0,
+                events=1,
+                tools=["Bash"],
+                categories=["API: Matomo"],
+                input_tokens=100,
+                output_tokens=50,
+                error="boom",
+            ),
+            ["✗", "API: Matomo", "ERR:", "boom"],
+        ),
+    ],
+)
+def test_run_prompt_line(res, substrs):
+    line = _run_prompt_line(res)
+    for s in substrs:
+        assert s in line
+
+
+def test_yield_summary_table_includes_totals():
+    orig = {"prompt_durations": [10.0, 20.0], "total_s": 30.0}
+    run_a = [PromptResult(duration_s=11.0), PromptResult(duration_s=21.0)]
+    run_b = [PromptResult(duration_s=12.0), PromptResult(duration_s=22.0)]
+    lines = _yield_summary_table(2, 2, orig, [run_a, run_b])
+    text = "".join(lines)
+    assert "RESULTS" in text and "TOTAL" in text
+    assert "Stdev" in text
 
 
 class TestBenchmarkRoute:
