@@ -3,6 +3,7 @@
 .env.ollama.local
 .claude/*
 !.claude/skills
+!.claude/commands
 !.claude/settings.json
 !.claude/rules
 !.claude/agents
